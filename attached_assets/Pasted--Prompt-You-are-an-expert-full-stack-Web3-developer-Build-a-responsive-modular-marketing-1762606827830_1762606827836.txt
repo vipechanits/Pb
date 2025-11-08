@@ -1,0 +1,1072 @@
+
+🚀 Prompt:
+
+You are an expert full-stack Web3 developer.
+Build a responsive, modular, marketing-style DApp dashboard for the project HybridP2P Rooted Smart Contract deployed on Polygon (Amoy / Mainnet).
+The app should support both User Dashboard and Admin Dashboard views, dynamically rendered based on connected wallet role.
+
+🎯 Project Overview
+
+HybridP2P Rooted is a hybrid peer-to-peer MLM + smart contract system with:
+
+USDT-based activation system (Polygon network)
+
+Binary pairing income (FIFO 3:3)
+
+5-Level Matrix income
+
+Manual/automatic re-entry cycles
+
+Offline + on-chain payments with proofs
+
+Admin-controlled creator/fallback fee cards
+
+User profile management (KYC-lite)
+
+Web3-based wallet activation and verification
+
+🧩 Technology Stack
+
+Frontend:
+
+React.js / Next.js 14 (App Router)
+
+Tailwind CSS + ShadCN/UI components
+
+Framer Motion for animation
+
+Ethers.js v6 for Web3 integration
+
+React Context for global wallet & contract state
+
+Recharts.js for income graphs
+
+Backend (optional):
+
+Node.js / Express.js (for off-chain verification & image uploads)
+
+MongoDB (for user profile/avatar storage)
+
+Smart Contract:
+
+HybridP2P_Rooted.sol
+
+ABI file: HybridP2P_Rooted_ABI.json
+
+Network: Polygon Amoy or Mainnet
+
+🧠 Core Pages & Features
+1️⃣ Landing / Login
+
+Hero section: logo, project tagline
+
+"Get Started" + "Connect Wallet" buttons
+
+Show wallet address and active network
+
+Route based on wallet role:
+
+If wallet == adminWallet(): → /admin
+
+Else → /user
+
+2️⃣ User Dashboard
+
+📊 Main Cards:
+
+Total Income (in USDT & INR)
+
+Direct Sponsoring Income
+
+Binary Matching Income
+
+Matrix (Non-working) Income
+
+Re-entry Count
+
+Carry Forward Left/Right Counts
+
+💼 Actions:
+
+✅ Activate Account:
+
+Choose payment mode: Offline (upload proof) or Web3 (approve & pay USDT)
+
+Shows admin/creator payment card(s)
+
+Submit transaction or proof → triggers submitOfflineProof() or payIndividuallyWeb3()
+
+🧾 Payment Confirmation Page:
+
+Users can view all sent proofs, and their confirmation status.
+
+Receiver/admin can confirm via confirmOfflinePayment().
+
+3️⃣ Direct Sponsoring Page
+
+Table: Sponsor Name | Sponsored User | Date | Mode | Amount | Status
+
+Total sponsoring income (sum)
+
+Button to view tree of directs (left/right distribution)
+
+4️⃣ Binary Matching Page
+
+Tree view: visualize left/right teams
+
+Real-time matching report:
+
+Left count, right count
+
+Qualified (boolean)
+
+Pairs matched
+
+USDT earned
+
+Carry forward
+
+Interactive bubble chart for downline users
+
+“Withdraw Income” button (future upgrade)
+
+5️⃣ Matrix Income Page
+
+Display 2×N global matrix tree:
+
+Show user node + index + parent index
+
+5-Level payout stats:
+
+Each level’s reward amount, recipient name/address
+
+When 5-level matrix full:
+
+Auto prompt for re-entry (buyReEntry())
+
+6️⃣ Re-entry Cycle Page
+
+Show user’s re-entry history:
+
+Cycle count
+
+Paid amount
+
+Binary pairs earned
+
+Matrix re-entry index
+
+Date/time
+
+Allow Additional Re-entry purchase (same logic as activation)
+
+7️⃣ Profile & Settings
+
+Editable fields:
+
+Name
+
+Email
+
+Mobile
+
+Avatar (optional upload)
+
+Payment Card (Bank + UPI)
+
+Functions:
+
+updateUserProfile(name, email, mobile, avatar)
+
+updateUserPaymentCard(holder, bank, account, ifsc, upi)
+
+8️⃣ Admin Dashboard
+
+👑 Admin Overview Cards
+
+Total Users
+
+Total Activations
+
+Total Matrix Cycles
+
+Total Binary Pairs Matched
+
+Fallback Payments Count
+
+⚙️ Admin Controls
+
+Add/Edit/Remove Creator Payment Cards
+(addCreatorPaymentCard, editCreatorPaymentCard, removeCreatorPaymentCard)
+
+Set Qualification Criteria (1 left / 1 right)
+(setBinaryQualification)
+
+Set Matching Criteria (3:3)
+(setBinaryMatchingCriteria)
+
+Set Activation Fee (5000 INR = 50 USDT)
+(setActivationFeeUSDT)
+
+Set Pair Payout (1000 INR = 10 USDT)
+(setBinaryPairPayoutUSDT)
+
+Add/Update fallback names (admin/creator/binary/matrix)
+
+Confirm admin wallet proposal
+(confirmAdminWallet())
+
+🧾 Offline Payment Confirmations
+
+Table of pending offline payments
+
+From user, to receiver, slot index, proof
+
+Approve/reject buttons → calls confirmOfflinePayment()
+
+📡 User Management
+
+Activate user manually → adminActivate()
+
+Deactivate user → adminDeactivate()
+
+View user binary/matrix position → getUserBinary(), getUserMatrixPosition()
+
+9️⃣ Global Components
+
+Sidebar Navigation (dynamic per role)
+
+WalletConnect modal
+
+Toast notifications (react-hot-toast)
+
+Loader & status spinner
+
+USDT → INR conversion (1 USDT = ₹100 fixed)
+
+🔐 Web3 & State Management
+Contract Initialization:
+/**
+ *Submitted for verification at amoy.polygonscan.com on 2025-11-08
+*/
+
+// Sources flattened with hardhat v2.27.0 https://hardhat.org
+
+// SPDX-License-Identifier: MIT
+
+// File @openzeppelin/contracts/utils/Context.sol@v4.9.6
+
+// Original license: SPDX_License_Identifier: MIT
+// OpenZeppelin Contracts (last updated v4.9.4) (utils/Context.sol)
+
+pragma solidity ^0.8.0;
+
+/**
+ * @dev Provides information about the current execution context, including the
+ * sender of the transaction and its data. While these are generally available
+ * via msg.sender and msg.data, they should not be accessed in such a direct
+ * manner, since when dealing with meta-transactions the account sending and
+ * paying for execution may not be the actual sender (as far as an application
+ * is concerned).
+ *
+ * This contract is only required for intermediate, library-like contracts.
+ */
+abstract contract Context {
+    function _msgSender() internal view virtual returns (address) {
+        return msg.sender;
+    }
+
+    function _msgData() internal view virtual returns (bytes calldata) {
+        return msg.data;
+    }
+
+    function _contextSuffixLength() internal view virtual returns (uint256) {
+        return 0;
+    }
+}
+
+
+// File @openzeppelin/contracts/access/Ownable.sol@v4.9.6
+
+// Original license: SPDX_License_Identifier: MIT
+// OpenZeppelin Contracts (last updated v4.9.0) (access/Ownable.sol)
+
+pragma solidity ^0.8.0;
+
+/**
+ * @dev Contract module which provides a basic access control mechanism, where
+ * there is an account (an owner) that can be granted exclusive access to
+ * specific functions.
+ *
+ * By default, the owner account will be the one that deploys the contract. This
+ * can later be changed with {transferOwnership}.
+ *
+ * This module is used through inheritance. It will make available the modifier
+ * `onlyOwner`, which can be applied to your functions to restrict their use to
+ * the owner.
+ */
+abstract contract Ownable is Context {
+    address private _owner;
+
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    /**
+     * @dev Initializes the contract setting the deployer as the initial owner.
+     */
+    constructor() {
+        _transferOwnership(_msgSender());
+    }
+
+    /**
+     * @dev Throws if called by any account other than the owner.
+     */
+    modifier onlyOwner() {
+        _checkOwner();
+        _;
+    }
+
+    /**
+     * @dev Returns the address of the current owner.
+     */
+    function owner() public view virtual returns (address) {
+        return _owner;
+    }
+
+    /**
+     * @dev Throws if the sender is not the owner.
+     */
+    function _checkOwner() internal view virtual {
+        require(owner() == _msgSender(), "Ownable: caller is not the owner");
+    }
+
+    /**
+     * @dev Leaves the contract without owner. It will not be possible to call
+     * `onlyOwner` functions. Can only be called by the current owner.
+     *
+     * NOTE: Renouncing ownership will leave the contract without an owner,
+     * thereby disabling any functionality that is only available to the owner.
+     */
+    function renounceOwnership() public virtual onlyOwner {
+        _transferOwnership(address(0));
+    }
+
+    /**
+     * @dev Transfers ownership of the contract to a new account (`newOwner`).
+     * Can only be called by the current owner.
+     */
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        require(newOwner != address(0), "Ownable: new owner is the zero address");
+        _transferOwnership(newOwner);
+    }
+
+    /**
+     * @dev Transfers ownership of the contract to a new account (`newOwner`).
+     * Internal function without access restriction.
+     */
+    function _transferOwnership(address newOwner) internal virtual {
+        address oldOwner = _owner;
+        _owner = newOwner;
+        emit OwnershipTransferred(oldOwner, newOwner);
+    }
+}
+
+
+// File @openzeppelin/contracts/security/ReentrancyGuard.sol@v4.9.6
+
+// Original license: SPDX_License_Identifier: MIT
+// OpenZeppelin Contracts (last updated v4.9.0) (security/ReentrancyGuard.sol)
+
+pragma solidity ^0.8.0;
+
+/**
+ * @dev Contract module that helps prevent reentrant calls to a function.
+ *
+ * Inheriting from `ReentrancyGuard` will make the {nonReentrant} modifier
+ * available, which can be applied to functions to make sure there are no nested
+ * (reentrant) calls to them.
+ *
+ * Note that because there is a single `nonReentrant` guard, functions marked as
+ * `nonReentrant` may not call one another. This can be worked around by making
+ * those functions `private`, and then adding `external` `nonReentrant` entry
+ * points to them.
+ *
+ * TIP: If you would like to learn more about reentrancy and alternative ways
+ * to protect against it, check out our blog post
+ * https://blog.openzeppelin.com/reentrancy-after-istanbul/[Reentrancy After Istanbul].
+ */
+abstract contract ReentrancyGuard {
+    // Booleans are more expensive than uint256 or any type that takes up a full
+    // word because each write operation emits an extra SLOAD to first read the
+    // slot's contents, replace the bits taken up by the boolean, and then write
+    // back. This is the compiler's defense against contract upgrades and
+    // pointer aliasing, and it cannot be disabled.
+
+    // The values being non-zero value makes deployment a bit more expensive,
+    // but in exchange the refund on every call to nonReentrant will be lower in
+    // amount. Since refunds are capped to a percentage of the total
+    // transaction's gas, it is best to keep them low in cases like this one, to
+    // increase the likelihood of the full refund coming into effect.
+    uint256 private constant _NOT_ENTERED = 1;
+    uint256 private constant _ENTERED = 2;
+
+    uint256 private _status;
+
+    constructor() {
+        _status = _NOT_ENTERED;
+    }
+
+    /**
+     * @dev Prevents a contract from calling itself, directly or indirectly.
+     * Calling a `nonReentrant` function from another `nonReentrant`
+     * function is not supported. It is possible to prevent this from happening
+     * by making the `nonReentrant` function external, and making it call a
+     * `private` function that does the actual work.
+     */
+    modifier nonReentrant() {
+        _nonReentrantBefore();
+        _;
+        _nonReentrantAfter();
+    }
+
+    function _nonReentrantBefore() private {
+        // On the first call to nonReentrant, _status will be _NOT_ENTERED
+        require(_status != _ENTERED, "ReentrancyGuard: reentrant call");
+
+        // Any calls to nonReentrant after this point will fail
+        _status = _ENTERED;
+    }
+
+    function _nonReentrantAfter() private {
+        // By storing the original value once again, a refund is triggered (see
+        // https://eips.ethereum.org/EIPS/eip-2200)
+        _status = _NOT_ENTERED;
+    }
+
+    /**
+     * @dev Returns true if the reentrancy guard is currently set to "entered", which indicates there is a
+     * `nonReentrant` function in the call stack.
+     */
+    function _reentrancyGuardEntered() internal view returns (bool) {
+        return _status == _ENTERED;
+    }
+}
+
+
+// File @openzeppelin/contracts/token/ERC20/IERC20.sol@v4.9.6
+
+// Original license: SPDX_License_Identifier: MIT
+// OpenZeppelin Contracts (last updated v4.9.0) (token/ERC20/IERC20.sol)
+
+pragma solidity ^0.8.0;
+
+/**
+ * @dev Interface of the ERC20 standard as defined in the EIP.
+ */
+interface IERC20 {
+    /**
+     * @dev Emitted when `value` tokens are moved from one account (`from`) to
+     * another (`to`).
+     *
+     * Note that `value` may be zero.
+     */
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    /**
+     * @dev Emitted when the allowance of a `spender` for an `owner` is set by
+     * a call to {approve}. `value` is the new allowance.
+     */
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+
+    /**
+     * @dev Returns the amount of tokens in existence.
+     */
+    function totalSupply() external view returns (uint256);
+
+    /**
+     * @dev Returns the amount of tokens owned by `account`.
+     */
+    function balanceOf(address account) external view returns (uint256);
+
+    /**
+     * @dev Moves `amount` tokens from the caller's account to `to`.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * Emits a {Transfer} event.
+     */
+    function transfer(address to, uint256 amount) external returns (bool);
+
+    /**
+     * @dev Returns the remaining number of tokens that `spender` will be
+     * allowed to spend on behalf of `owner` through {transferFrom}. This is
+     * zero by default.
+     *
+     * This value changes when {approve} or {transferFrom} are called.
+     */
+    function allowance(address owner, address spender) external view returns (uint256);
+
+    /**
+     * @dev Sets `amount` as the allowance of `spender` over the caller's tokens.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * IMPORTANT: Beware that changing an allowance with this method brings the risk
+     * that someone may use both the old and the new allowance by unfortunate
+     * transaction ordering. One possible solution to mitigate this race
+     * condition is to first reduce the spender's allowance to 0 and set the
+     * desired value afterwards:
+     * https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729
+     *
+     * Emits an {Approval} event.
+     */
+    function approve(address spender, uint256 amount) external returns (bool);
+
+    /**
+     * @dev Moves `amount` tokens from `from` to `to` using the
+     * allowance mechanism. `amount` is then deducted from the caller's
+     * allowance.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * Emits a {Transfer} event.
+     */
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+}
+
+
+// File contracts/HybridP2P_Rooted.sol
+
+// Original license: SPDX_License_Identifier: MIT
+pragma solidity ^0.8.19;
+
+/*
+  HybridP2P_Rooted.sol
+
+  Removes upgradeable pattern and enforces a permanent root (index = 1)
+  Root is created during constructor and is always active.
+  Admin (owner) can activate/deactivate users by calling adminActivate/adminDeactivate.
+  Many of the public functions/events are preserved from your ABI.
+*/
+
+
+
+contract HybridP2P_Rooted is Ownable, ReentrancyGuard {
+    // --- Events (kept from ABI and added where necessary) ---
+    event ActivationCreated(address indexed user, address sponsor, address binaryReceiver, address[5] matrixReceivers);
+    event ActivationFeeUpdated(uint256 newFeeUSDT);
+    event AdminWalletCancelled();
+    event AdminWalletConfirmed(address newAdmin);
+    event AdminWalletProposed(address pendingAdmin, uint256 at);
+    event AutoReEntryCreated(address indexed user, uint32 cycle);
+    event BinaryDirectQualified(address indexed user, uint32 left, uint32 right, bool qualified);
+    event BinaryMatchEarningUpdated(address indexed user, uint256 newAccruedUSDT);
+    event BinaryMatchingCriteriaUpdated(uint8 left, uint8 right);
+    event BinaryPairsMatched(address indexed user, uint64 newPairsPaidNow, uint64 totalPairs, uint256 paidAmount);
+    event BinaryQualificationUpdated(uint8 leftRequired, uint8 rightRequired);
+    event BinaryUnitsBubbled(address indexed ancestor, uint64 leftUnits, uint64 rightUnits);
+    event CreatorCardAdded(uint256 indexed id, string label, string holder);
+    event CreatorCardRemoved(uint256 indexed id);
+    event CreatorCardRenamed(uint256 indexed id, string newLabel);
+    event CreatorCardUpdated(uint256 indexed id, string label, string holder);
+    event Initialized(uint8 version);
+    event MatrixFull(address indexed user, uint256 matrixIndex);
+    event MatrixPlaced(address indexed user, address parent, string side);
+    event Paused(address account);
+    event PaymentConfirmed(address indexed user, address indexed receiver, uint8 slotIndex, uint256 usdtAmount, string mode);
+    event ProofSubmitted(address indexed user, address indexed receiver, uint8 slotIndex, string proof);
+    event SponsorIncomeUpdated(address indexed sponsor, address indexed fromUser, uint256 amount, string mode);
+    event USDTAddressUpdated(address token);
+    event Unpaused(address account);
+    event UserCardUpdated(address indexed user, string holderName);
+    event UserFullyActivated(address indexed user, address sponsor, uint8 side, string pbId, string mobile);
+    event UserIdUpdated(address indexed user, string pbId);
+    event UserPlacedBinary(address indexed user, address indexed parent, uint8 side);
+    event UserPlacedGlobalMatrix(address indexed user, uint256 index);
+    event UserPreRegistered(address indexed user, address sponsor, uint8 side);
+    event UserProfileUpdated(address indexed user, string name, string email, string mobile, string avatar);
+    event UserReEntered(address indexed user, uint32 cycle);
+
+    // --- Structs ---
+    struct ActivationView {
+        bool hasActivation;
+        bool activated;
+        address[8] receivers;
+        uint256[8] amounts;
+        bool[8] paid;
+        bool[8] verifiedOnchain;
+        string[8] modes;
+        string[8] proofs;
+    }
+
+    struct BinaryState {
+        uint32 directLeft;
+        uint32 directRight;
+        uint64 leftUnits;
+        uint64 rightUnits;
+        uint64 pairsMatched;
+    }
+
+    struct MatrixPos {
+        uint256 index;
+        uint256 parentIndex;
+        address parent;
+        uint8 level;
+        uint256 leftChildIndex;
+        uint256 rightChildIndex;
+    }
+
+    struct CreatorCard {
+        uint256 id;
+        string label;
+        string holderName;
+        string bankName;
+        string accountNumber;
+        string ifscOrSwift;
+        string upiId;
+        bool active;
+    }
+
+    struct UserProfile {
+        string name;
+        string email;
+        string mobile;
+        string avatar;
+        bool profileCompleted;
+        // payment card:
+        string holderName;
+        string bankName;
+        string accountNumber;
+        string ifscOrSwift;
+        string upiId;
+    }
+
+    // --- State ---
+    IERC20 public usdt;
+    address public adminWallet;
+    uint256 public activationFeeUSDT;
+    uint8 public constant SLOT_COUNT = 8;
+    uint8 public constant SLOT_SPONSOR = 0;
+    uint8 public constant SLOT_BINARY = 1;
+    uint8 public constant SLOT_CREATOR = 2;
+    uint8 public constant SLOT_ML1 = 3;
+    uint8 public constant SLOT_ML2 = 4;
+    uint8 public constant SLOT_ML3 = 5;
+    uint8 public constant SLOT_ML4 = 6;
+    uint8 public constant SLOT_ML5 = 7;
+
+    // binary/matching criteria
+    uint8 public binaryRequiredLeft = 1;
+    uint8 public binaryRequiredRight = 1;
+    uint8 public binaryMatchLeft = 3;
+    uint8 public binaryMatchRight = 3;
+    uint256 public binaryPairPayoutUSDT;
+
+    // slot amounts array
+    uint256[SLOT_COUNT] private _slotAmounts;
+
+    // activations stored on-chain
+    mapping(address => bool) public activations;
+    mapping(address => ActivationView) private _activationViews;
+    mapping(address => BinaryState) public binaryStates;
+
+    // binary tree
+    struct BinaryNode { address parent; address left; address right; }
+    mapping(address => BinaryNode) public binaryTree;
+    mapping(address => bool) public binaryPlaced;
+
+    // matrix
+    struct MatrixNode { address user; uint256 index; uint256 parentIndex; address parent; bool filled; }
+    mapping(uint256 => MatrixNode) public matrixGlobal;
+    mapping(address => uint256) public matrixIndexOf;
+    uint256 public nextMatrixIndex = 2;
+
+    // creator cards
+    mapping(uint256 => CreatorCard) public creatorCards;
+    uint256 public creatorCardCount;
+
+    // user profiles
+    mapping(address => UserProfile) public userProfiles;
+
+    // pausable
+    bool public paused;
+
+    // --- Modifiers ---
+    modifier notPaused() {
+        require(!paused, "paused");
+        _;
+    }
+
+    modifier onlyAdmin() {
+        require(owner() == _msgSender(), "only owner");
+        _;
+    }
+
+    // --- Constructor: sets USDT and admin (root) and creates root user at matrix index 1 ---
+    constructor(address _usdt, address _adminWallet) {
+        require(_usdt != address(0), "usdt 0");
+        require(_adminWallet != address(0), "admin 0");
+        usdt = IERC20(_usdt);
+        adminWallet = _adminWallet;
+        activationFeeUSDT = 50 * (10 ** 6);
+        binaryPairPayoutUSDT = 10 * (10 ** 6);
+        _slotAmounts[0] = 1000 * (10 ** 6);
+        _createRootUser(_adminWallet);
+        emit Initialized(1);
+    }
+
+    // --- Internal: create root ---
+    function _createRootUser(address _root) internal {
+        activations[_root] = true;
+
+        ActivationView storage av = _activationViews[_root];
+        av.hasActivation = true;
+        av.activated = true;
+        for (uint8 i = 0; i < SLOT_COUNT; i++) {
+            av.paid[i] = true;
+            av.receivers[i] = _root;
+            av.amounts[i] = 0;
+        }
+
+        binaryTree[_root] = BinaryNode({parent: address(0), left: address(0), right: address(0)});
+        binaryPlaced[_root] = true;
+
+        matrixGlobal[1] = MatrixNode({user: _root, index: 1, parentIndex: 0, parent: address(0), filled: true});
+        matrixIndexOf[_root] = 1;
+        nextMatrixIndex = 2;
+
+        emit ActivationCreated(_root, address(0), address(0), [address(0), address(0), address(0), address(0), address(0)]);
+        emit UserFullyActivated(_root, address(0), 0, "", "");
+        emit UserPlacedGlobalMatrix(_root, 1);
+        emit UserPlacedBinary(_root, address(0), 0);
+    }
+
+    // --- Admin activation / deactivation ---
+    function adminActivate(address user) external onlyOwner {
+        require(user != address(0), "user 0");
+        if (!activations[user]) {
+            activations[user] = true;
+            ActivationView storage av = _activationViews[user];
+            av.hasActivation = true;
+            av.activated = true;
+            emit ActivationCreated(user, address(0), address(0), [address(0), address(0), address(0), address(0), address(0)]);
+            emit UserFullyActivated(user, address(0), 0, "", "");
+        } else {
+            _activationViews[user].activated = true;
+            activations[user] = true;
+            emit UserFullyActivated(user, address(0), 0, "", "");
+        }
+    }
+
+    function adminDeactivate(address user) external onlyOwner {
+        require(user != address(0), "user 0");
+        require(user != adminWallet, "cannot deactivate root");
+        require(activations[user], "not active");
+        activations[user] = false;
+        _activationViews[user].activated = false;
+        emit UserProfileUpdated(user, userProfiles[user].name, userProfiles[user].email, userProfiles[user].mobile, userProfiles[user].avatar);
+    }
+
+    // --- Public reads ---
+    function slotAmounts(uint256 i) external view returns (uint256) {
+        require(i < SLOT_COUNT, "slot index");
+        return _slotAmounts[i];
+    }
+
+    function getActivation(address user) external view returns (
+        bool hasActivation, bool activated,
+        address[8] memory receivers, uint256[8] memory amounts,
+        bool[8] memory paid, bool[8] memory verifiedOnchain,
+        string[8] memory modes, string[8] memory proofs
+    ) {
+        ActivationView storage av = _activationViews[user];
+        hasActivation = av.hasActivation;
+        activated = av.activated || activations[user];
+        receivers = av.receivers;
+        amounts = av.amounts;
+        paid = av.paid;
+        verifiedOnchain = av.verifiedOnchain;
+        modes = av.modes;
+        proofs = av.proofs;
+    }
+
+    function getBinaryReport(address user) external view returns (
+        uint32 directLeft, uint32 directRight, bool qualified,
+        uint64 leftUnits, uint64 rightUnits, uint64 pairsMatched, uint256 accruedUSDT
+    ) {
+        BinaryState storage b = binaryStates[user];
+        directLeft = b.directLeft;
+        directRight = b.directRight;
+        leftUnits = b.leftUnits;
+        rightUnits = b.rightUnits;
+        pairsMatched = b.pairsMatched;
+        qualified = (b.directLeft >= binaryRequiredLeft && b.directRight >= binaryRequiredRight);
+        accruedUSDT = 0;
+    }
+
+    function getUserMatrixPosition(address user) external view returns (
+        uint256 index, uint256 parentIndex, address parent, uint8 level, uint256 leftChildIndex, uint256 rightChildIndex
+    ) {
+        uint256 idx = matrixIndexOf[user];
+        if (idx == 0) {
+            return (0, 0, address(0), 0, 0, 0);
+        }
+        MatrixNode storage m = matrixGlobal[idx];
+        index = m.index;
+        parentIndex = m.parentIndex;
+        parent = m.parent;
+        level = 0;
+        leftChildIndex = m.index * 2;
+        rightChildIndex = m.index * 2 + 1;
+    }
+
+    function getMatrixSummary() external view returns (uint256 totalPlaced, uint256 nextIndex) {
+        totalPlaced = nextMatrixIndex - 1;
+        nextIndex = nextMatrixIndex;
+    }
+
+    function getAllCreatorCards() external view returns (CreatorCard[] memory cards) {
+        uint256 cnt = creatorCardCount;
+        cards = new CreatorCard[](cnt);
+        for (uint256 i = 1; i <= cnt; i++) {
+            cards[i-1] = creatorCards[i];
+        }
+    }
+
+    function getUserBinary(address user) external view returns (address parent, address left, address right) {
+        BinaryNode storage n = binaryTree[user];
+        parent = n.parent;
+        left = n.left;
+        right = n.right;
+    }
+
+    function getUserProfile(address user) external view returns (
+        string memory name, string memory email, string memory mobile, string memory avatar, bool profileCompleted,
+        string memory holderName, string memory bankName, string memory accountNumber, string memory ifscOrSwift, string memory upiId
+    ) {
+        UserProfile storage p = userProfiles[user];
+        name = p.name;
+        email = p.email;
+        mobile = p.mobile;
+        avatar = p.avatar;
+        profileCompleted = p.profileCompleted;
+        holderName = p.holderName;
+        bankName = p.bankName;
+        accountNumber = p.accountNumber;
+        ifscOrSwift = p.ifscOrSwift;
+        upiId = p.upiId;
+    }
+
+    // --- Write functions ---
+
+    function addCreatorPaymentCard(
+        string memory label,
+        string memory holderName_,
+        string memory bankName_,
+        string memory accountNumber_,
+        string memory ifscOrSwift_,
+        string memory upiId_
+    ) external onlyOwner {
+        creatorCardCount++;
+        CreatorCard storage c = creatorCards[creatorCardCount];
+        c.id = creatorCardCount;
+        c.label = label;
+        c.holderName = holderName_;
+        c.bankName = bankName_;
+        c.accountNumber = accountNumber_;
+        c.ifscOrSwift = ifscOrSwift_;
+        c.upiId = upiId_;
+        c.active = true;
+        emit CreatorCardAdded(c.id, label, holderName_);
+    }
+
+    function editCreatorPaymentCard(
+        uint256 id,
+        string memory label,
+        string memory holderName_,
+        string memory bankName_,
+        string memory accountNumber_,
+        string memory ifscOrSwift_,
+        string memory upiId_
+    ) external onlyOwner {
+        require(id > 0 && id <= creatorCardCount, "card id");
+        CreatorCard storage c = creatorCards[id];
+        c.label = label;
+        c.holderName = holderName_;
+        c.bankName = bankName_;
+        c.accountNumber = accountNumber_;
+        c.ifscOrSwift = ifscOrSwift_;
+        c.upiId = upiId_;
+        emit CreatorCardUpdated(id, label, holderName_);
+    }
+
+    function removeCreatorPaymentCard(uint256 id) external onlyOwner {
+        require(id > 0 && id <= creatorCardCount, "card id");
+        delete creatorCards[id];
+        emit CreatorCardRemoved(id);
+    }
+
+    function submitOfflineProof(uint8 slotIndex, string memory utrOrTx, string memory proof) external notPaused nonReentrant {
+        require(slotIndex < SLOT_COUNT, "slot");
+        address sender = _msgSender();
+        ActivationView storage av = _activationViews[sender];
+        av.modes[slotIndex] = utrOrTx;
+        av.proofs[slotIndex] = proof;
+        emit ProofSubmitted(sender, address(0), slotIndex, proof);
+    }
+
+    function confirmOfflinePayment(address fromUser, uint8 slotIndex) external notPaused onlyOwner nonReentrant {
+        require(slotIndex < SLOT_COUNT, "slot");
+        ActivationView storage av = _activationViews[fromUser];
+        av.paid[slotIndex] = true;
+        av.verifiedOnchain[slotIndex] = true;
+        emit PaymentConfirmed(fromUser, _msgSender(), slotIndex, 0, av.modes[slotIndex]);
+    }
+
+    function payIndividuallyWeb3(uint8 slotIndex) external notPaused nonReentrant {
+        require(slotIndex < SLOT_COUNT, "slot");
+        address sender = _msgSender();
+        ActivationView storage av = _activationViews[sender];
+        uint256 amt = av.amounts[slotIndex];
+        require(amt > 0, "amt not set");
+        require(usdt.transferFrom(sender, address(this), amt), "transferFrom failed");
+        av.paid[slotIndex] = true;
+        av.verifiedOnchain[slotIndex] = true;
+        emit PaymentConfirmed(sender, address(this), slotIndex, amt, "web3");
+    }
+
+    function updateUserProfile(string memory name, string memory email, string memory mobile, string memory avatar) external {
+        UserProfile storage p = userProfiles[_msgSender()];
+        p.name = name;
+        p.email = email;
+        p.mobile = mobile;
+        p.avatar = avatar;
+        p.profileCompleted = bytes(name).length > 0 && bytes(mobile).length > 0;
+        emit UserProfileUpdated(_msgSender(), name, email, mobile, avatar);
+    }
+
+    function updateUserPaymentCard(string memory holderName_, string memory bankName_, string memory accountNumber_, string memory ifscOrSwift_, string memory upiId_) external {
+        UserProfile storage p = userProfiles[_msgSender()];
+        p.holderName = holderName_;
+        p.bankName = bankName_;
+        p.accountNumber = accountNumber_;
+        p.ifscOrSwift = ifscOrSwift_;
+        p.upiId = upiId_;
+        emit UserCardUpdated(_msgSender(), holderName_);
+    }
+
+    function setActivationFeeUSDT(uint256 amount) external onlyOwner {
+        activationFeeUSDT = amount;
+        emit ActivationFeeUpdated(amount);
+    }
+
+    function setSlotAmounts(uint256[8] calldata newAmts) external onlyOwner {
+        for (uint8 i = 0; i < SLOT_COUNT; i++) {
+            _slotAmounts[i] = newAmts[i];
+        }
+    }
+
+    function setBinaryQualification(uint8 leftCount, uint8 rightCount) external onlyOwner {
+        binaryRequiredLeft = leftCount;
+        binaryRequiredRight = rightCount;
+        emit BinaryQualificationUpdated(leftCount, rightCount);
+    }
+
+    function setBinaryMatchingCriteria(uint8 left, uint8 right) external onlyOwner {
+        binaryMatchLeft = left;
+        binaryMatchRight = right;
+        emit BinaryMatchingCriteriaUpdated(left, right);
+    }
+
+    function setBinaryPairPayoutUSDT(uint256 amount) external onlyOwner {
+        binaryPairPayoutUSDT = amount;
+        emit BinaryMatchEarningUpdated(address(0), amount);
+    }
+
+    function setUSDT(address _usdt) external onlyOwner {
+        require(_usdt != address(0), "usdt 0");
+        usdt = IERC20(_usdt);
+        emit USDTAddressUpdated(_usdt);
+    }
+
+    function _placeToBinary(address user, address sponsor, uint8 side) internal {
+        binaryTree[user] = BinaryNode({ parent: sponsor, left: address(0), right: address(0) });
+        binaryPlaced[user] = true;
+        if (side == 0) {
+            binaryTree[sponsor].left = user;
+        } else {
+            binaryTree[sponsor].right = user;
+        }
+        emit UserPlacedBinary(user, sponsor, side);
+    }
+
+    function _placeToMatrix(address user) internal returns (uint256 assignedIndex) {
+        assignedIndex = nextMatrixIndex;
+        matrixGlobal[assignedIndex] = MatrixNode({ user: user, index: assignedIndex, parentIndex: 0, parent: address(0), filled: true });
+        matrixIndexOf[user] = assignedIndex;
+        nextMatrixIndex++;
+        emit UserPlacedGlobalMatrix(user, assignedIndex);
+    }
+
+    function preregister(address sponsor, uint8 side) external {
+        address user = _msgSender();
+        emit UserPreRegistered(user, sponsor, side);
+    }
+
+    function buyReEntry() external payable {
+        emit UserReEntered(_msgSender(), 0);
+    }
+
+    function pause() external onlyOwner {
+        paused = true;
+        emit Paused(_msgSender());
+    }
+
+    function unpause() external onlyOwner {
+        paused = false;
+        emit Unpaused(_msgSender());
+    }
+
+    address public pendingAdminWallet;
+    uint256 public lastProposalTime;
+
+    function proposeAdminWallet(address _admin) external onlyOwner {
+        pendingAdminWallet = _admin;
+        lastProposalTime = block.timestamp;
+        emit AdminWalletProposed(_admin, lastProposalTime);
+    }
+
+    function confirmAdminWallet() external onlyOwner {
+        require(pendingAdminWallet != address(0), "no pending");
+        adminWallet = pendingAdminWallet;
+        pendingAdminWallet = address(0);
+        emit AdminWalletConfirmed(adminWallet);
+    }
+
+    function cancelAdminWalletUpdate() external onlyOwner {
+        pendingAdminWallet = address(0);
+        emit AdminWalletCancelled();
+    }
+
+    function transferOwnership(address newOwner) public override onlyOwner {
+        super.transferOwnership(newOwner);
+    }
+
+    function withdrawToken(address token, address to, uint256 amount) external onlyOwner nonReentrant {
+        IERC20(token).transfer(to, amount);
+    }
+
+    receive() external payable {}
+}
+
+[{"inputs":[{"internalType":"address","name":"_usdt","type":"address"},{"internalType":"address","name":"_adminWallet","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"address","name":"sponsor","type":"address"},{"indexed":false,"internalType":"address","name":"binaryReceiver","type":"address"},{"indexed":false,"internalType":"address[5]","name":"matrixReceivers","type":"address[5]"}],"name":"ActivationCreated","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint256","name":"newFeeUSDT","type":"uint256"}],"name":"ActivationFeeUpdated","type":"event"},{"anonymous":false,"inputs":[],"name":"AdminWalletCancelled","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"address","name":"newAdmin","type":"address"}],"name":"AdminWalletConfirmed","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"address","name":"pendingAdmin","type":"address"},{"indexed":false,"internalType":"uint256","name":"at","type":"uint256"}],"name":"AdminWalletProposed","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint32","name":"cycle","type":"uint32"}],"name":"AutoReEntryCreated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint32","name":"left","type":"uint32"},{"indexed":false,"internalType":"uint32","name":"right","type":"uint32"},{"indexed":false,"internalType":"bool","name":"qualified","type":"bool"}],"name":"BinaryDirectQualified","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"newAccruedUSDT","type":"uint256"}],"name":"BinaryMatchEarningUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint8","name":"left","type":"uint8"},{"indexed":false,"internalType":"uint8","name":"right","type":"uint8"}],"name":"BinaryMatchingCriteriaUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint64","name":"newPairsPaidNow","type":"uint64"},{"indexed":false,"internalType":"uint64","name":"totalPairs","type":"uint64"},{"indexed":false,"internalType":"uint256","name":"paidAmount","type":"uint256"}],"name":"BinaryPairsMatched","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint8","name":"leftRequired","type":"uint8"},{"indexed":false,"internalType":"uint8","name":"rightRequired","type":"uint8"}],"name":"BinaryQualificationUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"ancestor","type":"address"},{"indexed":false,"internalType":"uint64","name":"leftUnits","type":"uint64"},{"indexed":false,"internalType":"uint64","name":"rightUnits","type":"uint64"}],"name":"BinaryUnitsBubbled","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"id","type":"uint256"},{"indexed":false,"internalType":"string","name":"label","type":"string"},{"indexed":false,"internalType":"string","name":"holder","type":"string"}],"name":"CreatorCardAdded","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"id","type":"uint256"}],"name":"CreatorCardRemoved","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"id","type":"uint256"},{"indexed":false,"internalType":"string","name":"newLabel","type":"string"}],"name":"CreatorCardRenamed","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"id","type":"uint256"},{"indexed":false,"internalType":"string","name":"label","type":"string"},{"indexed":false,"internalType":"string","name":"holder","type":"string"}],"name":"CreatorCardUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint8","name":"version","type":"uint8"}],"name":"Initialized","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"matrixIndex","type":"uint256"}],"name":"MatrixFull","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"address","name":"parent","type":"address"},{"indexed":false,"internalType":"string","name":"side","type":"string"}],"name":"MatrixPlaced","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"address","name":"account","type":"address"}],"name":"Paused","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":true,"internalType":"address","name":"receiver","type":"address"},{"indexed":false,"internalType":"uint8","name":"slotIndex","type":"uint8"},{"indexed":false,"internalType":"uint256","name":"usdtAmount","type":"uint256"},{"indexed":false,"internalType":"string","name":"mode","type":"string"}],"name":"PaymentConfirmed","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":true,"internalType":"address","name":"receiver","type":"address"},{"indexed":false,"internalType":"uint8","name":"slotIndex","type":"uint8"},{"indexed":false,"internalType":"string","name":"proof","type":"string"}],"name":"ProofSubmitted","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"sponsor","type":"address"},{"indexed":true,"internalType":"address","name":"fromUser","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"string","name":"mode","type":"string"}],"name":"SponsorIncomeUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"address","name":"token","type":"address"}],"name":"USDTAddressUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"address","name":"account","type":"address"}],"name":"Unpaused","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"string","name":"holderName","type":"string"}],"name":"UserCardUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"address","name":"sponsor","type":"address"},{"indexed":false,"internalType":"uint8","name":"side","type":"uint8"},{"indexed":false,"internalType":"string","name":"pbId","type":"string"},{"indexed":false,"internalType":"string","name":"mobile","type":"string"}],"name":"UserFullyActivated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"string","name":"pbId","type":"string"}],"name":"UserIdUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":true,"internalType":"address","name":"parent","type":"address"},{"indexed":false,"internalType":"uint8","name":"side","type":"uint8"}],"name":"UserPlacedBinary","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"index","type":"uint256"}],"name":"UserPlacedGlobalMatrix","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"address","name":"sponsor","type":"address"},{"indexed":false,"internalType":"uint8","name":"side","type":"uint8"}],"name":"UserPreRegistered","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"string","name":"name","type":"string"},{"indexed":false,"internalType":"string","name":"email","type":"string"},{"indexed":false,"internalType":"string","name":"mobile","type":"string"},{"indexed":false,"internalType":"string","name":"avatar","type":"string"}],"name":"UserProfileUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint32","name":"cycle","type":"uint32"}],"name":"UserReEntered","type":"event"},{"inputs":[],"name":"SLOT_BINARY","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"SLOT_COUNT","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"SLOT_CREATOR","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"SLOT_ML1","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"SLOT_ML2","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"SLOT_ML3","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"SLOT_ML4","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"SLOT_ML5","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"SLOT_SPONSOR","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"activationFeeUSDT","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"activations","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"string","name":"label","type":"string"},{"internalType":"string","name":"holderName_","type":"string"},{"internalType":"string","name":"bankName_","type":"string"},{"internalType":"string","name":"accountNumber_","type":"string"},{"internalType":"string","name":"ifscOrSwift_","type":"string"},{"internalType":"string","name":"upiId_","type":"string"}],"name":"addCreatorPaymentCard","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"adminActivate","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"adminDeactivate","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"adminWallet","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"binaryMatchLeft","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"binaryMatchRight","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"binaryPairPayoutUSDT","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"binaryPlaced","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"binaryRequiredLeft","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"binaryRequiredRight","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"binaryStates","outputs":[{"internalType":"uint32","name":"directLeft","type":"uint32"},{"internalType":"uint32","name":"directRight","type":"uint32"},{"internalType":"uint64","name":"leftUnits","type":"uint64"},{"internalType":"uint64","name":"rightUnits","type":"uint64"},{"internalType":"uint64","name":"pairsMatched","type":"uint64"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"binaryTree","outputs":[{"internalType":"address","name":"parent","type":"address"},{"internalType":"address","name":"left","type":"address"},{"internalType":"address","name":"right","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"buyReEntry","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[],"name":"cancelAdminWalletUpdate","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"confirmAdminWallet","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"fromUser","type":"address"},{"internalType":"uint8","name":"slotIndex","type":"uint8"}],"name":"confirmOfflinePayment","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"creatorCardCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"creatorCards","outputs":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"string","name":"label","type":"string"},{"internalType":"string","name":"holderName","type":"string"},{"internalType":"string","name":"bankName","type":"string"},{"internalType":"string","name":"accountNumber","type":"string"},{"internalType":"string","name":"ifscOrSwift","type":"string"},{"internalType":"string","name":"upiId","type":"string"},{"internalType":"bool","name":"active","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"string","name":"label","type":"string"},{"internalType":"string","name":"holderName_","type":"string"},{"internalType":"string","name":"bankName_","type":"string"},{"internalType":"string","name":"accountNumber_","type":"string"},{"internalType":"string","name":"ifscOrSwift_","type":"string"},{"internalType":"string","name":"upiId_","type":"string"}],"name":"editCreatorPaymentCard","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"getActivation","outputs":[{"internalType":"bool","name":"hasActivation","type":"bool"},{"internalType":"bool","name":"activated","type":"bool"},{"internalType":"address[8]","name":"receivers","type":"address[8]"},{"internalType":"uint256[8]","name":"amounts","type":"uint256[8]"},{"internalType":"bool[8]","name":"paid","type":"bool[8]"},{"internalType":"bool[8]","name":"verifiedOnchain","type":"bool[8]"},{"internalType":"string[8]","name":"modes","type":"string[8]"},{"internalType":"string[8]","name":"proofs","type":"string[8]"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getAllCreatorCards","outputs":[{"components":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"string","name":"label","type":"string"},{"internalType":"string","name":"holderName","type":"string"},{"internalType":"string","name":"bankName","type":"string"},{"internalType":"string","name":"accountNumber","type":"string"},{"internalType":"string","name":"ifscOrSwift","type":"string"},{"internalType":"string","name":"upiId","type":"string"},{"internalType":"bool","name":"active","type":"bool"}],"internalType":"struct HybridP2P_Rooted.CreatorCard[]","name":"cards","type":"tuple[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"getBinaryReport","outputs":[{"internalType":"uint32","name":"directLeft","type":"uint32"},{"internalType":"uint32","name":"directRight","type":"uint32"},{"internalType":"bool","name":"qualified","type":"bool"},{"internalType":"uint64","name":"leftUnits","type":"uint64"},{"internalType":"uint64","name":"rightUnits","type":"uint64"},{"internalType":"uint64","name":"pairsMatched","type":"uint64"},{"internalType":"uint256","name":"accruedUSDT","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getMatrixSummary","outputs":[{"internalType":"uint256","name":"totalPlaced","type":"uint256"},{"internalType":"uint256","name":"nextIndex","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"getUserBinary","outputs":[{"internalType":"address","name":"parent","type":"address"},{"internalType":"address","name":"left","type":"address"},{"internalType":"address","name":"right","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"getUserMatrixPosition","outputs":[{"internalType":"uint256","name":"index","type":"uint256"},{"internalType":"uint256","name":"parentIndex","type":"uint256"},{"internalType":"address","name":"parent","type":"address"},{"internalType":"uint8","name":"level","type":"uint8"},{"internalType":"uint256","name":"leftChildIndex","type":"uint256"},{"internalType":"uint256","name":"rightChildIndex","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"getUserProfile","outputs":[{"internalType":"string","name":"name","type":"string"},{"internalType":"string","name":"email","type":"string"},{"internalType":"string","name":"mobile","type":"string"},{"internalType":"string","name":"avatar","type":"string"},{"internalType":"bool","name":"profileCompleted","type":"bool"},{"internalType":"string","name":"holderName","type":"string"},{"internalType":"string","name":"bankName","type":"string"},{"internalType":"string","name":"accountNumber","type":"string"},{"internalType":"string","name":"ifscOrSwift","type":"string"},{"internalType":"string","name":"upiId","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"lastProposalTime","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"matrixGlobal","outputs":[{"internalType":"address","name":"user","type":"address"},{"internalType":"uint256","name":"index","type":"uint256"},{"internalType":"uint256","name":"parentIndex","type":"uint256"},{"internalType":"address","name":"parent","type":"address"},{"internalType":"bool","name":"filled","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"matrixIndexOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"nextMatrixIndex","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"pause","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"paused","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint8","name":"slotIndex","type":"uint8"}],"name":"payIndividuallyWeb3","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"pendingAdminWallet","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"sponsor","type":"address"},{"internalType":"uint8","name":"side","type":"uint8"}],"name":"preregister","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"_admin","type":"address"}],"name":"proposeAdminWallet","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"id","type":"uint256"}],"name":"removeCreatorPaymentCard","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"setActivationFeeUSDT","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint8","name":"left","type":"uint8"},{"internalType":"uint8","name":"right","type":"uint8"}],"name":"setBinaryMatchingCriteria","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"setBinaryPairPayoutUSDT","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint8","name":"leftCount","type":"uint8"},{"internalType":"uint8","name":"rightCount","type":"uint8"}],"name":"setBinaryQualification","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256[8]","name":"newAmts","type":"uint256[8]"}],"name":"setSlotAmounts","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"_usdt","type":"address"}],"name":"setUSDT","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"i","type":"uint256"}],"name":"slotAmounts","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint8","name":"slotIndex","type":"uint8"},{"internalType":"string","name":"utrOrTx","type":"string"},{"internalType":"string","name":"proof","type":"string"}],"name":"submitOfflineProof","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"unpause","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"string","name":"holderName_","type":"string"},{"internalType":"string","name":"bankName_","type":"string"},{"internalType":"string","name":"accountNumber_","type":"string"},{"internalType":"string","name":"ifscOrSwift_","type":"string"},{"internalType":"string","name":"upiId_","type":"string"}],"name":"updateUserPaymentCard","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"string","name":"name","type":"string"},{"internalType":"string","name":"email","type":"string"},{"internalType":"string","name":"mobile","type":"string"},{"internalType":"string","name":"avatar","type":"string"}],"name":"updateUserProfile","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"usdt","outputs":[{"internalType":"contract IERC20","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"userProfiles","outputs":[{"internalType":"string","name":"name","type":"string"},{"internalType":"string","name":"email","type":"string"},{"internalType":"string","name":"mobile","type":"string"},{"internalType":"string","name":"avatar","type":"string"},{"internalType":"bool","name":"profileCompleted","type":"bool"},{"internalType":"string","name":"holderName","type":"string"},{"internalType":"string","name":"bankName","type":"string"},{"internalType":"string","name":"accountNumber","type":"string"},{"internalType":"string","name":"ifscOrSwift","type":"string"},{"internalType":"string","name":"upiId","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"token","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"withdrawToken","outputs":[],"stateMutability":"nonpayable","type":"function"},{"stateMutability":"payable","type":"receive"}]
+
+0000000000000000000000003afb9f97834839d1e443a0322e110d8ec9f24cc70000000000000000000000002616179166eb6cf663ee3ba23c75b5964b0a5576
+
+-----Decoded View---------------
+Arg [0] : _usdt (address): 0x3afb9f97834839d1E443A0322e110D8ec9F24cc7
+Arg [1] : _adminWallet (address): 0x2616179166Eb6Cf663Ee3BA23c75B5964B0a5576
+
+-----Encoded View---------------
+2 Constructor Arguments found :
+Arg [0] : 0000000000000000000000003afb9f97834839d1e443a0322e110d8ec9f24cc7
+Arg [1] : 0000000000000000000000002616179166eb6cf663ee3ba23c75b5964b0a5576
