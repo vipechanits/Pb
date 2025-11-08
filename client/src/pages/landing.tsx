@@ -1,23 +1,25 @@
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Wallet, TrendingUp, Users, Shield } from 'lucide-react';
 import WalletButton from '@/components/WalletButton';
 import NetworkBadge from '@/components/NetworkBadge';
+import { useWeb3 } from '@/context/Web3Context';
+import { useActivationData } from '@/hooks/useBlockchainData';
 
 export default function Landing() {
   const [, setLocation] = useLocation();
-  const [walletConnected, setWalletConnected] = useState(false);
-  const isAdmin = false; // todo: remove mock functionality - check if connected wallet is admin
+  const { isConnected, isCorrectNetwork, account } = useWeb3();
+  const { data: activationData } = useActivationData();
 
-  const handleConnect = () => {
-    setWalletConnected(true);
-    console.log('Wallet connected, routing to dashboard');
-    setTimeout(() => {
-      setLocation(isAdmin ? '/admin' : '/user');
-    }, 500);
-  };
+  useEffect(() => {
+    if (isConnected && isCorrectNetwork && account) {
+      if (activationData?.activated) {
+        setLocation('/user');
+      }
+    }
+  }, [isConnected, isCorrectNetwork, account, activationData, setLocation]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -33,8 +35,8 @@ export default function Landing() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <NetworkBadge network="polygon-amoy" isCorrect={true} />
-            <WalletButton onConnect={handleConnect} />
+            <NetworkBadge network="polygon-amoy" isCorrect={isCorrectNetwork} />
+            <WalletButton />
           </div>
         </div>
       </header>
@@ -50,10 +52,16 @@ export default function Landing() {
               and 5-level matrix rewards on Polygon network.
             </p>
             <div className="flex gap-4 justify-center pt-4">
-              <Button size="lg" onClick={handleConnect} data-testid="button-get-started">
-                <Wallet className="w-5 h-5 mr-2" />
-                Get Started
-              </Button>
+              {!isConnected ? (
+                <WalletButton />
+              ) : !isCorrectNetwork ? (
+                <NetworkBadge network="polygon-amoy" isCorrect={false} />
+              ) : (
+                <Button size="lg" onClick={() => setLocation('/user')} data-testid="button-get-started">
+                  <Wallet className="w-5 h-5 mr-2" />
+                  Go to Dashboard
+                </Button>
+              )}
               <Button size="lg" variant="outline" data-testid="button-learn-more">
                 Learn More
               </Button>
@@ -107,9 +115,9 @@ export default function Landing() {
             <p className="text-muted-foreground">
               Connect your wallet to access your dashboard and start earning with HybridP2P Rooted
             </p>
-            {!walletConnected && (
+            {!isConnected && (
               <div className="pt-4">
-                <WalletButton onConnect={handleConnect} />
+                <WalletButton />
               </div>
             )}
           </div>

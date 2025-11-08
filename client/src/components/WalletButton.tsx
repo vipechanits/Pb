@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Wallet, Copy, Check, LogOut } from 'lucide-react';
+import { Wallet, Copy, Check, LogOut, AlertCircle } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import { useWeb3 } from '@/context/Web3Context';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface WalletButtonProps {
   onConnect?: () => void;
@@ -14,26 +17,25 @@ interface WalletButtonProps {
 }
 
 export default function WalletButton({ onConnect, onDisconnect }: WalletButtonProps) {
-  const [isConnected, setIsConnected] = useState(false);
+  const { account, isConnected, isCorrectNetwork, connect, disconnect, switchNetwork } = useWeb3();
   const [copied, setCopied] = useState(false);
-  const walletAddress = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7'; // todo: remove mock functionality
 
-  const handleConnect = () => {
-    setIsConnected(true);
+  const handleConnect = async () => {
+    await connect();
     onConnect?.();
-    console.log('Wallet connect triggered');
   };
 
   const handleDisconnect = () => {
-    setIsConnected(false);
+    disconnect();
     onDisconnect?.();
-    console.log('Wallet disconnect triggered');
   };
 
   const copyAddress = () => {
-    navigator.clipboard.writeText(walletAddress);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (account) {
+      navigator.clipboard.writeText(account);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const truncateAddress = (addr: string) => {
@@ -49,12 +51,21 @@ export default function WalletButton({ onConnect, onDisconnect }: WalletButtonPr
     );
   }
 
+  if (!isCorrectNetwork) {
+    return (
+      <Button onClick={switchNetwork} variant="destructive" data-testid="button-switch-network">
+        <AlertCircle className="w-4 h-4 mr-2" />
+        Wrong Network
+      </Button>
+    );
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" className="font-mono" data-testid="button-wallet-menu">
           <Wallet className="w-4 h-4 mr-2" />
-          {truncateAddress(walletAddress)}
+          {truncateAddress(account!)}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
@@ -66,6 +77,7 @@ export default function WalletButton({ onConnect, onDisconnect }: WalletButtonPr
           )}
           {copied ? 'Copied!' : 'Copy Address'}
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleDisconnect} data-testid="button-disconnect">
           <LogOut className="w-4 h-4 mr-2" />
           Disconnect
