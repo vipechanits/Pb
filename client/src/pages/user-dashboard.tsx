@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { DollarSign, Users, GitBranch, Grid3x3, RefreshCw, ArrowLeftRight, Share2, Link2, ExternalLink, Layers, Plus } from 'lucide-react';
+import { DollarSign, Users, GitBranch, Grid3x3, RefreshCw, ArrowLeftRight, Share2, Link2, ExternalLink, Layers, Plus, Upload, Eye } from 'lucide-react';
 import StatCard from '@/components/StatCard';
 import PaymentModeSelector from '@/components/PaymentModeSelector';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Copy, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useContract } from '@/hooks/useContract';
+import { ObjectUploader } from '@/components/ObjectUploader';
+import type { UploadResult } from '@uppy/core';
 
 interface PaymentProof {
   transactionId: string;
@@ -418,13 +420,81 @@ export default function UserDashboard() {
                                 disabled={isPaid}
                                 data-testid={`input-transaction-id-${index}`}
                               />
-                              <Input 
-                                placeholder="Payment proof URL" 
-                                value={proof.proofUrl}
-                                onChange={(e) => handlePaymentProofChange(index, 'proofUrl', e.target.value)}
-                                disabled={isPaid}
-                                data-testid={`input-proof-url-${index}`}
-                              />
+                              <div className="space-y-2">
+                                <Label>Payment Proof</Label>
+                                <div className="flex gap-2">
+                                  <ObjectUploader
+                                    maxNumberOfFiles={1}
+                                    maxFileSize={10485760}
+                                    onGetUploadParameters={async () => {
+                                      const response = await fetch('/api/objects/upload', {
+                                        method: 'POST',
+                                      });
+                                      const data = await response.json();
+                                      return {
+                                        method: 'PUT' as const,
+                                        url: data.uploadURL,
+                                      };
+                                    }}
+                                    onComplete={async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
+                                      if (result.successful && result.successful.length > 0) {
+                                        const uploadedUrl = result.successful[0].uploadURL;
+                                        
+                                        const response = await fetch('/api/payment-proofs', {
+                                          method: 'PUT',
+                                          headers: {
+                                            'Content-Type': 'application/json',
+                                          },
+                                          body: JSON.stringify({
+                                            proofUrl: uploadedUrl,
+                                            walletAddress: account,
+                                          }),
+                                        });
+                                        
+                                        if (response.ok) {
+                                          const data = await response.json();
+                                          handlePaymentProofChange(index, 'proofUrl', data.objectPath);
+                                          toast({
+                                            title: "Upload Successful",
+                                            description: "Payment proof has been uploaded",
+                                          });
+                                        }
+                                      }
+                                    }}
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={isPaid}
+                                  >
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    {proof.proofUrl ? 'Change File' : 'Upload File'}
+                                  </ObjectUploader>
+                                  {proof.proofUrl && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => window.open(proof.proofUrl, '_blank')}
+                                      disabled={isPaid}
+                                      data-testid={`button-preview-proof-${index}`}
+                                    >
+                                      <Eye className="w-4 h-4 mr-2" />
+                                      Preview
+                                    </Button>
+                                  )}
+                                </div>
+                                {proof.proofUrl && (
+                                  <div className="relative w-full h-32 bg-muted rounded-md overflow-hidden">
+                                    <img 
+                                      src={proof.proofUrl} 
+                                      alt={`Payment proof ${index + 1}`}
+                                      className="w-full h-full object-contain"
+                                      onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.style.display = 'none';
+                                      }}
+                                    />
+                                  </div>
+                                )}
+                              </div>
                             </div>
                             <Button 
                               size="sm" 

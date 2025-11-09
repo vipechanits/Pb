@@ -60,6 +60,35 @@ Preferred communication style: Simple, everyday language.
 
 **Migrations**: Drizzle Kit manages database migrations with schema definitions in `shared/schema.ts` and migration files generated in the `migrations/` directory.
 
+### Object Storage
+
+**Replit Object Storage**: Google Cloud Storage-backed object storage for file uploads and serving. Configured through environment variables:
+- `DEFAULT_OBJECT_STORAGE_BUCKET_ID`: Unique bucket identifier
+- `PUBLIC_OBJECT_SEARCH_PATHS`: Comma-separated paths for public assets
+- `PRIVATE_OBJECT_DIR`: Directory for private user-uploaded files
+
+**ObjectStorageService** (`server/objectStorage.ts`): Core service for interacting with object storage:
+- Presigned URL generation for direct client-to-storage uploads
+- File serving with automatic content-type detection
+- ACL (Access Control List) policy management for private files
+- Object path normalization and validation
+
+**ObjectUploader Component** (`client/src/components/ObjectUploader.tsx`): React component providing file upload UI:
+- Uppy-powered modal interface for file selection and upload
+- Support for images and PDFs (max 10MB per file)
+- Direct-to-storage uploads using presigned URLs
+- Progress tracking and upload status display
+
+**Use Cases**:
+- Payment proof uploads for offline activation payments
+- User-submitted documentation and verification files
+- Future: profile images, KYC documents, transaction receipts
+
+**File Access**:
+- Public files: Accessible via `/objects/:objectPath` route with public ACL policy
+- Private files: ACL-based access control with owner verification
+- Metadata stored in object custom properties for authorization
+
 ### Blockchain Architecture
 
 **Smart Contract**: HybridP2P Rooted contract deployed on Polygon Amoy Testnet (contract address: 0xE1eD8da387AcDF4BaB818f8Fc12cFc03314cDf7E).
