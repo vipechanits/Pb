@@ -82,6 +82,103 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Fallback payment routes
+  app.post("/api/fallback-payments", async (req, res) => {
+    try {
+      const { paymentType, userWalletAddress, amountUsdt, amountInr, transactionId, paymentProofUrl, notes } = req.body;
+      
+      if (!paymentType || !userWalletAddress || !amountUsdt || !amountInr) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const payment = await storage.createFallbackPayment({
+        paymentType,
+        userWalletAddress,
+        amountUsdt,
+        amountInr,
+        transactionId,
+        paymentProofUrl,
+        notes,
+        adminConfirmed: false,
+        userConfirmed: false,
+      });
+
+      res.status(201).json(payment);
+    } catch (error) {
+      console.error("Error creating fallback payment:", error);
+      res.status(500).json({ error: "Failed to create fallback payment" });
+    }
+  });
+
+  app.get("/api/fallback-payments/user/:walletAddress", async (req, res) => {
+    try {
+      const { walletAddress } = req.params;
+      const payments = await storage.getFallbackPaymentsByUser(walletAddress);
+      res.json(payments);
+    } catch (error) {
+      console.error("Error fetching user fallback payments:", error);
+      res.status(500).json({ error: "Failed to fetch payments" });
+    }
+  });
+
+  app.get("/api/fallback-payments/pending", async (req, res) => {
+    try {
+      const payments = await storage.getPendingFallbackPayments();
+      res.json(payments);
+    } catch (error) {
+      console.error("Error fetching pending fallback payments:", error);
+      res.status(500).json({ error: "Failed to fetch payments" });
+    }
+  });
+
+  app.get("/api/fallback-payments", async (req, res) => {
+    try {
+      const payments = await storage.getAllFallbackPayments();
+      res.json(payments);
+    } catch (error) {
+      console.error("Error fetching all fallback payments:", error);
+      res.status(500).json({ error: "Failed to fetch payments" });
+    }
+  });
+
+  app.post("/api/fallback-payments/:id/confirm-admin", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { adminWalletAddress } = req.body;
+
+      if (!adminWalletAddress) {
+        return res.status(400).json({ error: "adminWalletAddress is required" });
+      }
+
+      const payment = await storage.confirmFallbackPaymentByAdmin(id, adminWalletAddress);
+      
+      if (!payment) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+
+      res.json(payment);
+    } catch (error) {
+      console.error("Error confirming payment by admin:", error);
+      res.status(500).json({ error: "Failed to confirm payment" });
+    }
+  });
+
+  app.post("/api/fallback-payments/:id/confirm-user", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const payment = await storage.confirmFallbackPaymentByUser(id);
+      
+      if (!payment) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+
+      res.json(payment);
+    } catch (error) {
+      console.error("Error confirming payment by user:", error);
+      res.status(500).json({ error: "Failed to confirm payment" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
