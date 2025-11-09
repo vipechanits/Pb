@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import {
   Sidebar,
@@ -23,8 +22,9 @@ import {
   FileCheck,
   UserCog,
 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import NetworkBadge from './NetworkBadge';
+import { useWeb3 } from '@/context/Web3Context';
+import logoUrl from '@assets/Generated Image October 16, 2025 - 6_58AM (1)_1762653844897.png';
 
 interface AppSidebarProps {
   isAdmin?: boolean;
@@ -32,13 +32,12 @@ interface AppSidebarProps {
 
 export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   const [location] = useLocation();
-  const walletAddress = '0x742d...bEb7'; // todo: remove mock functionality
+  const { account, isCorrectNetwork } = useWeb3();
 
   const userMenuItems: Array<{
     title: string;
     url: string;
     icon: typeof LayoutDashboard;
-    badge?: number;
   }> = [
     {
       title: 'Dashboard',
@@ -76,7 +75,6 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     title: string;
     url: string;
     icon: typeof LayoutDashboard;
-    badge?: number;
   }> = [
     {
       title: 'Admin Dashboard',
@@ -87,7 +85,6 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       title: 'Payment Confirmations',
       url: '/admin/payments',
       icon: FileCheck,
-      badge: 5, // todo: remove mock functionality
     },
     {
       title: 'User Management',
@@ -108,19 +105,19 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">H</span>
-            </div>
+            <img src={logoUrl} alt="PAYBACK247" className="w-10 h-10" />
             <div>
-              <div className="font-semibold text-sm">HybridP2P</div>
-              <div className="text-xs text-muted-foreground">Rooted</div>
+              <div className="font-semibold text-sm">PAYBACK247</div>
+              <div className="text-xs text-muted-foreground">HybridP2P Platform</div>
             </div>
           </div>
           <div className="pt-2">
             <div className="text-xs text-muted-foreground mb-1">Connected Wallet</div>
-            <div className="font-mono text-xs">{walletAddress}</div>
+            <div className="font-mono text-xs">
+              {account ? `${account.slice(0, 6)}...${account.slice(-4)}` : 'Not connected'}
+            </div>
             <div className="mt-2">
-              <NetworkBadge network="polygon-amoy" isCorrect={true} />
+              <NetworkBadge network="polygon-amoy" isCorrect={isCorrectNetwork} />
             </div>
           </div>
         </div>
@@ -136,11 +133,6 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
                     <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
                       <item.icon className="w-4 h-4" />
                       <span>{item.title}</span>
-                      {'badge' in item && item.badge && (
-                        <Badge variant="destructive" className="ml-auto text-xs">
-                          {item.badge}
-                        </Badge>
-                      )}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

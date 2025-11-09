@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { DollarSign, Users, GitBranch, Grid3x3, RefreshCw, ArrowLeftRight } from 'lucide-react';
 import StatCard from '@/components/StatCard';
 import PaymentModeSelector from '@/components/PaymentModeSelector';
-import IncomeTable from '@/components/IncomeTable';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -25,39 +24,6 @@ export default function UserDashboard() {
   const { data: binaryData, isLoading: binaryLoading } = useBinaryReport();
   const { data: activationFee } = useActivationFee();
 
-  // todo: remove mock functionality
-  const mockTransactions = [
-    {
-      id: '1',
-      type: 'Direct Sponsoring',
-      from: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7',
-      amount: '10 USDT',
-      amountInr: '₹1,000',
-      date: '2025-11-07',
-      status: 'confirmed' as const,
-      mode: 'web3' as const,
-    },
-    {
-      id: '2',
-      type: 'Binary Matching',
-      to: '0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199',
-      amount: '30 USDT',
-      amountInr: '₹3,000',
-      date: '2025-11-06',
-      status: 'confirmed' as const,
-      mode: 'offline' as const,
-    },
-    {
-      id: '3',
-      type: 'Matrix Level 1',
-      to: '0xAbCdEf1234567890aBcDeF1234567890AbCdEf12',
-      amount: '5 USDT',
-      amountInr: '₹500',
-      date: '2025-11-05',
-      status: 'pending' as const,
-      mode: 'web3' as const,
-    },
-  ];
 
   if (!isConnected) {
     return (
@@ -138,8 +104,8 @@ export default function UserDashboard() {
             />
             <StatCard
               title="Direct Sponsoring"
-              value="0 USDT"
-              subtitle="No direct income yet"
+              value="Coming Soon"
+              subtitle="Requires event log parsing"
               icon={Users}
               iconColor="text-chart-1"
             />
@@ -187,7 +153,11 @@ export default function UserDashboard() {
 
       <div>
         <h2 className="text-xl font-semibold mb-4">Recent Transactions</h2>
-        <IncomeTable transactions={mockTransactions} />
+        <Alert>
+          <AlertDescription>
+            Transaction history will be populated from blockchain events. Connect your wallet and activate your account to start tracking transactions.
+          </AlertDescription>
+        </Alert>
       </div>
     </div>
   );

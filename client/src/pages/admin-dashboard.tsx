@@ -1,20 +1,13 @@
-import { Shield, Users, RefreshCw, GitBranch, FileCheck } from 'lucide-react';
+import { Shield, RefreshCw, GitBranch } from 'lucide-react';
 import StatCard from '@/components/StatCard';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useActivationFee, useBinaryMatchingCriteria } from '@/hooks/useBlockchainData';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function AdminDashboard() {
-  // todo: remove mock functionality
-  const handleUpdateFee = () => {
-    console.log('Activation fee updated');
-  };
-
-  const handleUpdatePayout = () => {
-    console.log('Binary payout updated');
-  };
+  const { data: activationFee, isLoading: feeLoading } = useActivationFee();
+  const { data: criteria, isLoading: criteriaLoading } = useBinaryMatchingCriteria();
 
   return (
     <div className="p-6 space-y-6">
@@ -23,144 +16,70 @@ export default function AdminDashboard() {
           <Shield className="w-8 h-8 text-primary" />
           Admin Dashboard
         </h1>
-        <p className="text-muted-foreground">Manage system settings and user activations</p>
+        <p className="text-muted-foreground">View current system settings and blockchain data</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Users"
-          value="1,247"
-          subtitle="Active accounts"
-          icon={Users}
-          iconColor="text-primary"
-          trend={{ value: '8.2%', positive: true }}
-        />
-        <StatCard
-          title="Total Activations"
-          value="892"
-          subtitle="Completed"
-          icon={Shield}
-          iconColor="text-chart-1"
-        />
-        <StatCard
-          title="Matrix Cycles"
-          value="156"
-          subtitle="Total re-entries"
-          icon={RefreshCw}
-          iconColor="text-chart-2"
-        />
-        <StatCard
-          title="Binary Pairs Matched"
-          value="3,421"
-          subtitle="All time"
-          icon={GitBranch}
-          iconColor="text-chart-3"
-        />
-      </div>
+      <Alert>
+        <AlertDescription>
+          System statistics require blockchain event log parsing. Admin write functions (updateActivationFee, updateBinaryPayout, updateMatchingCriteria) are contract methods that require admin wallet signatures and can be called directly via the contract interface when needed.
+        </AlertDescription>
+      </Alert>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Activation Fee Settings</CardTitle>
-            <CardDescription>Set the activation fee in USDT</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="activation-fee">Activation Fee (USDT)</Label>
-              <Input
-                id="activation-fee"
-                type="number"
-                defaultValue="50"
-                placeholder="50"
-                data-testid="input-activation-fee"
-              />
-              <p className="text-sm text-muted-foreground">Current: 50 USDT (₹5,000 INR)</p>
-            </div>
-            <Button onClick={handleUpdateFee} data-testid="button-update-fee">
-              Update Fee
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Binary Pair Payout</CardTitle>
-            <CardDescription>Set the payout per matched pair in USDT</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="pair-payout">Pair Payout (USDT)</Label>
-              <Input
-                id="pair-payout"
-                type="number"
-                defaultValue="10"
-                placeholder="10"
-                data-testid="input-pair-payout"
-              />
-              <p className="text-sm text-muted-foreground">Current: 10 USDT (₹1,000 INR)</p>
-            </div>
-            <Button onClick={handleUpdatePayout} data-testid="button-update-payout">
-              Update Payout
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      {(feeLoading || criteriaLoading) ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3].map(i => (
+            <Skeleton key={i} className="h-32" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <StatCard
+            title="Activation Fee"
+            value={`${activationFee || '...'} USDT`}
+            subtitle="Current activation fee"
+            icon={Shield}
+            iconColor="text-primary"
+          />
+          <StatCard
+            title="Match Left Criteria"
+            value={criteria?.matchLeft?.toString() || '...'}
+            subtitle="Required left members"
+            icon={GitBranch}
+            iconColor="text-chart-1"
+          />
+          <StatCard
+            title="Match Right Criteria"
+            value={criteria?.matchRight?.toString() || '...'}
+            subtitle="Required right members"
+            icon={RefreshCw}
+            iconColor="text-chart-2"
+          />
+        </div>
+      )}
 
       <Card>
         <CardHeader>
-          <CardTitle>Binary Matching Criteria</CardTitle>
-          <CardDescription>Configure binary qualification and matching rules</CardDescription>
+          <CardTitle>Contract Information</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <h3 className="font-semibold">Qualification Criteria</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="qual-left">Left Required</Label>
-                  <Input id="qual-left" type="number" defaultValue="1" data-testid="input-qual-left" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="qual-right">Right Required</Label>
-                  <Input id="qual-right" type="number" defaultValue="1" data-testid="input-qual-right" />
-                </div>
-              </div>
-            </div>
-            <div className="space-y-4">
-              <h3 className="font-semibold">Matching Criteria</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="match-left">Left Match</Label>
-                  <Input id="match-left" type="number" defaultValue="3" data-testid="input-match-left" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="match-right">Right Match</Label>
-                  <Input id="match-right" type="number" defaultValue="3" data-testid="input-match-right" />
-                </div>
-              </div>
-            </div>
+        <CardContent className="space-y-2">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Network:</span>
+            <span className="font-semibold">Polygon Amoy Testnet</span>
           </div>
-          <Button className="mt-4" data-testid="button-update-criteria">
-            Update Criteria
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-          <div>
-            <CardTitle>Pending Payment Confirmations</CardTitle>
-            <CardDescription>Offline payments awaiting approval</CardDescription>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Contract Address:</span>
+            <span className="font-mono text-sm">0xE1eD8da387AcDF4BaB818f8Fc12cFc03314cDf7E</span>
           </div>
-          <Badge variant="destructive" className="text-sm">
-            5 Pending
-          </Badge>
-        </CardHeader>
-        <CardContent>
-          <Button variant="outline" data-testid="button-view-payments">
-            <FileCheck className="w-4 h-4 mr-2" />
-            View All Payments
-          </Button>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Activation Fee:</span>
+            <span className="font-semibold">{activationFee || '...'} USDT</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Binary Criteria:</span>
+            <span className="font-semibold">
+              {criteria?.matchLeft || '...'} left, {criteria?.matchRight || '...'} right
+            </span>
+          </div>
         </CardContent>
       </Card>
     </div>

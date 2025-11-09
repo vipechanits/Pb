@@ -7,6 +7,7 @@ import WalletButton from '@/components/WalletButton';
 import NetworkBadge from '@/components/NetworkBadge';
 import { useWeb3 } from '@/context/Web3Context';
 import { useActivationData } from '@/hooks/useBlockchainData';
+import logoUrl from '@assets/Generated Image October 16, 2025 - 6_58AM (1)_1762653844897.png';
 
 export default function Landing() {
   const [, setLocation] = useLocation();
@@ -26,12 +27,10 @@ export default function Landing() {
       <header className="border-b border-border">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-md bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-lg">H</span>
-            </div>
+            <img src={logoUrl} alt="PAYBACK247" className="w-12 h-12" />
             <div>
-              <h1 className="text-xl font-bold">HybridP2P Rooted</h1>
-              <p className="text-xs text-muted-foreground">Web3 MLM Platform</p>
+              <h1 className="text-xl font-bold">PAYBACK247</h1>
+              <p className="text-xs text-muted-foreground">HybridP2P Rooted Platform</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -44,8 +43,11 @@ export default function Landing() {
       <main>
         <section className="container mx-auto px-4 py-16 text-center">
           <div className="max-w-3xl mx-auto space-y-6">
+            <div className="flex justify-center mb-6">
+              <img src={logoUrl} alt="PAYBACK247" className="w-32 h-32" />
+            </div>
             <h2 className="text-4xl md:text-5xl font-bold tracking-tight">
-              Welcome to HybridP2P Rooted
+              Welcome to PAYBACK247
             </h2>
             <p className="text-xl text-muted-foreground">
               A hybrid peer-to-peer MLM system with USDT-based activations, binary pairing income,
@@ -113,7 +115,7 @@ export default function Landing() {
           <div className="max-w-2xl mx-auto space-y-4">
             <h3 className="text-2xl font-bold">Ready to join?</h3>
             <p className="text-muted-foreground">
-              Connect your wallet to access your dashboard and start earning with HybridP2P Rooted
+              Connect your wallet to access your dashboard and start earning with PAYBACK247
             </p>
             {!isConnected && (
               <div className="pt-4">
