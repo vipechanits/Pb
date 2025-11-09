@@ -1,7 +1,22 @@
-# HybridP2P Rooted Web3 DApp
+# PAYBACK247 - P2P MLM Platform (Non-Blockchain)
 
 ## Overview
-PAYBACK247 is a hybrid peer-to-peer MLM platform built on the Polygon blockchain. It integrates smart contract-based USDT transactions with web application features to create a decentralized marketing platform. The system supports binary pairing income, multi-level matrix rewards, and both on-chain and off-chain payment verification. The platform allows users to activate accounts, build referral networks, track earnings, and manage profiles, while administrators can configure the system, approve payments, and access analytics.
+PAYBACK247 is a peer-to-peer MLM platform being converted from blockchain-based to traditional full-stack web application. The system supports binary pairing income, multi-level matrix rewards, and manual payment tracking with admin approval. The platform allows users to activate accounts, build referral networks, track earnings, and manage profiles, while administrators can configure the system, approve payments, and access analytics.
+
+## Current Status (November 9, 2025)
+**⚠️ BLOCKCHAIN REMOVAL IN PROGRESS**
+
+The application is being converted from a Web3 DApp to a traditional web application:
+- ✅ **Phase 1 Complete**: Removed blockchain dependencies (ethers.js, Web3Context, smart contract hooks)
+- ✅ **Phase 1 Complete**: Stubbed all pages/components to get app building
+- 🔄 **Phase 2 In Progress**: Need to implement traditional authentication and rebuild core features
+- ⏳ **Phase 3 Pending**: Rebuild all dashboard pages with REST APIs
+- ⏳ **Phase 4 Pending**: Implement admin approval workflow for manual payments
+
+**Files Stubbed (Need Rebuilding):**
+- Pages: landing, user-dashboard, confirmation, binary-matching, matrix-income, direct-sponsoring, admin-payments, reentry, additional-reentry, admin-dashboard
+- Components: WalletButton, NetworkBadge, PaymentModeSelector
+- Hooks: useBlockchainData.ts
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -11,9 +26,9 @@ Preferred communication style: Simple, everyday language.
 ### Frontend
 - **Framework**: React with TypeScript (Vite).
 - **Routing**: Wouter for client-side routing.
-- **State Management**: React Context API for Web3, TanStack React Query for server state, local component state for UI.
+- **State Management**: TanStack React Query for server state, local component state for UI.
 - **UI**: shadcn/ui (Radix UI + Tailwind CSS) following Material Design principles.
-- **Web3 Integration**: Ethers.js v6, MetaMask, custom hooks for smart contract interaction, real-time blockchain data polling.
+- **Authentication** (To Be Implemented): Email/password login with session management.
 - **Design System**: Tailwind CSS, custom themes, Inter and JetBrains Mono fonts, 8px grid spacing.
 
 ### Backend
@@ -38,17 +53,11 @@ Preferred communication style: Simple, everyday language.
 - **Use Cases**: Payment proof uploads, user documents (KYC), profile images.
 - **File Access**: Public via `/objects/:objectPath`, private with ACL-based owner verification.
 
-### Blockchain
-- **Smart Contract**: HybridP2P Rooted on Polygon Amoy Testnet (0xE1eD8da387AcDF4BaB818f8Fc12cFc03314cDf7E).
-- **Token**: USDT integration (0x3afb9f97834839d1E443A0322e110D8ec9F24cc7).
-- **Core Features**: User activation (USDT fees), binary tree (3:3 pairing), five-level matrix, re-entry cycles, dual payment modes (Web3/offline).
-- **Network**: Polygon Amoy Testnet (80002), planned Mainnet support (137).
-
-### Authentication & Authorization
-- **Authentication**: MetaMask wallet connection (Ethereum address as identity).
-- **Role Detection**: Admin/user roles based on wallet address vs. smart contract config.
-- **Session Persistence**: Express session storage in PostgreSQL.
-- **Network Validation**: Enforces correct network connection.
+### Authentication & Authorization (To Be Implemented)
+- **Authentication**: Email/password authentication with bcrypt password hashing.
+- **Session Management**: Express sessions with PostgreSQL store (connect-pg-simple).
+- **Role Detection**: Admin/user roles stored in database user table.
+- **User IDs**: Auto-incrementing integer IDs (PB1, PB2, etc.) replacing wallet addresses.
 
 ### Payment Processing
 - **8-Payment Activation System**: Each user activation requires 8 separate payments:
@@ -59,9 +68,9 @@ Preferred communication style: Simple, everyday language.
   
 - **Admin Fallback**: When eligible receiver is unavailable (no sponsor, no binary match, no matrix upline), payment automatically goes to admin wallet (displayed as "Admin Wallet" with grey badge in UI).
 
-- **Dual-Mode Per Payment**:
-    1. **Web3 Payments**: On-chain USDT approval + transfer via `payIndividuallyWeb3(slotIndex)`
-    2. **Offline Payments**: UTR/Transaction ID + optional proof upload via `submitOfflineProof(slotIndex, utr, proofUrl)`
+- **Payment Mode** (Manual Only):
+    - **Offline Payments**: UTR/Transaction ID + optional proof upload
+    - User initiates payment → enters UTR → uploads proof → admin approves
     
 - **Payment Flow**:
   - User views 8-payment checklist showing receivers, amounts (USDT/INR), and status
