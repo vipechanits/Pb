@@ -17,6 +17,7 @@ interface PaymentSubmissionDialogProps {
     id: string;
     slotIndex: number;
     paymentType: string;
+    payerUserId: string;
     receiverUserId: string | null;
     receiverType: 'user' | 'admin';
     amountInr: string;
@@ -94,6 +95,12 @@ export function PaymentSubmissionDialog({
           headers: {
             'Content-Type': proofFile.type,
           },
+        });
+
+        // Set ACL policy to make file publicly accessible
+        await apiRequest('PUT', '/api/payment-proofs', {
+          proofUrl: uploadResponse.publicUrl,
+          walletAddress: payment.payerUserId,
         });
 
         proofUrl = uploadResponse.publicUrl;
