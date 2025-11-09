@@ -82,99 +82,103 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Fallback payment routes
-  app.post("/api/fallback-payments", async (req, res) => {
+  // Activation payment confirmation routes
+  app.post("/api/activation-payments/confirmations", async (req, res) => {
     try {
-      const { paymentType, userWalletAddress, amountUsdt, amountInr, transactionId, paymentProofUrl, notes } = req.body;
+      const { 
+        payerWalletAddress, 
+        receiverWalletAddress, 
+        receiverIndex,
+        amountUsdt, 
+        paymentStage, 
+        isAdminReceiver,
+        paymentMode,
+        transactionId,
+        transactionHash,
+        paymentProofUrl,
+        notes 
+      } = req.body;
       
-      if (!paymentType || !userWalletAddress || !amountUsdt || !amountInr) {
+      if (!payerWalletAddress || !receiverWalletAddress || receiverIndex === undefined || !amountUsdt || !paymentStage || !paymentMode) {
         return res.status(400).json({ error: "Missing required fields" });
       }
 
-      const payment = await storage.createFallbackPayment({
-        paymentType,
-        userWalletAddress,
+      const confirmation = await storage.createActivationPaymentConfirmation({
+        payerWalletAddress: payerWalletAddress.toLowerCase(),
+        receiverWalletAddress: receiverWalletAddress.toLowerCase(),
+        receiverIndex,
         amountUsdt,
-        amountInr,
+        paymentStage,
+        isAdminReceiver: isAdminReceiver || false,
+        paymentMode,
         transactionId,
+        transactionHash,
         paymentProofUrl,
         notes,
-        adminConfirmed: false,
-        userConfirmed: false,
+        confirmed: false,
       });
 
-      res.status(201).json(payment);
+      res.status(201).json(confirmation);
     } catch (error) {
-      console.error("Error creating fallback payment:", error);
-      res.status(500).json({ error: "Failed to create fallback payment" });
+      console.error("Error creating activation payment confirmation:", error);
+      res.status(500).json({ error: "Failed to create payment confirmation" });
     }
   });
 
-  app.get("/api/fallback-payments/user/:walletAddress", async (req, res) => {
+  app.get("/api/activation-payments/confirmations/payer/:walletAddress", async (req, res) => {
     try {
       const { walletAddress } = req.params;
-      const payments = await storage.getFallbackPaymentsByUser(walletAddress);
-      res.json(payments);
+      const confirmations = await storage.getActivationPaymentConfirmationsByPayer(walletAddress);
+      res.json(confirmations);
     } catch (error) {
-      console.error("Error fetching user fallback payments:", error);
-      res.status(500).json({ error: "Failed to fetch payments" });
+      console.error("Error fetching payer payment confirmations:", error);
+      res.status(500).json({ error: "Failed to fetch payment confirmations" });
     }
   });
 
-  app.get("/api/fallback-payments/pending", async (req, res) => {
+  app.get("/api/activation-payments/confirmations/receiver/:walletAddress", async (req, res) => {
     try {
-      const payments = await storage.getPendingFallbackPayments();
-      res.json(payments);
+      const { walletAddress } = req.params;
+      const confirmations = await storage.getActivationPaymentConfirmationsByReceiver(walletAddress);
+      res.json(confirmations);
     } catch (error) {
-      console.error("Error fetching pending fallback payments:", error);
-      res.status(500).json({ error: "Failed to fetch payments" });
+      console.error("Error fetching receiver payment confirmations:", error);
+      res.status(500).json({ error: "Failed to fetch payment confirmations" });
     }
   });
 
-  app.get("/api/fallback-payments", async (req, res) => {
+  app.get("/api/activation-payments/confirmations/pending", async (req, res) => {
     try {
-      const payments = await storage.getAllFallbackPayments();
-      res.json(payments);
+      const confirmations = await storage.getPendingActivationPaymentConfirmations();
+      res.json(confirmations);
     } catch (error) {
-      console.error("Error fetching all fallback payments:", error);
-      res.status(500).json({ error: "Failed to fetch payments" });
+      console.error("Error fetching pending payment confirmations:", error);
+      res.status(500).json({ error: "Failed to fetch payment confirmations" });
     }
   });
 
-  app.post("/api/fallback-payments/:id/confirm-admin", async (req, res) => {
+  app.get("/api/activation-payments/confirmations", async (req, res) => {
     try {
-      const { id } = req.params;
-      const { adminWalletAddress } = req.body;
-
-      if (!adminWalletAddress) {
-        return res.status(400).json({ error: "adminWalletAddress is required" });
-      }
-
-      const payment = await storage.confirmFallbackPaymentByAdmin(id, adminWalletAddress);
-      
-      if (!payment) {
-        return res.status(404).json({ error: "Payment not found" });
-      }
-
-      res.json(payment);
+      const confirmations = await storage.getAllActivationPaymentConfirmations();
+      res.json(confirmations);
     } catch (error) {
-      console.error("Error confirming payment by admin:", error);
-      res.status(500).json({ error: "Failed to confirm payment" });
+      console.error("Error fetching all payment confirmations:", error);
+      res.status(500).json({ error: "Failed to fetch payment confirmations" });
     }
   });
 
-  app.post("/api/fallback-payments/:id/confirm-user", async (req, res) => {
+  app.post("/api/activation-payments/confirmations/:id/confirm", async (req, res) => {
     try {
       const { id } = req.params;
-      const payment = await storage.confirmFallbackPaymentByUser(id);
+      const confirmation = await storage.confirmActivationPayment(id);
       
-      if (!payment) {
-        return res.status(404).json({ error: "Payment not found" });
+      if (!confirmation) {
+        return res.status(404).json({ error: "Payment confirmation not found" });
       }
 
-      res.json(payment);
+      res.json(confirmation);
     } catch (error) {
-      console.error("Error confirming payment by user:", error);
+      console.error("Error confirming payment:", error);
       res.status(500).json({ error: "Failed to confirm payment" });
     }
   });
