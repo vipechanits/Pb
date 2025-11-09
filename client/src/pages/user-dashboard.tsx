@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { DollarSign, Users, GitBranch, Grid3x3, RefreshCw, ArrowLeftRight, Share2, Link2, ExternalLink, Layers, Plus } from 'lucide-react';
+import { DollarSign, Users, GitBranch, Grid3x3, RefreshCw, ArrowLeftRight, Share2, Link2, ExternalLink, Layers, Plus, Upload, Eye } from 'lucide-react';
 import StatCard from '@/components/StatCard';
+import PaymentModeSelector from '@/components/PaymentModeSelector';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -16,12 +18,20 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { useWeb3 } from '@/context/Web3Context';
-import { useActivationData, useBinaryReport, useActivationFee, useMatrixPosition } from '@/hooks/useBlockchainData';
+import { useActivationData, useBinaryReport, useActivationFee, useMatrixPosition, useCreatorCards } from '@/hooks/useBlockchainData';
 import WalletButton from '@/components/WalletButton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Copy, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useContract } from '@/hooks/useContract';
+import { ObjectUploader } from '@/components/ObjectUploader';
+import type { UploadResult } from '@uppy/core';
+
+interface PaymentProof {
+  transactionId: string;
+  proofUrl: string;
+  status: 'pending' | 'paid' | 'resubmit';
+}
 
 const USDT_TO_INR = 100;
 
@@ -59,6 +69,9 @@ export default function UserDashboard() {
   const [showActivation, setShowActivation] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copiedLink, setCopiedLink] = useState<'left' | 'right' | null>(null);
+  const [paymentProofs, setPaymentProofs] = useState<PaymentProof[]>(
+    Array.from({ length: 8 }, () => ({ transactionId: '', proofUrl: '', status: 'pending' }))
+  );
   const [individualPaymentStatus, setIndividualPaymentStatus] = useState<Record<number, 'pending' | 'paid'>>(
     Object.fromEntries(Array.from({ length: 8 }, (_, i) => [i, 'pending']))
   );
@@ -67,8 +80,9 @@ export default function UserDashboard() {
   const { data: binaryData, isLoading: binaryLoading } = useBinaryReport();
   const { data: activationFee } = useActivationFee();
   const { data: matrixPosition } = useMatrixPosition();
+  const { data: creatorCards } = useCreatorCards();
   const { toast } = useToast();
-  const { approveUSDT, paySlotWeb3, isLoading } = useContract();
+  const { approveUSDT, paySlotWeb3, submitOfflineProof, isLoading } = useContract();
 
 
   if (!isConnected) {
@@ -131,6 +145,51 @@ export default function UserDashboard() {
         description: `${side === 'left' ? 'Left' : 'Right'} referral link copied to clipboard`,
       });
       setTimeout(() => setCopiedLink(null), 2000);
+    }
+  };
+
+  const handlePaymentProofChange = (index: number, field: 'transactionId' | 'proofUrl', value: string) => {
+    setPaymentProofs(prev => {
+      const newProofs = [...prev];
+      newProofs[index] = { ...newProofs[index], [field]: value };
+      return newProofs;
+    });
+  };
+
+  const handleSubmitProof = async (index: number) => {
+    const proof = paymentProofs[index];
+    if (!proof.transactionId || !proof.proofUrl) {
+      toast({
+        title: "Missing Information",
+        description: "Please provide both transaction ID and proof URL",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!account) {
+      toast({
+        title: "Wallet Not Connected",
+        description: "Please connect your wallet first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const receipt = await submitOfflineProof(index, proof.transactionId, proof.proofUrl);
+    
+    if (receipt) {
+      setPaymentProofs(prev => {
+        const newProofs = [...prev];
+        newProofs[index] = { ...newProofs[index], status: 'paid' };
+        return newProofs;
+      });
+    } else {
+      setPaymentProofs(prev => {
+        const newProofs = [...prev];
+        newProofs[index] = { ...newProofs[index], status: 'resubmit' };
+        return newProofs;
+      });
     }
   };
 
@@ -204,91 +263,291 @@ export default function UserDashboard() {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4">
-            <Alert>
-              <AlertDescription>
-                Pay each of the 8 receivers individually on-chain. You'll need to approve and send 8 separate transactions.
-              </AlertDescription>
-            </Alert>
-            
-            {activationData?.receivers && activationData.receivers.length > 0 ? (
-              <div className="space-y-3">
-                {activationData.receivers.map((receiver: string, index: number) => {
-                  const isPaid = individualPaymentStatus[index] === 'paid';
-                  const amount = activationData.amounts?.[index] || '0';
-                  return (
-                    <Card key={index}>
-                      <CardContent className="p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-1">
-                            <p className="text-sm font-semibold">Payment #{index + 1}</p>
-                            <p className="text-xs text-muted-foreground font-mono">
-                              {receiver.slice(0, 10)}...{receiver.slice(-8)}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-bold text-sm">{formatDualCurrency(amount)}</p>
-                            <Badge variant={isPaid ? 'default' : 'outline'} className="mt-1">
-                              {isPaid ? 'Paid' : 'Pending'}
-                            </Badge>
-                          </div>
-                        </div>
-                        <Button 
-                          size="sm" 
-                          className="w-full" 
-                          variant={isPaid ? 'secondary' : 'default'}
-                          disabled={isPaid}
-                          onClick={() => handleIndividualPayment(index)}
-                          data-testid={`button-pay-individual-${index}`}
-                        >
-                          {isPaid ? 'Paid' : `Pay ${formatDualCurrency(amount)}`}
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+          <Tabs defaultValue="one-shot" className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="one-shot">One-Shot Online</TabsTrigger>
+              <TabsTrigger value="individual">Individual Online</TabsTrigger>
+              <TabsTrigger value="offline">Offline</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="one-shot" className="space-y-4">
+              <Alert>
+                <AlertDescription>
+                  Web3 Payment (USDT on-chain) - Pay the entire activation fee in a single transaction
+                </AlertDescription>
+              </Alert>
+              <div className="p-4 bg-muted rounded-md space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-sm font-semibold">Payment Method:</span>
+                  <span className="text-sm">Web3 (USDT on-chain)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Total Amount:</span>
+                  <span className="font-semibold">
+                    {activationFee ? formatDualCurrency(activationFee) : '...'}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground pt-2 border-t">
+                  This will approve and pay the full activation fee in one transaction. All 8 payments will be distributed automatically.
+                </p>
               </div>
-            ) : (
-              <>
-                <Alert variant="default">
-                  <AlertCircle className="w-4 h-4" />
-                  <AlertDescription>
-                    <strong>Receivers Not Yet Assigned</strong><br />
-                    Your activation receivers will be assigned automatically by the smart contract when you make your first payment. The estimated amount per payment is shown below.
-                  </AlertDescription>
-                </Alert>
+              <PaymentModeSelector onSuccess={() => setShowActivation(false)} />
+            </TabsContent>
+
+            <TabsContent value="individual" className="space-y-4">
+              <Alert>
+                <AlertDescription>
+                  Pay each of the 8 receivers individually on-chain. You'll need to approve and send 8 separate transactions.
+                </AlertDescription>
+              </Alert>
+              
+              {activationData?.receivers && activationData.receivers.length > 0 ? (
                 <div className="space-y-3">
-                  {Array.from({ length: 8 }).map((_, index) => {
-                    const amount = activationFee ? (parseFloat(activationFee) / 8).toFixed(2) : '0';
+                  {activationData.receivers.map((receiver: string, index: number) => {
                     const isPaid = individualPaymentStatus[index] === 'paid';
+                    const amount = activationData.amounts?.[index] || '0';
                     return (
                       <Card key={index}>
                         <CardContent className="p-4 space-y-3">
                           <div className="flex items-center justify-between">
                             <div className="space-y-1">
                               <p className="text-sm font-semibold">Payment #{index + 1}</p>
-                              <p className="text-xs text-muted-foreground">
-                                Receiver will be assigned
+                              <p className="text-xs text-muted-foreground font-mono">
+                                {receiver.slice(0, 10)}...{receiver.slice(-8)}
                               </p>
                             </div>
                             <div className="text-right">
                               <p className="font-bold text-sm">{formatDualCurrency(amount)}</p>
-                              <Badge variant="outline" className="mt-1">
-                                Pending
+                              <Badge variant={isPaid ? 'default' : 'outline'} className="mt-1">
+                                {isPaid ? 'Paid' : 'Pending'}
                               </Badge>
                             </div>
                           </div>
-                          <Button size="sm" className="w-full" variant="outline" disabled>
-                            Pay {formatDualCurrency(amount)}
+                          <Button 
+                            size="sm" 
+                            className="w-full" 
+                            variant={isPaid ? 'secondary' : 'default'}
+                            disabled={isPaid}
+                            onClick={() => handleIndividualPayment(index)}
+                            data-testid={`button-pay-individual-${index}`}
+                          >
+                            {isPaid ? 'Paid' : `Pay ${formatDualCurrency(amount)}`}
                           </Button>
                         </CardContent>
                       </Card>
                     );
                   })}
                 </div>
-              </>
-            )}
-          </div>
+              ) : (
+                <>
+                  <Alert variant="default">
+                    <AlertCircle className="w-4 h-4" />
+                    <AlertDescription>
+                      <strong>Receivers Not Yet Assigned</strong><br />
+                      Your activation receivers will be assigned automatically by the smart contract when you make your first payment. The estimated amount per payment is shown below.
+                    </AlertDescription>
+                  </Alert>
+                  <div className="space-y-3">
+                    {Array.from({ length: 8 }).map((_, index) => {
+                      const amount = activationFee ? (parseFloat(activationFee) / 8).toFixed(2) : '0';
+                      const isPaid = individualPaymentStatus[index] === 'paid';
+                      return (
+                        <Card key={index}>
+                          <CardContent className="p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="space-y-1">
+                                <p className="text-sm font-semibold">Payment #{index + 1}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Receiver will be assigned
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-bold text-sm">{formatDualCurrency(amount)}</p>
+                                <Badge variant="outline" className="mt-1">
+                                  Pending
+                                </Badge>
+                              </div>
+                            </div>
+                            <Button size="sm" className="w-full" variant="outline" disabled>
+                              Pay {formatDualCurrency(amount)}
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </TabsContent>
+
+            <TabsContent value="offline" className="space-y-4">
+              <Alert>
+                <AlertDescription>
+                  Submit payment proof for offline payment. Admin will verify and activate your account.
+                </AlertDescription>
+              </Alert>
+              {creatorCards && creatorCards[0] && (
+                <div className="p-4 bg-muted rounded-md text-sm space-y-1">
+                  <p className="font-semibold">Payment Details:</p>
+                  <p>Name: {creatorCards[0].holderName}</p>
+                  <p>Bank: {creatorCards[0].bankName}</p>
+                  <p>Account: {creatorCards[0].accountNumber}</p>
+                  {creatorCards[0].ifscOrSwift && <p>IFSC: {creatorCards[0].ifscOrSwift}</p>}
+                  {creatorCards[0].upiId && <p>UPI: {creatorCards[0].upiId}</p>}
+                </div>
+              )}
+              <div className="space-y-3">
+                <p className="text-sm font-semibold">Submit Payment Proofs:</p>
+                {Array.from({ length: 8 }).map((_, index) => {
+                  const amount = activationFee ? (parseFloat(activationFee) / 8).toFixed(2) : '0';
+                  const proof = paymentProofs[index];
+                  const canResubmit = proof.status === 'resubmit';
+                  const isPaid = proof.status === 'paid';
+                  
+                  return (
+                    <Card key={index}>
+                      <CardContent className="p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-semibold">Payment #{index + 1}</p>
+                            <p className="text-xs text-muted-foreground">{formatDualCurrency(amount)}</p>
+                          </div>
+                          <Badge 
+                            variant={
+                              isPaid ? 'default' : 
+                              canResubmit ? 'destructive' : 
+                              'outline'
+                            }
+                          >
+                            {isPaid ? 'Paid' : canResubmit ? 'Resubmit' : 'Pending'}
+                          </Badge>
+                        </div>
+                        <div className="space-y-2">
+                          <Input 
+                            placeholder="Transaction ID / UTR" 
+                            value={proof.transactionId}
+                            onChange={(e) => handlePaymentProofChange(index, 'transactionId', e.target.value)}
+                            disabled={isPaid}
+                            data-testid={`input-transaction-id-${index}`}
+                          />
+                          <div className="space-y-2">
+                            <Label>Payment Proof</Label>
+                            <div className="flex gap-2">
+                              <ObjectUploader
+                                maxNumberOfFiles={1}
+                                maxFileSize={10485760}
+                                onGetUploadParameters={async () => {
+                                  const response = await fetch('/api/objects/upload', {
+                                    method: 'POST',
+                                  });
+                                  const data = await response.json();
+                                  return {
+                                    method: 'PUT' as const,
+                                    url: data.uploadURL,
+                                    meta: { uploadURL: data.uploadURL },
+                                  };
+                                }}
+                                onComplete={async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
+                                  if (result.successful && result.successful.length > 0) {
+                                    const file = result.successful[0];
+                                    const uploadURL = (file.meta as { uploadURL?: string })?.uploadURL;
+                                    
+                                    if (!uploadURL || !account) {
+                                      toast({
+                                        title: "Upload Failed",
+                                        description: "Missing upload information",
+                                        variant: "destructive",
+                                      });
+                                      return;
+                                    }
+
+                                    try {
+                                      const response = await fetch('/api/payment-proofs', {
+                                        method: 'PUT',
+                                        headers: {
+                                          'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify({
+                                          proofUrl: uploadURL,
+                                          walletAddress: account,
+                                        }),
+                                      });
+                                      
+                                      if (response.ok) {
+                                        const data = await response.json();
+                                        handlePaymentProofChange(index, 'proofUrl', data.objectPath);
+                                        toast({
+                                          title: "Upload Successful",
+                                          description: "Payment proof has been uploaded",
+                                        });
+                                      } else {
+                                        toast({
+                                          title: "Upload Failed",
+                                          description: "Failed to set file permissions",
+                                          variant: "destructive",
+                                        });
+                                      }
+                                    } catch (error) {
+                                      toast({
+                                        title: "Upload Failed",
+                                        description: "Error processing upload",
+                                        variant: "destructive",
+                                      });
+                                    }
+                                  }
+                                }}
+                                variant="outline"
+                                size="sm"
+                                disabled={isPaid}
+                              >
+                                <Upload className="w-4 h-4 mr-2" />
+                                {proof.proofUrl ? 'Change File' : 'Upload File'}
+                              </ObjectUploader>
+                              {proof.proofUrl && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => window.open(proof.proofUrl, '_blank')}
+                                  disabled={isPaid}
+                                  data-testid={`button-preview-proof-${index}`}
+                                >
+                                  <Eye className="w-4 h-4 mr-2" />
+                                  Preview
+                                </Button>
+                              )}
+                            </div>
+                            {proof.proofUrl && (
+                              <div className="relative w-full h-32 bg-muted rounded-md overflow-hidden">
+                                <img 
+                                  src={proof.proofUrl} 
+                                  alt={`Payment proof ${index + 1}`}
+                                  className="w-full h-full object-contain"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = 'none';
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          className="w-full" 
+                          variant={isPaid ? 'secondary' : 'default'}
+                          onClick={() => handleSubmitProof(index)}
+                          disabled={isPaid}
+                          data-testid={`button-submit-proof-${index}`}
+                        >
+                          {isPaid ? 'Submitted' : canResubmit ? 'Resubmit Proof' : 'Submit Proof'}
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
 

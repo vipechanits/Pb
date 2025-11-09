@@ -229,3 +229,33 @@ Planned backend service to enable historical transaction views:
 - Provide full binary tree visualization with all downline members
 
 This two-phase approach prioritizes displaying accurate real-time data immediately while scheduling comprehensive historical data features for future implementation.
+
+### Activation Payment System (November 2025)
+
+Restored comprehensive tab-based activation dialog with three payment options and fallback support:
+
+**Payment Options:**
+1. **One-Shot Online Payment**: Web3/USDT on-chain payment for the entire activation fee in a single transaction. Uses `PaymentModeSelector` component to handle approval and payment.
+
+2. **Individual Online Payments**: Users can pay each of the 8 receivers individually on-chain. Each payment requires a separate USDT approval and transfer transaction. Includes fallback UI when receivers are not yet assigned by smart contract.
+
+3. **Offline Payments**: Traditional payment proof submission system with file uploads:
+   - Users submit UTR/transaction ID for each of 8 payments
+   - Upload payment proof images/documents via `ObjectUploader` component (max 10MB)
+   - Files stored in Replit Object Storage with ACL-based access control
+   - Admin verification workflow for approval
+   - Support for resubmission if proof is rejected
+
+**Fallback Handling:**
+- When activation receivers are not yet assigned (`activationData.receivers` is empty):
+  - Shows informative Alert explaining automatic receiver assignment
+  - Displays 8 payment slots with estimated amounts
+  - Disables payment buttons until receivers are assigned by smart contract
+  - Provides clear user guidance on the activation process
+
+**Technical Implementation:**
+- Tab-based UI using shadcn Tabs component
+- State management for payment proofs (transactionId, proofUrl, status)
+- Integration with `useCreatorCards` hook for offline payment bank details
+- Object storage integration for payment proof uploads
+- Dual currency display (USDT/INR at 1:100 ratio) throughout payment flows
