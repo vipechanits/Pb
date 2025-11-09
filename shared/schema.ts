@@ -82,3 +82,10 @@ export const insertActivationPaymentSchema = createInsertSchema(activationPaymen
 
 export type InsertActivationPayment = z.infer<typeof insertActivationPaymentSchema>;
 export type ActivationPayment = typeof activationPayments.$inferSelect;
+
+// Schema for updating activation status
+export const updateActivationStatusSchema = z.object({
+  status: z.enum(['pending', 'partial', 'completed', 'failed']),
+});
+
+export type UpdateActivationStatus = z.infer<typeof updateActivationStatusSchema>;

@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { insertActivationSchema, insertActivationPaymentSchema } from "@shared/schema";
+import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // put application routes here
@@ -124,17 +124,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/activations/:id/status", async (req, res) => {
     try {
-      const { status } = req.body;
-      if (!status) {
-        return res.status(400).json({ error: "status is required" });
+      const validationResult = updateActivationStatusSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
       
-      const validStatuses = ['pending', 'partial', 'completed', 'failed'];
-      if (!validStatuses.includes(status)) {
-        return res.status(400).json({ error: "Invalid status. Must be one of: pending, partial, completed, failed" });
-      }
-      
-      const activation = await storage.updateActivationStatus(req.params.id, status);
+      const activation = await storage.updateActivationStatus(req.params.id, validationResult.data.status);
       if (!activation) {
         return res.status(404).json({ error: "Activation not found" });
       }

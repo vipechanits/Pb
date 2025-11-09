@@ -24,8 +24,12 @@ Preferred communication style: Simple, everyday language.
 ### Data Storage
 - **Database**: PostgreSQL (Neon serverless).
 - **ORM**: Drizzle ORM for type-safe operations.
-- **Schema**: Minimal `users` table, extendable for profiles, payment proofs, and transactions.
-- **Migrations**: Drizzle Kit.
+- **Schema**: 
+  - `users` table for authentication
+  - `activations` table tracking activation lifecycle (payer, sponsor, binary match, 5 matrix uplines)
+  - `activation_payments` table tracking individual payment obligations (8 payments per activation)
+- **Migrations**: Drizzle Kit with `npm run db:push` for schema synchronization.
+- **Validation**: Zod schemas enforce enum types (payment_type, receiver_type, payment_mode, activation_status) and required fields.
 
 ### Object Storage
 - **Provider**: Replit Object Storage (Google Cloud Storage-backed).
@@ -47,11 +51,89 @@ Preferred communication style: Simple, everyday language.
 - **Network Validation**: Enforces correct network connection.
 
 ### Payment Processing
-- **Dual-Mode**:
-    1. **Web3 Payments**: On-chain USDT transfers via smart contract.
-    2. **Offline Payments**: Payment proof submission (UTR/transaction ID, documents) for admin verification.
-- **Payment Flow**: Users select mode, Web3 involves USDT approval/payment, Offline involves proof submission and admin verification.
-- **Fallback Payments**: Database schema for tracking payments that can't be distributed on-chain. Two-step confirmation (admin/user), object storage for proofs.
+- **8-Payment Activation System**: Each user activation requires 8 separate payments:
+  1. **Direct Sponsor** (Slot 0): Payment to user's sponsor
+  2. **Binary Match** (Slot 1): Payment to matched binary user in global FIFO
+  3. **Creator Fee** (Slot 2): Platform creator fee
+  4. **Matrix Levels 1-5** (Slots 3-7): Payments to 5 matrix upline levels
+  
+- **Admin Fallback**: When eligible receiver is unavailable (no sponsor, no binary match, no matrix upline), payment automatically goes to admin wallet (displayed as "Admin Wallet" with grey badge in UI).
+
+- **Dual-Mode Per Payment**:
+    1. **Web3 Payments**: On-chain USDT approval + transfer via `payIndividuallyWeb3(slotIndex)`
+    2. **Offline Payments**: UTR/Transaction ID + optional proof upload via `submitOfflineProof(slotIndex, utr, proofUrl)`
+    
+- **Payment Flow**:
+  - User views 8-payment checklist showing receivers, amounts (USDT/INR), and status
+  - Each unpaid slot has "Pay Now" button opening payment dialog
+  - User selects Web3 or Offline mode
+  - Web3: USDT approval → on-chain payment → immediate verification
+  - Offline: UTR entry → proof upload (optional) → admin verification required
+  
+- **Payment Tracking**: 
+  - Smart contract stores: receivers[8], amounts[8], paid[8], verifiedOnchain[8], modes[8], proofs[8]
+  - Database mirrors activation data for off-chain analytics
+  - Real-time status updates from blockchain via `getUserActivationData()`
+
+## Key Application Pages
+
+### Activation Page (`/user/activation`)
+**Purpose**: Guide users through 8-payment activation process
+
+**Features**:
+- **Summary Dashboard**: Shows total payments (8), completed count, pending count
+- **Payment Checklist**: Lists all 8 payment slots with:
+  - Payment label (Direct Sponsor, Binary Match, Creator Fee, Matrix Levels 1-5)
+  - Receiver wallet address or "Admin Wallet" badge (when receiver unavailable)
+  - Amount in USDT and INR (1:100 conversion ratio)
+  - Payment status: Completed ✅, Pending Verification ⚠️, Pending ⭕
+  - "Pay Now" button for unpaid slots
+  
+- **Payment Dialog**: 
+  - Radio selection: Web3 Payment (on-chain) or Offline Payment (with proof)
+  - Web3 mode: Approve USDT → Execute payment
+  - Offline mode: Enter UTR → Upload proof (optional) → Submit
+  - Real-time amount display in dual currency
+  
+- **Object Storage Integration**: 
+  - File upload via Uppy/ObjectUploader component
+  - Supports images and PDFs up to 10MB
+  - Stores proofs in Replit Object Storage
+  - Returns public URL for admin verification
+  
+- **Smart Contract Integration**:
+  - Fetches activation data: `contract.getActivation(address)`
+  - Fetches activation fee: `contract.activationFeeUSDT()`
+  - Web3 payment: `contract.payIndividuallyWeb3(slotIndex)`
+  - Offline proof: `contract.submitOfflineProof(slotIndex, utr, proofUrl)`
+  
+- **Test IDs**: All interactive elements tagged for automated testing (payment-slot-{0-7}, button-pay-{0-7}, radio-web3, radio-offline, etc.)
+
+### Confirmation Page (`/user/confirmation`)
+**Purpose**: Shows payments pending user confirmation
+
+### Admin Payments Page (`/admin/payments`)
+**Purpose**: Admin approval queue for offline payment proofs
+
+## API Endpoints
+
+### Activation Management
+- `POST /api/activations` - Create activation record (validated with Zod)
+- `GET /api/activations/:id` - Get activation details
+- `GET /api/activations/payer/:walletAddress` - Get activations by payer
+- `PATCH /api/activations/:id/status` - Update activation status
+
+### Payment Tracking
+- `POST /api/activation-payments` - Create payment record (validated with Zod)
+- `GET /api/activation-payments/activation/:activationId` - Get all 8 payments for activation
+- `GET /api/activation-payments/receiver/:walletAddress` - Get payments for receiver
+- `GET /api/activation-payments/receiver/:walletAddress/pending` - Get pending confirmations
+- `POST /api/activation-payments/:id/confirm` - Confirm payment receipt
+- `PATCH /api/activation-payments/:id/mode` - Update payment mode (web3/offline)
+
+### Object Storage
+- `POST /api/objects/upload` - Get presigned upload URL
+- `PUT /api/payment-proofs` - Set ACL policy for uploaded proof
 
 ## External Dependencies
 
