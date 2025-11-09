@@ -179,9 +179,17 @@ When PB5 completes NEXT 3:3 pair:
   ↓
 Binary matching income = CONTINUOUS (unlimited pairs)
 
-[QUEUE EMPTY]
+[QUEUE EMPTY - No qualified users]
   ↓
-Payment goes to Admin Wallet
+Payment 2 (Binary Match) → Goes to ADMIN
+  ↓
+New user sees: "Receiver: Admin"
+  ↓
+User pays ₹1,000 to Admin via Google Pay/Paytm
+  ↓
+User uploads proof + UTR
+  ↓
+Admin confirms payment in Admin Dashboard ✅
 ```
 
 ### How Binary Matching Works:
@@ -374,36 +382,61 @@ Level 5 (32 people): 32 × ₹500 = ₹16,000
 TOTAL POTENTIAL: ₹31,000
 ```
 
+### Admin Fallback for Matrix Payments:
+```
+New User Activating:
+  ↓
+System determines matrix uplines (L1-L5)
+  ↓
+For EACH Level (1-5):
+  ↓
+[Upline Exists?]
+  YES → Payment to that upline user
+  NO  → Payment to ADMIN
+  ↓
+If Level 3 has no upline:
+  → User sees "Receiver: Admin" for Payment 5
+  → User pays ₹500 to Admin
+  → Admin confirms payment ✅
+```
+
 ---
 
-## 🔄 5. Admin Payment Confirmation Flow (Creator Fee ONLY)
+## 🔄 5. Admin Payment Confirmation Flow
+
+**WHO CONFIRMS WHAT:**
+- **Admin** confirms ALL payments where receiver = Admin:
+  - Payment 0: Creator Fee (₹500) - ALWAYS
+  - Payment 1: Sponsor (₹1,000) - when no sponsor
+  - Payment 2: Binary Match (₹1,000) - when queue empty
+  - Payments 3-7: Matrix L1-L5 (₹500 each) - when no upline
+- **Receivers** confirm payments where receiver = user
 
 ```
 Admin Dashboard
   ↓
 "Payment Confirmations" Tab
   ↓
-⚠️ ONLY CREATOR FEE PAYMENTS (₹500):
+ALL PAYMENTS TO ADMIN:
   │
-  For Each Creator Fee Payment:
+  For Each Admin Payment:
   ├─ User ID (Payer)
-  ├─ Amount: ₹500
-  ├─ Payment Type: Creator Fee
+  ├─ Amount: ₹500 or ₹1,000
+  ├─ Payment Type: Creator/Sponsor/Binary/Matrix L1-L5
   ├─ UTR/Transaction ID
   ├─ Payment Proof (Image/PDF)
   ├─ Timestamp
   └─ Status
   
-Note: Payments 1-7 confirmed by RECEIVERS only
-  
 Admin Actions:
   ↓
-Click "Review Creator Fee Payment"
+Click "Review Payment"
   ↓
 View Full Details:
+  - Payment type (Creator/Sponsor/Binary/Matrix)
   - Proof image/PDF viewer
   - UTR verification
-  - Payment details
+  - Payment amount
   ↓
 [CONFIRM PAYMENT]              [REJECT PAYMENT]
   ↓                               ↓
@@ -608,30 +641,90 @@ Can re-enter UNLIMITED times
 
 ---
 
-## 🛡️ Admin Fallback Rules
+## 🛡️ Admin Fallback System
+
+### Payment Assignment Logic:
 
 ```
-Payment Assignment Logic:
+Payment 0 (Creator Fee): ₹500
+  → ALWAYS Admin
+  → User pays Admin directly
+  → Admin confirms
 
-Payment 0 (Creator Fee):
-  → ALWAYS goes to Admin
+Payment 1 (Sponsor): ₹1,000
+  Has sponsor? → User pays sponsor → Sponsor confirms
+  No sponsor?  → User pays Admin → Admin confirms
 
-Payment 1 (Sponsor):
-  Has sponsor? → Pay sponsor
-  No sponsor? → Pay Admin
+Payment 2 (Binary Match): ₹1,000
+  User in queue? → User pays them → They confirm
+  Queue empty?   → User pays Admin → Admin confirms
 
-Payment 2 (Binary Match):
-  Qualified user in queue? → Pay them
-  No qualified user? → Pay Admin
+Payments 3-7 (Matrix L1-L5): ₹500 each
+  Upline exists? → User pays upline → Upline confirms
+  No upline?     → User pays Admin → Admin confirms
+```
 
-Payments 3-7 (Matrix L1-L5):
-  Upline exists at level? → Pay upline
-  No upline (new matrix)? → Pay Admin
+### How Users See It on Activation Page:
+
+```
+Payment 0: Creator Fee
+  Receiver: Admin
+  Amount: ₹500
+  Status: Pending ⭕
+
+Payment 1: Direct Sponsor
+  Receiver: PB50 (or "Admin" if no sponsor)
+  Amount: ₹1,000
+  Status: Pending ⭕
+
+Payment 2: Binary Match
+  Receiver: PB23 (or "Admin" if queue empty)
+  Amount: ₹1,000
+  Status: Pending ⭕
+
+Payment 3: Matrix Level 1
+  Receiver: PB50 (or "Admin" if no L1 upline)
+  Amount: ₹500
+  Status: Pending ⭕
+
+...continues for all 8 payments
+```
+
+### User Payment Flow (When Receiver = Admin):
+
+```
+Step 1: User clicks "Pay Now"
+  ↓
+Step 2: System shows "Receiver: Admin" with payment details
+  ↓
+Step 3: User pays Admin via Google Pay/Paytm/PhonePe
+  ↓
+Step 4: User uploads proof + enters UTR
+  ↓
+Step 5: Submits payment
+  ↓
+Step 6: Payment goes to ADMIN DASHBOARD for confirmation
+  ↓
+Step 7: Admin reviews proof and confirms ✅
+  ↓
+Payment complete
+```
+
+### What Admin Receives:
+
+```
+✅ Payment 0: Creator Fee (₹500) - ALWAYS
+✅ Payment 1: Sponsor (₹1,000) - when user has no sponsor
+✅ Payment 2: Binary Match (₹1,000) - when queue is empty
+✅ Payments 3-7: Matrix L1-L5 (₹500 each) - when no upline exists
+
+Admin confirms ALL these payments in Admin Dashboard
 
 This ensures:
   ✅ Every payment has valid receiver
   ✅ No payments lost
-  ✅ System works for first users
+  ✅ System works even for first users
+  ✅ Admin earns from fallback payments
 ```
 
 ---
