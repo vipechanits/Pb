@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { insertActivationSchema, insertActivationPaymentSchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // put application routes here
@@ -85,29 +86,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Activation routes
   app.post("/api/activations", async (req, res) => {
     try {
-      const { id, payerWallet, sponsorWallet, binaryMatchId, matrixUpline1, matrixUpline2, matrixUpline3, matrixUpline4, matrixUpline5, status, blockchainTxHash } = req.body;
-      
-      if (!id || !payerWallet) {
-        return res.status(400).json({ error: "id and payerWallet are required" });
+      const validationResult = insertActivationSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
       
-      if (status && !['pending', 'partial', 'completed', 'failed'].includes(status)) {
-        return res.status(400).json({ error: "Invalid status. Must be one of: pending, partial, completed, failed" });
-      }
-      
-      const activation = await storage.createActivation({
-        id,
-        payerWallet,
-        sponsorWallet,
-        binaryMatchId,
-        matrixUpline1,
-        matrixUpline2,
-        matrixUpline3,
-        matrixUpline4,
-        matrixUpline5,
-        status,
-        blockchainTxHash,
-      });
+      const activation = await storage.createActivation(validationResult.data);
       res.status(201).json(activation);
     } catch (error) {
       console.error("Error creating activation:", error);
@@ -164,39 +148,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Activation payment routes
   app.post("/api/activation-payments", async (req, res) => {
     try {
-      const { activationId, paymentType, receiverWallet, receiverType, amountUsdt, paymentMode, blockchainTxHash, offlineUtrId, offlineProofUrl, notes } = req.body;
-      
-      if (!activationId || !paymentType || !receiverWallet || !receiverType || !amountUsdt) {
-        return res.status(400).json({ error: "activationId, paymentType, receiverWallet, receiverType, and amountUsdt are required" });
+      const validationResult = insertActivationPaymentSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
       
-      const validPaymentTypes = ['direct_sponsor', 'binary_match', 'creator_fee', 'matrix_level_1', 'matrix_level_2', 'matrix_level_3', 'matrix_level_4', 'matrix_level_5'];
-      if (!validPaymentTypes.includes(paymentType)) {
-        return res.status(400).json({ error: "Invalid paymentType" });
-      }
-      
-      const validReceiverTypes = ['user', 'admin'];
-      if (!validReceiverTypes.includes(receiverType)) {
-        return res.status(400).json({ error: "Invalid receiverType. Must be 'user' or 'admin'" });
-      }
-      
-      if (paymentMode && !['web3', 'offline'].includes(paymentMode)) {
-        return res.status(400).json({ error: "Invalid paymentMode. Must be 'web3' or 'offline'" });
-      }
-      
-      const payment = await storage.createActivationPayment({
-        activationId,
-        paymentType: paymentType as any,
-        receiverWallet,
-        receiverType: receiverType as any,
-        amountUsdt,
-        paymentMode: paymentMode as any,
-        blockchainTxHash,
-        offlineUtrId,
-        offlineProofUrl,
-        confirmed: false,
-        notes,
-      });
+      const payment = await storage.createActivationPayment(validationResult.data);
       res.status(201).json(payment);
     } catch (error) {
       console.error("Error creating activation payment:", error);
