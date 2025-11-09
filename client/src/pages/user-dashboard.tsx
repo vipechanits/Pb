@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { DollarSign, Users, GitBranch, Grid3x3, RefreshCw, ArrowLeftRight, Share2, Link2, ExternalLink, Layers, Plus, Upload, Eye } from 'lucide-react';
+import { DollarSign, Users, GitBranch, Grid3x3, RefreshCw, ArrowLeftRight, Share2, Link2, ExternalLink, Layers, Plus, Upload, Eye, CheckCircle } from 'lucide-react';
 import StatCard from '@/components/StatCard';
 import PaymentModeSelector from '@/components/PaymentModeSelector';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,9 @@ import { useToast } from '@/hooks/use-toast';
 import { useContract } from '@/hooks/useContract';
 import { ObjectUploader } from '@/components/ObjectUploader';
 import type { UploadResult } from '@uppy/core';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { queryClient, apiRequest } from '@/lib/queryClient';
+import { format } from 'date-fns';
 
 interface PaymentProof {
   transactionId: string;
@@ -718,6 +721,9 @@ export default function UserDashboard() {
         </CardContent>
       </Card>
 
+      {/* Fallback Payments Section */}
+      <FallbackPaymentsSection />
+
       <div>
         <h2 className="text-xl font-semibold mb-4">Recent Transactions</h2>
         <Alert>
@@ -727,5 +733,199 @@ export default function UserDashboard() {
         </Alert>
       </div>
     </div>
+  );
+}
+
+function FallbackPaymentsSection() {
+  const { account } = useWeb3();
+  const { toast } = useToast();
+  const [selectedProof, setSelectedProof] = useState<string | null>(null);
+
+  const { data: payments, isLoading } = useQuery({
+    queryKey: ['/api/fallback-payments/user', account],
+    enabled: !!account,
+    refetchInterval: 30000,
+  });
+
+  const confirmMutation = useMutation({
+    mutationFn: async (paymentId: string) => {
+      return await apiRequest('POST', '/api/fallback-payments/' + paymentId + '/confirm-user');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/fallback-payments/user', account] });
+      toast({
+        title: "Payment Confirmed",
+        description: "You've successfully confirmed receipt of this payment",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Confirmation Failed",
+        description: "Failed to confirm payment receipt",
+        variant: "destructive",
+      });
+    },
+  });
+
+  if (!account) return null;
+
+  const pendingPayments = payments?.filter((p: any) => p.adminConfirmed && !p.userConfirmed) || [];
+  const confirmedPayments = payments?.filter((p: any) => p.userConfirmed) || [];
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Fallback Payments</CardTitle>
+          <CardDescription>Binary and matrix income fallback payments</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-32 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!payments || payments.length === 0) {
+    return null;
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Fallback Payments</CardTitle>
+        <CardDescription>Confirm receipt of binary and matrix fallback payments</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {pendingPayments.length > 0 && (
+          <Alert>
+            <AlertCircle className="w-4 h-4" />
+            <AlertDescription>
+              You have {pendingPayments.length} payment{pendingPayments.length > 1 ? 's' : ''} awaiting your confirmation
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {pendingPayments.map((payment: any) => (
+          <Card key={payment.id}>
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Badge variant={payment.paymentType === 'binary' ? 'default' : 'secondary'}>
+                      {payment.paymentType.toUpperCase()}
+                    </Badge>
+                    <Badge variant="outline">Pending Confirmation</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {format(new Date(payment.createdAt), 'MMM dd, yyyy HH:mm')}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold">{formatDualCurrency(payment.amountUsdt)}</p>
+                  {payment.transactionId && (
+                    <p className="text-xs text-muted-foreground font-mono mt-1">
+                      TX: {payment.transactionId.slice(0, 8)}...
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {payment.notes && (
+                <Alert>
+                  <AlertDescription className="text-xs">{payment.notes}</AlertDescription>
+                </Alert>
+              )}
+
+              <div className="flex gap-2">
+                {payment.paymentProofUrl && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedProof(payment.paymentProofUrl)}
+                    data-testid={`button-view-proof-${payment.id}`}
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    View Proof
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  onClick={() => confirmMutation.mutate(payment.id)}
+                  disabled={confirmMutation.isPending}
+                  data-testid={`button-confirm-payment-${payment.id}`}
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Confirm Receipt
+                </Button>
+              </div>
+
+              {payment.adminConfirmedAt && (
+                <div className="text-xs text-muted-foreground pt-2 border-t">
+                  Admin confirmed: {format(new Date(payment.adminConfirmedAt), 'MMM dd, yyyy HH:mm')}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+
+        {confirmedPayments.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-muted-foreground">Confirmed Payments</h3>
+            {confirmedPayments.map((payment: any) => (
+              <Card key={payment.id} className="bg-muted/30">
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant={payment.paymentType === 'binary' ? 'default' : 'secondary'} className="text-xs">
+                        {payment.paymentType.toUpperCase()}
+                      </Badge>
+                      <span className="text-sm">{formatDualCurrency(payment.amountUsdt)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-green-500" />
+                      <span className="text-xs text-muted-foreground">
+                        {format(new Date(payment.userConfirmedAt), 'MMM dd, yyyy')}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </CardContent>
+
+      <Dialog open={!!selectedProof} onOpenChange={() => setSelectedProof(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Payment Proof</DialogTitle>
+          </DialogHeader>
+          {selectedProof && (
+            <div className="space-y-4">
+              <div className="relative w-full max-h-96 bg-muted rounded-md overflow-hidden">
+                <img
+                  src={selectedProof}
+                  alt="Payment proof"
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                  }}
+                />
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => window.open(selectedProof, '_blank')}
+                className="w-full"
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Open in New Tab
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </Card>
   );
 }
