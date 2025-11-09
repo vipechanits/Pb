@@ -16,6 +16,7 @@ export interface IStorage {
   
   createActivationPaymentConfirmation(confirmation: InsertActivationPaymentConfirmation): Promise<ActivationPaymentConfirmation>;
   getActivationPaymentConfirmation(id: string): Promise<ActivationPaymentConfirmation | undefined>;
+  getActivationPaymentConfirmationsByActivationId(activationId: string): Promise<ActivationPaymentConfirmation[]>;
   getActivationPaymentConfirmationsByPayer(payerWalletAddress: string): Promise<ActivationPaymentConfirmation[]>;
   getActivationPaymentConfirmationsByReceiver(receiverWalletAddress: string): Promise<ActivationPaymentConfirmation[]>;
   getPendingActivationPaymentConfirmations(): Promise<ActivationPaymentConfirmation[]>;
@@ -47,6 +48,10 @@ export class DbStorage implements IStorage {
   async getActivationPaymentConfirmation(id: string): Promise<ActivationPaymentConfirmation | undefined> {
     const result = await db.select().from(activationPaymentConfirmations).where(eq(activationPaymentConfirmations.id, id)).limit(1);
     return result[0];
+  }
+
+  async getActivationPaymentConfirmationsByActivationId(activationId: string): Promise<ActivationPaymentConfirmation[]> {
+    return db.select().from(activationPaymentConfirmations).where(eq(activationPaymentConfirmations.activationId, activationId));
   }
 
   async getActivationPaymentConfirmationsByPayer(payerWalletAddress: string): Promise<ActivationPaymentConfirmation[]> {

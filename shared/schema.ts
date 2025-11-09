@@ -19,6 +19,7 @@ export type User = typeof users.$inferSelect;
 
 export const activationPaymentConfirmations = pgTable("activation_payment_confirmations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  activationId: varchar("activation_id", { length: 100 }).notNull(),
   payerWalletAddress: varchar("payer_wallet_address", { length: 42 }).notNull(),
   receiverWalletAddress: varchar("receiver_wallet_address", { length: 42 }).notNull(),
   receiverIndex: varchar("receiver_index", { length: 10 }).notNull(),

@@ -86,6 +86,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/activation-payments/confirmations", async (req, res) => {
     try {
       const { 
+        activationId,
         payerWalletAddress, 
         receiverWalletAddress, 
         receiverIndex,
@@ -99,11 +100,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         notes 
       } = req.body;
       
-      if (!payerWalletAddress || !receiverWalletAddress || receiverIndex === undefined || !amountUsdt || !paymentStage || !paymentMode) {
-        return res.status(400).json({ error: "Missing required fields" });
+      if (!activationId || !payerWalletAddress || !receiverWalletAddress || receiverIndex === undefined || !amountUsdt || !paymentStage || !paymentMode) {
+        return res.status(400).json({ error: "Missing required fields (activationId, payerWalletAddress, receiverWalletAddress, receiverIndex, amountUsdt, paymentStage, paymentMode)" });
       }
 
       const confirmation = await storage.createActivationPaymentConfirmation({
+        activationId,
         payerWalletAddress: payerWalletAddress.toLowerCase(),
         receiverWalletAddress: receiverWalletAddress.toLowerCase(),
         receiverIndex,
@@ -122,6 +124,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error creating activation payment confirmation:", error);
       res.status(500).json({ error: "Failed to create payment confirmation" });
+    }
+  });
+
+  app.get("/api/activation-payments/confirmations/activation/:activationId", async (req, res) => {
+    try {
+      const { activationId } = req.params;
+      const confirmations = await storage.getActivationPaymentConfirmationsByActivationId(activationId);
+      res.json(confirmations);
+    } catch (error) {
+      console.error("Error fetching activation payment confirmations:", error);
+      res.status(500).json({ error: "Failed to fetch payment confirmations" });
     }
   });
 
