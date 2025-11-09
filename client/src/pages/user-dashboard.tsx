@@ -4,6 +4,7 @@ import StatCard from '@/components/StatCard';
 import PaymentModeSelector from '@/components/PaymentModeSelector';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,10 +24,22 @@ import { AlertCircle, Copy, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useContract } from '@/hooks/useContract';
 
+interface PaymentProof {
+  transactionId: string;
+  proofUrl: string;
+  status: 'pending' | 'paid' | 'resubmit';
+}
+
 export default function UserDashboard() {
   const [showActivation, setShowActivation] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copiedLink, setCopiedLink] = useState<'left' | 'right' | null>(null);
+  const [paymentProofs, setPaymentProofs] = useState<PaymentProof[]>(
+    Array.from({ length: 8 }, () => ({ transactionId: '', proofUrl: '', status: 'pending' }))
+  );
+  const [individualPaymentStatus, setIndividualPaymentStatus] = useState<Record<number, 'pending' | 'paid'>>(
+    Object.fromEntries(Array.from({ length: 8 }, (_, i) => [i, 'pending']))
+  );
   const { account, isConnected } = useWeb3();
   const { data: activationData, isLoading: activationLoading } = useActivationData();
   const { data: binaryData, isLoading: binaryLoading } = useBinaryReport();
@@ -83,6 +96,76 @@ export default function UserDashboard() {
     }
   };
 
+  const handlePaymentProofChange = (index: number, field: 'transactionId' | 'proofUrl', value: string) => {
+    setPaymentProofs(prev => {
+      const newProofs = [...prev];
+      newProofs[index] = { ...newProofs[index], [field]: value };
+      return newProofs;
+    });
+  };
+
+  const handleSubmitProof = async (index: number) => {
+    const proof = paymentProofs[index];
+    if (!proof.transactionId || !proof.proofUrl) {
+      toast({
+        title: "Missing Information",
+        description: "Please provide both transaction ID and proof URL",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!account) {
+      toast({
+        title: "Wallet Not Connected",
+        description: "Please connect your wallet first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const receipt = await submitOfflineProof(index, proof.transactionId, proof.proofUrl);
+    
+    if (receipt) {
+      setPaymentProofs(prev => {
+        const newProofs = [...prev];
+        newProofs[index] = { ...newProofs[index], status: 'paid' };
+        return newProofs;
+      });
+    } else {
+      setPaymentProofs(prev => {
+        const newProofs = [...prev];
+        newProofs[index] = { ...newProofs[index], status: 'resubmit' };
+        return newProofs;
+      });
+    }
+  };
+
+  const handleIndividualPayment = async (index: number) => {
+    if (!account || !activationData?.receivers || !activationData?.amounts) {
+      toast({
+        title: "Cannot Process Payment",
+        description: "Missing required payment information",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const amount = activationData.amounts[index];
+
+    const approvalReceipt = await approveUSDT(amount);
+    
+    if (!approvalReceipt) {
+      return;
+    }
+
+    const paymentReceipt = await paySlotWeb3(index);
+    
+    if (paymentReceipt) {
+      setIndividualPaymentStatus(prev => ({ ...prev, [index]: 'paid' }));
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -134,16 +217,20 @@ export default function UserDashboard() {
                 <TabsContent value="one-shot" className="space-y-4">
                   <Alert>
                     <AlertDescription>
-                      Pay the entire activation fee in a single transaction. All 8 payments will be processed automatically.
+                      Web3 Payment (USDT on-chain) - Pay the entire activation fee in a single transaction
                     </AlertDescription>
                   </Alert>
-                  <div className="p-4 bg-muted rounded-md">
-                    <div className="flex justify-between mb-2">
+                  <div className="p-4 bg-muted rounded-md space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-sm font-semibold">Payment Method:</span>
+                      <span className="text-sm">Web3 (USDT on-chain)</span>
+                    </div>
+                    <div className="flex justify-between">
                       <span className="text-sm text-muted-foreground">Total Amount:</span>
                       <span className="font-semibold">{activationFee || '...'} USDT</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      This will approve and pay the full activation fee in one transaction.
+                    <p className="text-xs text-muted-foreground pt-2 border-t">
+                      This will approve and pay the full activation fee in one transaction. All 8 payments will be distributed automatically.
                     </p>
                   </div>
                   <PaymentModeSelector onSuccess={() => setShowActivation(false)} />
@@ -157,36 +244,61 @@ export default function UserDashboard() {
                   </Alert>
                   {activationData?.receivers && activationData.receivers.length > 0 ? (
                     <div className="space-y-3">
-                      {activationData.receivers.map((receiver: string, index: number) => (
-                        <Card key={index}>
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm font-semibold">Payment {index + 1}</span>
-                              <span className="font-bold">{activationData.amounts?.[index] || '0'} USDT</span>
-                            </div>
-                            <div className="text-xs text-muted-foreground mb-2">
-                              To: {receiver.slice(0, 10)}...{receiver.slice(-8)}
-                            </div>
-                            <Button size="sm" className="w-full" variant="outline">
-                              Pay {activationData.amounts?.[index] || '0'} USDT
-                            </Button>
-                          </CardContent>
-                        </Card>
-                      ))}
+                      {activationData.receivers.map((receiver: string, index: number) => {
+                        const isPaid = individualPaymentStatus[index] === 'paid';
+                        return (
+                          <Card key={index}>
+                            <CardContent className="p-4 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div className="space-y-1">
+                                  <p className="text-sm font-semibold">ID: #{index + 1}</p>
+                                  <p className="text-xs text-muted-foreground font-mono">
+                                    {receiver.slice(0, 10)}...{receiver.slice(-8)}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="font-bold">{activationData.amounts?.[index] || '0'} USDT</p>
+                                  <Badge variant={isPaid ? 'default' : 'outline'} className="mt-1">
+                                    {isPaid ? 'Paid' : 'Pending'}
+                                  </Badge>
+                                </div>
+                              </div>
+                              <Button 
+                                size="sm" 
+                                className="w-full" 
+                                variant={isPaid ? 'secondary' : 'default'}
+                                disabled={isPaid}
+                                onClick={() => handleIndividualPayment(index)}
+                                data-testid={`button-pay-individual-${index}`}
+                              >
+                                {isPaid ? 'Paid' : `Pay ${activationData.amounts?.[index] || '0'} USDT`}
+                              </Button>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="space-y-3">
                       {Array.from({ length: 8 }).map((_, index) => {
                         const amount = activationFee ? (parseFloat(activationFee) / 8).toFixed(2) : '0';
+                        const isPaid = individualPaymentStatus[index] === 'paid';
                         return (
                           <Card key={index}>
-                            <CardContent className="p-4">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-semibold">Payment {index + 1}</span>
-                                <span className="font-bold">{amount} USDT</span>
-                              </div>
-                              <div className="text-xs text-muted-foreground mb-2">
-                                Receiver address will be assigned upon activation
+                            <CardContent className="p-4 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div className="space-y-1">
+                                  <p className="text-sm font-semibold">ID: #{index + 1}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Receiver will be assigned
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="font-bold">{amount} USDT</p>
+                                  <Badge variant="outline" className="mt-1">
+                                    Pending
+                                  </Badge>
+                                </div>
                               </div>
                               <Button size="sm" className="w-full" variant="outline" disabled>
                                 Pay {amount} USDT
@@ -216,23 +328,61 @@ export default function UserDashboard() {
                     </div>
                   )}
                   <div className="space-y-3">
-                    <p className="text-sm font-semibold">Submit 8 Payment Proofs:</p>
+                    <p className="text-sm font-semibold">Submit Payment Proofs:</p>
                     {Array.from({ length: 8 }).map((_, index) => {
                       const amount = activationFee ? (parseFloat(activationFee) / 8).toFixed(2) : '0';
+                      const proof = paymentProofs[index];
+                      const canResubmit = proof.status === 'resubmit';
+                      const isPaid = proof.status === 'paid';
+                      
                       return (
                         <Card key={index}>
-                          <CardContent className="p-4 space-y-2">
+                          <CardContent className="p-4 space-y-3">
                             <div className="flex items-center justify-between">
-                              <span className="text-sm font-semibold">Payment {index + 1}</span>
-                              <span className="font-bold">{amount} USDT</span>
+                              <div>
+                                <p className="text-sm font-semibold">Payment #{index + 1}</p>
+                                <p className="text-xs text-muted-foreground">{amount} USDT</p>
+                              </div>
+                              <Badge 
+                                variant={
+                                  isPaid ? 'default' : 
+                                  canResubmit ? 'destructive' : 
+                                  'outline'
+                                }
+                              >
+                                {isPaid ? 'Paid' : canResubmit ? 'Resubmit' : 'Pending'}
+                              </Badge>
                             </div>
-                            <Input placeholder="Transaction ID / UTR" size={1} />
-                            <Input placeholder="Payment proof URL" size={1} />
+                            <div className="space-y-2">
+                              <Input 
+                                placeholder="Transaction ID / UTR" 
+                                value={proof.transactionId}
+                                onChange={(e) => handlePaymentProofChange(index, 'transactionId', e.target.value)}
+                                disabled={isPaid}
+                                data-testid={`input-transaction-id-${index}`}
+                              />
+                              <Input 
+                                placeholder="Payment proof URL" 
+                                value={proof.proofUrl}
+                                onChange={(e) => handlePaymentProofChange(index, 'proofUrl', e.target.value)}
+                                disabled={isPaid}
+                                data-testid={`input-proof-url-${index}`}
+                              />
+                            </div>
+                            <Button 
+                              size="sm" 
+                              className="w-full" 
+                              variant={isPaid ? 'secondary' : 'default'}
+                              onClick={() => handleSubmitProof(index)}
+                              disabled={isPaid}
+                              data-testid={`button-submit-proof-${index}`}
+                            >
+                              {isPaid ? 'Submitted' : canResubmit ? 'Resubmit Proof' : 'Submit Proof'}
+                            </Button>
                           </CardContent>
                         </Card>
                       );
                     })}
-                    <Button className="w-full">Submit All Proofs</Button>
                   </div>
                 </TabsContent>
               </Tabs>
