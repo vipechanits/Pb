@@ -102,7 +102,23 @@ export const BINARY_QUALIFICATION = {
   SELF_SPONSORED_RIGHT: 1,     // Must sponsor 1 on right
   LEFT_TEAM_MATCHED: 3,        // 3:3 left team must be complete
   RIGHT_TEAM_MATCHED: 3,       // 3:3 right team must be complete
-  NOTE: 'User enters GLOBAL FIFO queue ONLY AFTER 3:3 team matching is complete',
+  ONE_TIME_ONLY: true,         // User can qualify ONLY ONCE
+  INCOME: 1000,                // ₹1,000 one time income
+  NOTES: [
+    'User enters GLOBAL FIFO queue ONLY AFTER 3:3 team matching is complete',
+    'Once user receives ₹1,000 payment, they are REMOVED from queue permanently',
+    'User CANNOT re-enter queue or qualify again for binary matching',
+  ],
+} as const;
+
+// Global Matrix placement
+export const MATRIX_PLACEMENT = {
+  MODEL: 'FIFO',               // First In, First Out
+  DIRECTION: 'Top to Bottom, Left to Right',
+  GLOBAL: true,                // ONE global matrix for all users
+  AUTOMATIC: true,             // System auto-places, user cannot choose
+  CONTINUOUS: true,            // Matrix never stops growing
+  NOTE: 'Every activated user placed in next free position automatically',
 } as const;
 
 // User ID format

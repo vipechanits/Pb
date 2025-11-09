@@ -158,13 +158,13 @@ Admin confirms ✅
   ↓
 PB5's pair is MATCHED ✅
   ↓
-Remove PB5 from queue
+Remove PB5 from queue PERMANENTLY
   ↓
 Queue now: [PB12] → [PB23] → [PB45] → [PB78] → ...
   ↓
-PB5 goes to back of queue (for next pair)
+⚠️ PB5 CANNOT re-enter queue
   ↓
-PB5 can qualify again for another pair
+Binary matching = ONE TIME ONLY per user
 
 [QUEUE EMPTY]
   ↓
@@ -215,8 +215,9 @@ Receive ₹1,000 when your turn comes
 Total: 3 Left + 3 Right = QUALIFIED ✅
 Enter GLOBAL FIFO QUEUE → Wait for ₹1,000
 
-Unmatched/additional members carry forward
-Can qualify for MULTIPLE pairs over time
+⚠️ ONE TIME QUALIFICATION ONLY
+After receiving ₹1,000 → REMOVED from queue permanently
+Cannot re-qualify for binary matching again
 ```
 
 ### Example Scenario:
@@ -227,25 +228,62 @@ Initial Queue: [PB5, PB12, PB23]
 
 New User PB150 activates:
   → Pays ₹1,000 to PB5 (first in queue)
-  → PB5 removed, goes to back
-  → Queue: [PB12, PB23, PB5]
+  → PB5 removed PERMANENTLY ✅
+  → Queue: [PB12, PB23]
 
 New User PB151 activates:
   → Pays ₹1,000 to PB12 (first in queue)
-  → PB12 removed, goes to back
-  → Queue: [PB23, PB5, PB12]
+  → PB12 removed PERMANENTLY ✅
+  → Queue: [PB23]
 
 New User PB152 activates:
   → Pays ₹1,000 to PB23 (first in queue)
-  → PB23 removed, goes to back
-  → Queue: [PB5, PB12, PB23]
+  → PB23 removed PERMANENTLY ✅
+  → Queue: []
 
-This ensures FAIR distribution - oldest qualified gets paid first!
+⚠️ Each user gets paid ONCE only!
+This ensures ONE TIME binary income per qualification!
 ```
 
 ---
 
-## 📊 4. Global Matrix Income Flow (FIFO Model)
+## 📊 4. Global Matrix Placement & Income Flow (FIFO Model)
+
+### 🌍 Matrix Placement Rules:
+
+```
+ALL activated users placed in ONE GLOBAL MATRIX
+  ↓
+Placement Order: FIFO (First In, First Out)
+  ↓
+Placement Direction: Top → Bottom, Left → Right
+  ↓
+New User Activated:
+  ↓
+System finds NEXT FREE POSITION in matrix
+  ↓
+Example Matrix Growth:
+
+Position 1: PB1 (First user)
+           /
+Position 2: PB2 (Second user - goes under PB1, left)
+Position 3: PB3 (Third user - goes under PB1, right)
+Position 4: PB4 (Fourth user - goes under PB2, left)
+Position 5: PB5 (Fifth user - goes under PB2, right)
+...and so on
+
+         PB1
+        /   \
+      PB2   PB3
+     /  \   /  \
+   PB4 PB5 PB6 PB7
+   ...
+
+Every new activation = Next free spot (left to right, top to bottom)
+Matrix NEVER stops growing
+```
+
+### 💰 Matrix Income Flow:
 
 ### Matrix Structure (5 Levels):
 ```
