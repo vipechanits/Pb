@@ -82,117 +82,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Activation payment confirmation routes
-  app.post("/api/activation-payments/confirmations", async (req, res) => {
+  // Activation routes
+  app.post("/api/activations", async (req, res) => {
     try {
-      const { 
-        activationId,
-        payerWalletAddress, 
-        receiverWalletAddress, 
-        receiverIndex,
-        amountUsdt, 
-        paymentStage, 
-        isAdminReceiver,
-        paymentMode,
-        transactionId,
-        transactionHash,
-        paymentProofUrl,
-        notes 
-      } = req.body;
-      
-      if (!activationId || !payerWalletAddress || !receiverWalletAddress || receiverIndex === undefined || !amountUsdt || !paymentStage || !paymentMode) {
-        return res.status(400).json({ error: "Missing required fields (activationId, payerWalletAddress, receiverWalletAddress, receiverIndex, amountUsdt, paymentStage, paymentMode)" });
+      const activation = await storage.createActivation(req.body);
+      res.status(201).json(activation);
+    } catch (error) {
+      console.error("Error creating activation:", error);
+      res.status(500).json({ error: "Failed to create activation" });
+    }
+  });
+
+  app.get("/api/activations/:id", async (req, res) => {
+    try {
+      const activation = await storage.getActivation(req.params.id);
+      if (!activation) {
+        return res.status(404).json({ error: "Activation not found" });
       }
-
-      const confirmation = await storage.createActivationPaymentConfirmation({
-        activationId,
-        payerWalletAddress: payerWalletAddress.toLowerCase(),
-        receiverWalletAddress: receiverWalletAddress.toLowerCase(),
-        receiverIndex,
-        amountUsdt,
-        paymentStage,
-        isAdminReceiver: isAdminReceiver || false,
-        paymentMode,
-        transactionId,
-        transactionHash,
-        paymentProofUrl,
-        notes,
-        confirmed: false,
-      });
-
-      res.status(201).json(confirmation);
+      res.json(activation);
     } catch (error) {
-      console.error("Error creating activation payment confirmation:", error);
-      res.status(500).json({ error: "Failed to create payment confirmation" });
+      console.error("Error fetching activation:", error);
+      res.status(500).json({ error: "Failed to fetch activation" });
     }
   });
 
-  app.get("/api/activation-payments/confirmations/activation/:activationId", async (req, res) => {
+  app.get("/api/activations/payer/:walletAddress", async (req, res) => {
     try {
-      const { activationId } = req.params;
-      const confirmations = await storage.getActivationPaymentConfirmationsByActivationId(activationId);
-      res.json(confirmations);
+      const activations = await storage.getActivationsByPayer(req.params.walletAddress);
+      res.json(activations);
     } catch (error) {
-      console.error("Error fetching activation payment confirmations:", error);
-      res.status(500).json({ error: "Failed to fetch payment confirmations" });
+      console.error("Error fetching activations:", error);
+      res.status(500).json({ error: "Failed to fetch activations" });
     }
   });
 
-  app.get("/api/activation-payments/confirmations/payer/:walletAddress", async (req, res) => {
+  // Activation payment routes
+  app.post("/api/activation-payments", async (req, res) => {
     try {
-      const { walletAddress } = req.params;
-      const confirmations = await storage.getActivationPaymentConfirmationsByPayer(walletAddress);
-      res.json(confirmations);
+      const payment = await storage.createActivationPayment(req.body);
+      res.status(201).json(payment);
     } catch (error) {
-      console.error("Error fetching payer payment confirmations:", error);
-      res.status(500).json({ error: "Failed to fetch payment confirmations" });
+      console.error("Error creating activation payment:", error);
+      res.status(500).json({ error: "Failed to create payment" });
     }
   });
 
-  app.get("/api/activation-payments/confirmations/receiver/:walletAddress", async (req, res) => {
+  app.get("/api/activation-payments/activation/:activationId", async (req, res) => {
     try {
-      const { walletAddress } = req.params;
-      const confirmations = await storage.getActivationPaymentConfirmationsByReceiver(walletAddress);
-      res.json(confirmations);
+      const payments = await storage.getActivationPaymentsByActivationId(req.params.activationId);
+      res.json(payments);
     } catch (error) {
-      console.error("Error fetching receiver payment confirmations:", error);
-      res.status(500).json({ error: "Failed to fetch payment confirmations" });
+      console.error("Error fetching activation payments:", error);
+      res.status(500).json({ error: "Failed to fetch payments" });
     }
   });
 
-  app.get("/api/activation-payments/confirmations/pending", async (req, res) => {
+  app.get("/api/activation-payments/receiver/:walletAddress", async (req, res) => {
     try {
-      const confirmations = await storage.getPendingActivationPaymentConfirmations();
-      res.json(confirmations);
+      const payments = await storage.getActivationPaymentsByReceiver(req.params.walletAddress);
+      res.json(payments);
     } catch (error) {
-      console.error("Error fetching pending payment confirmations:", error);
-      res.status(500).json({ error: "Failed to fetch payment confirmations" });
+      console.error("Error fetching receiver payments:", error);
+      res.status(500).json({ error: "Failed to fetch payments" });
     }
   });
 
-  app.get("/api/activation-payments/confirmations", async (req, res) => {
+  app.get("/api/activation-payments/receiver/:walletAddress/pending", async (req, res) => {
     try {
-      const confirmations = await storage.getAllActivationPaymentConfirmations();
-      res.json(confirmations);
+      const payments = await storage.getActivationPaymentsPendingConfirmation(req.params.walletAddress);
+      res.json(payments);
     } catch (error) {
-      console.error("Error fetching all payment confirmations:", error);
-      res.status(500).json({ error: "Failed to fetch payment confirmations" });
+      console.error("Error fetching pending payments:", error);
+      res.status(500).json({ error: "Failed to fetch pending payments" });
     }
   });
 
-  app.post("/api/activation-payments/confirmations/:id/confirm", async (req, res) => {
+  app.post("/api/activation-payments/:id/confirm", async (req, res) => {
     try {
-      const { id } = req.params;
-      const confirmation = await storage.confirmActivationPayment(id);
-      
-      if (!confirmation) {
-        return res.status(404).json({ error: "Payment confirmation not found" });
+      const { confirmedBy } = req.body;
+      if (!confirmedBy) {
+        return res.status(400).json({ error: "confirmedBy is required" });
       }
-
-      res.json(confirmation);
+      
+      const payment = await storage.confirmActivationPayment(req.params.id, confirmedBy);
+      if (!payment) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+      res.json(payment);
     } catch (error) {
       console.error("Error confirming payment:", error);
       res.status(500).json({ error: "Failed to confirm payment" });
+    }
+  });
+
+  app.patch("/api/activation-payments/:id/mode", async (req, res) => {
+    try {
+      const { mode, txHash, utrId, proofUrl } = req.body;
+      if (!mode) {
+        return res.status(400).json({ error: "mode is required" });
+      }
+      
+      const payment = await storage.updateActivationPaymentMode(req.params.id, mode, txHash, utrId, proofUrl);
+      if (!payment) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+      res.json(payment);
+    } catch (error) {
+      console.error("Error updating payment mode:", error);
+      res.status(500).json({ error: "Failed to update payment mode" });
     }
   });
 
