@@ -359,21 +359,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to request activation" });
     }
   });
-  
-  app.post("/api/activations", async (req, res) => {
-    try {
-      const validationResult = insertActivationSchema.safeParse(req.body);
-      if (!validationResult.success) {
-        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
-      }
-      
-      const activation = await storage.createActivation(validationResult.data);
-      res.status(201).json(activation);
-    } catch (error) {
-      console.error("Error creating activation:", error);
-      res.status(500).json({ error: "Failed to create activation" });
-    }
-  });
+
+  // REMOVED: Legacy POST /api/activations - use /api/activations/request instead
+  // The old endpoint allowed creating activations without payments (orphaned data)
+  // All activation creation must now use the transactional endpoint above
 
   app.get("/api/activations/:id", async (req, res) => {
     try {

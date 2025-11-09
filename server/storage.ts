@@ -24,7 +24,7 @@ export interface IStorage {
   getLastUser(): Promise<User | undefined>;
   
   // Activation methods
-  createActivation(activation: InsertActivation): Promise<Activation>;
+  // REMOVED: createActivation() - use createActivationWithPayments() to ensure transactional safety
   createActivationWithPayments(activation: InsertActivation, payerUserId: string, sponsorUserId: string | null): Promise<{ activation: Activation; payments: ActivationPayment[] }>;
   getActivation(id: string): Promise<Activation | undefined>;
   getActivationsByPayer(payerWallet: string): Promise<Activation[]>;
@@ -32,7 +32,7 @@ export interface IStorage {
   
   // Payment methods
   createActivationPayment(payment: InsertActivationPayment): Promise<ActivationPayment>;
-  createActivationPayments(activationId: string, payerUserId: string, sponsorUserId: string | null): Promise<ActivationPayment[]>;
+  // REMOVED: createActivationPayments() from interface - internal use only via transaction
   getActivationPayment(id: string): Promise<ActivationPayment | undefined>;
   getActivationPaymentsByActivationId(activationId: string): Promise<ActivationPayment[]>;
   getActivationPaymentsByPayerUserId(payerUserId: string): Promise<ActivationPayment[]>;
@@ -83,11 +83,8 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
-  async createActivation(activation: InsertActivation): Promise<Activation> {
-    // Note: Not lowercasing because we're now storing user IDs (PB...), not wallet addresses
-    const result = await db.insert(activations).values(activation).returning();
-    return result[0];
-  }
+  // REMOVED: createActivation() - use createActivationWithPayments() to ensure data consistency
+  // If you need to create an activation, you MUST use the transactional method below
 
   // Create activation and payments transactionally (prevents orphaned activations)
   async createActivationWithPayments(
@@ -170,62 +167,8 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
-  // DEPRECATED: Do not use directly - use createActivationWithPayments() instead
-  // This method exists only for backward compatibility with legacy code
-  async createActivationPayments(
-    activationId: string, 
-    payerUserId: string, 
-    sponsorUserId: string | null
-  ): Promise<ActivationPayment[]> {
-    console.warn('DEPRECATED: createActivationPayments() called directly. Use createActivationWithPayments() instead to ensure transactional safety.');
-    const paymentsToCreate: InsertActivationPayment[] = [];
-    
-    // Create all 8 payment slots based on SLOT_TO_PAYMENT_TYPE mapping
-    for (let slotIndex = 0; slotIndex < SLOT_TO_PAYMENT_TYPE.length; slotIndex++) {
-      const paymentType = SLOT_TO_PAYMENT_TYPE[slotIndex];
-      const amount = PAYMENT_TYPE_AMOUNTS[paymentType];
-      
-      // Determine receiver based on payment type
-      let receiverUserId: string | null = null;
-      let receiverType: 'user' | 'admin' = 'admin';
-      
-      if (paymentType === 'direct_sponsor') {
-        // Slot 0: Direct Sponsor
-        if (sponsorUserId) {
-          receiverUserId = sponsorUserId;
-          receiverType = 'user';
-        }
-      } else if (paymentType === 'binary_match') {
-        // Slot 1: Binary Match - for now, falls back to admin
-        // TODO: Implement binary matching logic to find next qualified user
-        receiverType = 'admin';
-      } else if (paymentType === 'creator_fee') {
-        // Slot 2: Creator Fee - always to admin
-        receiverType = 'admin';
-      } else if (paymentType.startsWith('matrix_level_')) {
-        // Slots 3-7: Matrix uplines - for now, falls back to admin
-        // TODO: Implement matrix placement logic to find uplines
-        receiverType = 'admin';
-      }
-      
-      paymentsToCreate.push({
-        activationId,
-        slotIndex,
-        payerUserId,
-        receiverUserId,
-        paymentType: paymentType as any,
-        receiverType,
-        amountInr: amount.toString(),
-        paymentMode: 'offline',
-        status: 'pending',
-        submissionCount: 0,
-      });
-    }
-    
-    // Insert all payments in one transaction
-    const result = await db.insert(activationPayments).values(paymentsToCreate).returning();
-    return result;
-  }
+  // REMOVED: createActivationPayments() - internal logic now only exists within createActivationWithPayments()
+  // This prevents callers from creating orphaned activations by separating creation steps
 
   async getActivationPayment(id: string): Promise<ActivationPayment | undefined> {
     const result = await db.select().from(activationPayments).where(eq(activationPayments.id, id)).limit(1);
