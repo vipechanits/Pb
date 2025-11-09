@@ -31,10 +31,15 @@ export function getCsrfToken(): string | null {
   return csrfToken;
 }
 
+export function resetCsrfToken(): void {
+  csrfToken = null;
+}
+
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
+  retryCount = 0,
 ): Promise<Response> {
   // Fetch CSRF token if not already fetched
   if (!csrfToken) {
@@ -54,6 +59,12 @@ export async function apiRequest(
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
+
+  // If we get 403 (CSRF error), clear token and retry once
+  if (res.status === 403 && retryCount === 0) {
+    resetCsrfToken();
+    return apiRequest(method, url, data, retryCount + 1);
+  }
 
   await throwIfResNotOk(res);
   return res;
