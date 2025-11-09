@@ -81,6 +81,13 @@ export default function ActivationPage() {
   const loadActivationData = async () => {
     try {
       const data = await getUserActivationData();
+      console.log('🔍 Activation Data from Contract:', data);
+      if (data && data.receivers) {
+        console.log('📋 Receivers Array:', data.receivers);
+        data.receivers.forEach((receiver: string, idx: number) => {
+          console.log(`Receiver[${idx}]:`, receiver, 'isZero:', receiver.toLowerCase() === '0x0000000000000000000000000000000000000000');
+        });
+      }
       setActivationData(data);
     } catch (error) {
       console.error('Error loading activation data:', error);
@@ -209,6 +216,9 @@ export default function ActivationPage() {
 
     const receiver = activationData.receivers[slotIndex];
     const isAdmin = receiver.toLowerCase() === '0x0000000000000000000000000000000000000000';
+    
+    // Debug logging
+    console.log(`Slot ${slotIndex}: Receiver = ${receiver}, isAdmin = ${isAdmin}`);
     
     return {
       address: isAdmin ? 'Admin Wallet' : `${receiver.slice(0, 6)}...${receiver.slice(-4)}`,
