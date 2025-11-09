@@ -339,6 +339,10 @@ export default function ActivationPage() {
                           {receiver.isAdmin && (
                             <Badge variant="secondary" className="ml-2" data-testid={`badge-admin-${index}`}>Admin Wallet</Badge>
                           )}
+                          {/* Debug info */}
+                          <span className="text-xs ml-2 text-red-500">
+                            [Debug: isAdmin={receiver.isAdmin ? 'YES' : 'NO'}]
+                          </span>
                         </div>
                         {activationData.modes[index] && (
                           <div className="text-xs text-muted-foreground mt-1">
