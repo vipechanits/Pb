@@ -613,31 +613,100 @@ GRAND TOTAL POTENTIAL: ₹42,000+ per cycle
 
 ---
 
-## 🔁 10. Re-Entry System
+## 🔁 10. Matrix Re-Entry System
 
+### When Matrix Gets Full:
 ```
-Fully Activated User (PB150)
+User's Matrix Status:
+  Level 1: 2/2 filled ✅
+  Level 2: 4/4 filled ✅
+  Level 3: 8/8 filled ✅
+  Level 4: 16/16 filled ✅
+  Level 5: 32/32 filled ✅
   ↓
-Completes Full Cycle:
-  ✅ Binary pairs matched
-  ✅ Matrix levels filled
+MATRIX COMPLETE (62 positions filled)
   ↓
-Views Re-Entry Dashboard
+Matrix payments STOP for this position
   ↓
-Click "Re-Enter Program"
-  ↓
-System creates NEW activation
-  ↓
-User pays ₹5,000 again (8 payments)
-  ↓
-Gets NEW position in:
-  - Global Matrix
-  - Binary Tree
-  ↓
-Earns fresh income from new network
-  ↓
-Can re-enter UNLIMITED times
+User sees "Matrix Re-Entry Available" in dashboard
 ```
+
+### Re-Entry Activation Fee: ₹5,000
+
+**Payment Structure (Different from first activation):**
+```
+Payment 0: Creator Fee → ₹500 → Admin
+Payment 1: Sponsor Fee → ₹1,000 → SAME original sponsor
+Payment 2: Binary Queue → ₹1,000 → Next person in global binary queue
+Payments 3-7: Matrix L1-L5 → ₹500 each → New matrix uplines
+
+Total: ₹5,000
+```
+
+### Re-Entry Process:
+```
+User (PB150) Matrix Full
+  ↓
+Click "Re-Enter Matrix"
+  ↓
+System creates NEW matrix activation
+  ↓
+User pays ₹5,000:
+  ├─ ₹500 to Admin (creator fee)
+  ├─ ₹1,000 to PB50 (SAME sponsor as before)
+  ├─ ₹1,000 to next in binary queue (whoever is first)
+  └─ ₹2,500 to new matrix uplines (L1-L5)
+  ↓
+After all 8 payments confirmed:
+  ↓
+User placed in TWO locations:
+  │
+  ├─ 1. Binary Tree (as bubbled placement)
+  │    → Counts for binary matching qualification
+  │    → Helps build 3:3 pairs
+  │
+  └─ 2. Global Matrix (next free spot)
+       → Gets NEW position number
+       → Example: PB150-2 (second matrix entry)
+       → Starts earning from new downline
+  ↓
+Dashboard shows NEW tree formation
+  ↓
+User can re-enter UNLIMITED times
+```
+
+### Dashboard View:
+```
+User PB150 Dashboard:
+
+Active Matrix Positions:
+┌─────────────────────────────────┐
+│ Matrix #1 (Position #150)       │
+│ Status: ✅ FULL (62/62)         │
+│ Total Earned: ₹31,000           │
+│ [View Tree]                      │
+└─────────────────────────────────┘
+
+┌─────────────────────────────────┐
+│ Matrix #2 (Position #523)       │
+│ Status: 🔄 Active (15/62)       │
+│ Total Earned: ₹7,500            │
+│ [View Tree]                      │
+└─────────────────────────────────┘
+
+[Re-Enter Matrix] (available when any matrix is full)
+```
+
+### Key Differences from First Activation:
+
+| Payment | First Activation | Matrix Re-Entry |
+|---------|------------------|-----------------|
+| Creator Fee | ₹500 → Admin | ₹500 → Admin |
+| Sponsor | ₹1,000 → Sponsor | ₹1,000 → SAME sponsor |
+| Binary | ₹1,000 → Matched user | ₹1,000 → Next in queue |
+| Matrix | ₹2,500 → 5 uplines | ₹2,500 → NEW 5 uplines |
+| Placement | New binary position | Bubbled in binary |
+| Matrix | New FIFO position | New FIFO position |
 
 ---
 

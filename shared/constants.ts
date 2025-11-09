@@ -125,7 +125,28 @@ export const MATRIX_PLACEMENT = {
   GLOBAL: true,                // ONE global matrix for all users
   AUTOMATIC: true,             // System auto-places, user cannot choose
   CONTINUOUS: true,            // Matrix never stops growing
-  NOTE: 'Every activated user placed in next free position automatically',
+  LEVELS: 5,
+  MAX_POSITIONS: 62,           // 2 + 4 + 8 + 16 + 32 = 62 total
+  POSITIONS_PER_LEVEL: {
+    1: 2,
+    2: 4,
+    3: 8,
+    4: 16,
+    5: 32,
+  },
+  INCOME_PER_POSITION: 500,    // ₹500 per position
+  RE_ENTRY: {
+    ENABLED: true,
+    TRIGGER: 'matrix_full',    // When all 62 positions filled
+    FEE: 5000,                 // Same ₹5,000 re-entry fee
+    SPONSOR_PAYMENT: 1000,     // ₹1,000 to SAME sponsor
+    BINARY_PAYMENT: 1000,      // ₹1,000 to next in binary queue (not matched pair)
+    CREATOR_FEE: 500,          // ₹500 to admin
+    MATRIX_PAYMENTS: 2500,     // ₹2,500 to new matrix uplines (5×₹500)
+    BINARY_PLACEMENT: 'bubbled', // Placed as bubbled in binary tree (counts for matching)
+    MATRIX_PLACEMENT: 'next_free_spot', // Gets new matrix position number
+  },
+  NOTE: 'Every activated user placed in next free position automatically. When matrix full, re-entry creates new matrix position.',
 } as const;
 
 // User ID format
