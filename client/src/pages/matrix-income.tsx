@@ -1,23 +1,134 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Info } from 'lucide-react';
+import { Grid3x3, DollarSign, TrendingUp, Users } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
-export default function PlaceholderPage() {
+export default function MatrixIncome() {
+  const matrixLevels = [
+    { level: 1, positions: 2, filled: 0, earning: '₹625 per position' },
+    { level: 2, positions: 4, filled: 0, earning: '₹625 per position' },
+    { level: 3, positions: 8, filled: 0, earning: '₹625 per position' },
+    { level: 4, positions: 16, filled: 0, earning: '₹625 per position' },
+    { level: 5, positions: 32, filled: 0, earning: '₹625 per position' },
+  ];
+
+  const stats = [
+    {
+      title: 'Matrix Earnings',
+      value: '₹0',
+      description: 'From 5 levels',
+      icon: DollarSign,
+    },
+    {
+      title: 'Total Positions',
+      value: '0/62',
+      description: 'Filled positions',
+      icon: Grid3x3,
+    },
+    {
+      title: 'Active Levels',
+      value: '0/5',
+      description: 'Completed levels',
+      icon: TrendingUp,
+    },
+    {
+      title: 'Matrix Team',
+      value: '0',
+      description: 'Members in matrix',
+      icon: Users,
+    },
+  ];
+
   return (
-    <div className="container mx-auto p-6">
+    <div className="container mx-auto p-6 space-y-6">
+      <div className="space-y-2">
+        <h1 className="text-3xl font-bold">Matrix Income</h1>
+        <p className="text-muted-foreground">
+          Track your 2+5 matrix levels and passive income
+        </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {stats.map((stat) => (
+          <Card key={stat.title}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                {stat.title}
+              </CardTitle>
+              <stat.icon className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stat.value}</div>
+              <p className="text-xs text-muted-foreground">
+                {stat.description}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle>Under Construction</CardTitle>
-          <CardDescription>Non-blockchain version coming soon</CardDescription>
+          <CardTitle>Matrix Level Status</CardTitle>
+          <CardDescription>Track your 5-level matrix progression</CardDescription>
         </CardHeader>
         <CardContent>
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertTitle>Blockchain Features Removed</AlertTitle>
-            <AlertDescription>
-              This page is being rebuilt to work without blockchain integration.
-            </AlertDescription>
-          </Alert>
+          <div className="space-y-3">
+            {matrixLevels.map((level) => (
+              <div key={level.level} className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <span className="font-bold text-sm">{level.level}</span>
+                  </div>
+                  <div>
+                    <p className="font-medium">Level {level.level}</p>
+                    <p className="text-xs text-muted-foreground">{level.earning}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="font-medium text-sm">{level.filled}/{level.positions}</p>
+                  <Badge variant={level.filled === 0 ? "secondary" : "default"} className="text-xs">
+                    {level.filled === 0 ? 'Empty' : `${Math.round((level.filled / level.positions) * 100)}%`}
+                  </Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>How the 2+5 Matrix Works</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <div>
+            <h4 className="font-semibold mb-1">Non-Working Matrix</h4>
+            <p className="text-muted-foreground">You only need 2 direct referrals. The system automatically places additional members in your 5-level matrix.</p>
+          </div>
+          <div>
+            <h4 className="font-semibold mb-1">Passive Income</h4>
+            <p className="text-muted-foreground">Earn ₹625 from each position filled in your matrix across all 5 levels (total 62 positions).</p>
+          </div>
+          <div>
+            <h4 className="font-semibold mb-1">Unlimited Re-entry</h4>
+            <p className="text-muted-foreground">Once your matrix is complete, you can re-enter to create new cycles and compound your earnings.</p>
+          </div>
+          <div>
+            <h4 className="font-semibold mb-1">Total Potential</h4>
+            <p className="text-muted-foreground font-semibold">₹31,000 from one complete 2+5 cycle (62 positions × ₹625 - ₹7,000 reentry)</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Matrix Income History</CardTitle>
+          <CardDescription>Earnings from each matrix level</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-6 text-muted-foreground text-sm">
+            No matrix earnings yet
+          </div>
         </CardContent>
       </Card>
     </div>
