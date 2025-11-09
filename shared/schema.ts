@@ -20,6 +20,8 @@ export const paymentModeEnum = pgEnum("payment_mode", ["offline"]);
 
 export const activationStatusEnum = pgEnum("activation_status", ["pending", "partial", "completed", "failed"]);
 
+export const paymentStatusEnum = pgEnum("payment_status", ["pending", "submitted", "confirmed", "rejected"]);
+
 export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
 
 export const binaryLegEnum = pgEnum("binary_leg", ["left", "right"]);
@@ -107,23 +109,29 @@ export type Activation = typeof activations.$inferSelect;
 export const activationPayments = pgTable("activation_payments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   activationId: varchar("activation_id", { length: 100 }).notNull(),
+  slotIndex: integer("slot_index").notNull(), // 0-7 for the 8 payment slots
+  payerUserId: varchar("payer_user_id", { length: 20 }).notNull(), // User ID of sender
+  receiverUserId: varchar("receiver_user_id", { length: 20 }), // User ID of receiver (null if admin)
   paymentType: paymentTypeEnum("payment_type").notNull(),
-  receiverWallet: varchar("receiver_wallet", { length: 42 }).notNull(),
   receiverType: receiverTypeEnum("receiver_type").notNull(),
   amountInr: decimal("amount_inr", { precision: 10, scale: 2 }).notNull(),
   paymentMode: paymentModeEnum("payment_mode"),
   offlineUtrId: text("offline_utr_id"),
   offlineProofUrl: text("offline_proof_url"),
-  confirmed: boolean("confirmed").notNull().default(false),
+  status: paymentStatusEnum("payment_status").notNull().default('pending'),
+  submissionCount: integer("submission_count").notNull().default(0),
   confirmedAt: timestamp("confirmed_at"),
-  confirmedBy: varchar("confirmed_by", { length: 42 }),
+  rejectedAt: timestamp("rejected_at"),
+  rejectionReason: text("rejection_reason"),
   notes: text("notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 export const insertActivationPaymentSchema = createInsertSchema(activationPayments).omit({
   id: true,
   createdAt: true,
+  updatedAt: true,
 });
 
 export type InsertActivationPayment = z.infer<typeof insertActivationPaymentSchema>;
@@ -135,3 +143,25 @@ export const updateActivationStatusSchema = z.object({
 });
 
 export type UpdateActivationStatus = z.infer<typeof updateActivationStatusSchema>;
+
+// Schema for submitting payment proof
+export const submitPaymentProofSchema = z.object({
+  offlineUtrId: z.string().min(1, "UTR/Transaction ID is required"),
+  offlineProofUrl: z.string().optional(),
+});
+
+export type SubmitPaymentProof = z.infer<typeof submitPaymentProofSchema>;
+
+// Schema for confirming payment
+export const confirmPaymentSchema = z.object({
+  notes: z.string().optional(),
+});
+
+export type ConfirmPayment = z.infer<typeof confirmPaymentSchema>;
+
+// Schema for rejecting payment
+export const rejectPaymentSchema = z.object({
+  rejectionReason: z.string().min(1, "Rejection reason is required"),
+});
+
+export type RejectPayment = z.infer<typeof rejectPaymentSchema>;

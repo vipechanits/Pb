@@ -4,10 +4,10 @@
 PAYBACK247 is a peer-to-peer MLM platform being converted from blockchain-based to traditional full-stack web application. The system supports binary pairing income, multi-level matrix rewards, and manual payment tracking with admin approval. The platform allows users to activate accounts, build referral networks, track earnings, and manage profiles, while administrators can configure the system, approve payments, and access analytics.
 
 ## Current Status (November 9, 2025)
-**✅ PHASE 2 COMPLETE: Authentication & Dashboard UI Implemented**
+**✅ PHASE 3 COMPLETE: Payment Activation & Confirmation System**
 **✅ Landing Page & Referral System Complete**
 
-The application has been successfully converted from Web3 to traditional authentication:
+The application has been successfully converted from Web3 to traditional authentication with complete payment workflow:
 - ✅ **Phase 1 Complete**: Removed blockchain dependencies (ethers.js, Web3Context, smart contract hooks)
 - ✅ **Phase 2 Complete**: Traditional authentication system implemented with security features
   - Email/password authentication with bcrypt hashing
@@ -18,11 +18,18 @@ The application has been successfully converted from Web3 to traditional authent
   - Admin user seeded (payback2472000@gmail.com / admin with userId PB0)
   - **User ID auto-generation**: New users get sequential IDs starting from PB10000
   - **Logout functionality**: Sidebar footer with logout button
-  - **User Dashboard UI**: Stats cards, welcome message, getting started guide
+  - **User Dashboard UI**: Stats cards, welcome message, referral links at top
 - ✅ **Landing Page**: Public marketing page with hero, features, income streams, FAQ, footer
 - ✅ **Referral System**: Left/right leg placement tracking, social sharing (WhatsApp, Telegram, Facebook, X)
-- 🔄 **Phase 3 In Progress**: Rebuild MLM system pages (activation, binary matching, matrix income)
-- ⏳ **Phase 4 Pending**: Implement admin approval workflow for manual payments
+- ✅ **Phase 3 Complete**: Payment activation and confirmation workflow
+  - **8-Slot Payment System**: Direct Sponsor, Binary Match, Creator Fee, Matrix Levels 1-5
+  - **Payment Submission**: Users submit UTR/Transaction ID with optional proof upload
+  - **Payment Confirmation**: Receivers can confirm or reject payments with reasons
+  - **Unlimited Resubmission**: Rejected payments can be resubmitted indefinitely
+  - **Submission Tracking**: Tracks submission attempts and rejection reasons
+  - **Secure Authorization**: All endpoints verify user permissions (payer, receiver, or admin)
+  - **Object Storage Integration**: Payment proofs stored in Replit Object Storage
+- 🔄 **Phase 4 In Progress**: Admin payment management and system configuration
 
 **Authentication System:**
 - ✅ Backend: API routes for signup, login, logout, profile management
@@ -47,11 +54,13 @@ The application has been successfully converted from Web3 to traditional authent
 **Dashboard Pages Updated:**
 - ✅ Admin Dashboard: Platform stats, system status, quick actions
 - ✅ Admin Payments: Payment approval queue interface
+- ✅ Admin Settings: Payment configuration, domain settings, admin wallet
+- ✅ Admin Users: User management with search and detail view
 - ✅ Direct Sponsoring: Referral tracking and sponsor income
 - ✅ Binary Matching: Binary tree visualization info
 - ✅ Matrix Income: Matrix levels and earnings tracking
-- ✅ Confirmation: Payment confirmation workflow
-- ✅ Activation: 8-payment activation checklist
+- ✅ User Confirmation: Confirm/reject received payments with unlimited resubmission
+- ✅ User Activation: 8-slot payment submission with proof upload and status tracking
 - ✅ Reentry: Reentry system information
 - ✅ Additional Reentry: Additional position purchase
 
@@ -80,11 +89,17 @@ Preferred communication style: Simple, everyday language.
 - **Database**: PostgreSQL (Neon serverless).
 - **ORM**: Drizzle ORM for type-safe operations.
 - **Schema**: 
-  - `users` table for authentication
+  - `users` table for authentication with user IDs (PB10000+)
   - `activations` table tracking activation lifecycle (payer, sponsor, binary match, 5 matrix uplines)
-  - `activation_payments` table tracking individual payment obligations (8 payments per activation)
-- **Migrations**: Drizzle Kit with `npm run db:push` for schema synchronization.
-- **Validation**: Zod schemas enforce enum types (payment_type, receiver_type, payment_mode, activation_status) and required fields.
+  - `activation_payments` table tracking individual payment obligations with:
+    - 8 payment slots per activation (slot_index 0-7)
+    - Payment status enum: pending, submitted, confirmed, rejected
+    - Payer and receiver user IDs
+    - UTR/Transaction ID and proof URL
+    - Submission count and rejection tracking
+    - Timestamps for submission, confirmation, and rejection
+- **Migrations**: Drizzle Kit with `npm run db:push --force` for schema synchronization.
+- **Validation**: Zod schemas enforce enum types and required fields for all payment operations.
 
 ### Object Storage
 - **Provider**: Replit Object Storage (Google Cloud Storage-backed).
@@ -107,23 +122,29 @@ Preferred communication style: Simple, everyday language.
   3. **Creator Fee** (Slot 2): Platform creator fee
   4. **Matrix Levels 1-5** (Slots 3-7): Payments to 5 matrix upline levels
   
-- **Admin Fallback**: When eligible receiver is unavailable (no sponsor, no binary match, no matrix upline), payment automatically goes to admin wallet (displayed as "Admin Wallet" with grey badge in UI).
+- **Admin Fallback**: When eligible receiver is unavailable (no sponsor, no binary match, no matrix upline), payment automatically goes to admin (receiverType: 'admin', receiverUserId: null).
 
-- **Payment Mode** (Manual Only):
-    - **Offline Payments**: UTR/Transaction ID + optional proof upload
-    - User initiates payment → enters UTR → uploads proof → admin approves
+- **Payment Mode** (Offline Only):
+    - **Manual INR Payments**: Google Pay, Paytm, PhonePe via UPI
+    - UTR/Transaction ID required, payment proof optional
     
 - **Payment Flow**:
-  - User views 8-payment checklist showing receivers, amounts (USDT/INR), and status
-  - Each unpaid slot has "Pay Now" button opening payment dialog
-  - User selects Web3 or Offline mode
-  - Web3: USDT approval → on-chain payment → immediate verification
-  - Offline: UTR entry → proof upload (optional) → admin verification required
+  1. **Submit**: User enters UTR and optionally uploads payment screenshot (status: pending → submitted)
+  2. **Review**: Receiver views submission in confirmation page
+  3. **Confirm**: Receiver confirms payment (status: submitted → confirmed)
+  4. **Reject**: Receiver rejects with reason (status: submitted → rejected)
+  5. **Resubmit**: User can resubmit unlimited times if rejected (submissionCount increments)
   
-- **Payment Tracking**: 
-  - Smart contract stores: receivers[8], amounts[8], paid[8], verifiedOnchain[8], modes[8], proofs[8]
-  - Database mirrors activation data for off-chain analytics
-  - Real-time status updates from blockchain via `getUserActivationData()`
+- **Payment Status Tracking**: 
+  - **Pending**: Payment slot created, no submission yet
+  - **Submitted**: User submitted UTR and proof, awaiting receiver confirmation
+  - **Confirmed**: Receiver confirmed payment receipt
+  - **Rejected**: Receiver rejected with reason, can resubmit
+  
+- **Security**:
+  - Users can only submit proofs for their own payments (payer check)
+  - Only receivers or admins can confirm/reject payments
+  - Users can only view their own payment lists (except admins)
 
 ## Key Application Pages
 

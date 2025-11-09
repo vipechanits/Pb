@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema } from "@shared/schema";
+import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema } from "@shared/schema";
 import { hashPassword, verifyPassword, serializeUser } from "./auth";
 import { generateUserPaymentQR } from "./qrcode-generator";
 import { z } from "zod";
@@ -399,9 +399,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/activation-payments/receiver/:walletAddress", async (req, res) => {
+  // Get payments by payer user ID - only for logged-in user's own payments
+  app.get("/api/activation-payments/payer/:userId", requireAuth, async (req, res) => {
     try {
-      const payments = await storage.getActivationPaymentsByReceiver(req.params.walletAddress);
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Users can only view their own payments, admins can view any
+      if (user.userId !== req.params.userId && user.role !== 'admin') {
+        return res.status(403).json({ error: "Forbidden - You can only view your own payments" });
+      }
+      
+      const payments = await storage.getActivationPaymentsByPayerUserId(req.params.userId);
+      res.json(payments);
+    } catch (error) {
+      console.error("Error fetching payer payments:", error);
+      res.status(500).json({ error: "Failed to fetch payments" });
+    }
+  });
+
+  // Get payments by receiver user ID - only for logged-in user's own payments
+  app.get("/api/activation-payments/receiver/:userId", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Users can only view their own received payments, admins can view any
+      if (user.userId !== req.params.userId && user.role !== 'admin') {
+        return res.status(403).json({ error: "Forbidden - You can only view your own payments" });
+      }
+      
+      const payments = await storage.getActivationPaymentsByReceiverUserId(req.params.userId);
       res.json(payments);
     } catch (error) {
       console.error("Error fetching receiver payments:", error);
@@ -409,9 +441,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/activation-payments/receiver/:walletAddress/pending", async (req, res) => {
+  // Get pending confirmation payments for receiver
+  app.get("/api/activation-payments/pending-confirmations", requireAuth, async (req, res) => {
     try {
-      const payments = await storage.getActivationPaymentsPendingConfirmation(req.params.walletAddress);
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user || !user.userId) {
+        return res.status(400).json({ error: "User ID not found" });
+      }
+      
+      const payments = await storage.getActivationPaymentsPendingConfirmation(user.userId);
       res.json(payments);
     } catch (error) {
       console.error("Error fetching pending payments:", error);
@@ -419,14 +457,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/activation-payments/:id/confirm", async (req, res) => {
+  // Submit payment proof - only payer can submit
+  app.patch("/api/activation-payments/:id/submit", requireAuth, async (req, res) => {
     try {
-      const { confirmedBy } = req.body;
-      if (!confirmedBy) {
-        return res.status(400).json({ error: "confirmedBy is required" });
+      const validationResult = submitPaymentProofSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
       
-      const payment = await storage.confirmActivationPayment(req.params.id, confirmedBy);
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Check if payment exists and user is the payer
+      const existingPayment = await storage.getActivationPayment(req.params.id);
+      if (!existingPayment) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+      
+      if (existingPayment.payerUserId !== user.userId) {
+        return res.status(403).json({ error: "Forbidden - You can only submit proof for your own payments" });
+      }
+      
+      const payment = await storage.submitPaymentProof(
+        req.params.id, 
+        validationResult.data.offlineUtrId,
+        validationResult.data.offlineProofUrl
+      );
+      if (!payment) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+      res.json(payment);
+    } catch (error) {
+      console.error("Error submitting payment proof:", error);
+      res.status(500).json({ error: "Failed to submit payment proof" });
+    }
+  });
+
+  // Confirm payment (receiver or admin only)
+  app.patch("/api/activation-payments/:id/confirm", requireAuth, async (req, res) => {
+    try {
+      const validationResult = confirmPaymentSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
+      }
+      
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Check if payment exists and user is the receiver or admin
+      const existingPayment = await storage.getActivationPayment(req.params.id);
+      if (!existingPayment) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+      
+      const isReceiver = existingPayment.receiverUserId === user.userId;
+      const isAdmin = user.role === 'admin';
+      
+      if (!isReceiver && !isAdmin) {
+        return res.status(403).json({ error: "Forbidden - Only the receiver or admin can confirm payments" });
+      }
+      
+      const payment = await storage.confirmActivationPayment(req.params.id, validationResult.data.notes);
       if (!payment) {
         return res.status(404).json({ error: "Payment not found" });
       }
@@ -437,25 +532,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/activation-payments/:id/mode", async (req, res) => {
+  // Reject payment (receiver or admin only)
+  app.patch("/api/activation-payments/:id/reject", requireAuth, async (req, res) => {
     try {
-      const { mode, txHash, utrId, proofUrl } = req.body;
-      if (!mode) {
-        return res.status(400).json({ error: "mode is required" });
+      const validationResult = rejectPaymentSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
       
-      if (!['web3', 'offline'].includes(mode)) {
-        return res.status(400).json({ error: "Invalid mode. Must be 'web3' or 'offline'" });
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
       }
       
-      const payment = await storage.updateActivationPaymentMode(req.params.id, mode, txHash, utrId, proofUrl);
+      // Check if payment exists and user is the receiver or admin
+      const existingPayment = await storage.getActivationPayment(req.params.id);
+      if (!existingPayment) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+      
+      const isReceiver = existingPayment.receiverUserId === user.userId;
+      const isAdmin = user.role === 'admin';
+      
+      if (!isReceiver && !isAdmin) {
+        return res.status(403).json({ error: "Forbidden - Only the receiver or admin can reject payments" });
+      }
+      
+      const payment = await storage.rejectActivationPayment(req.params.id, validationResult.data.rejectionReason);
       if (!payment) {
         return res.status(404).json({ error: "Payment not found" });
       }
       res.json(payment);
     } catch (error) {
-      console.error("Error updating payment mode:", error);
-      res.status(500).json({ error: "Failed to update payment mode" });
+      console.error("Error rejecting payment:", error);
+      res.status(500).json({ error: "Failed to reject payment" });
     }
   });
 

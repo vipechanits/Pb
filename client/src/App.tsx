@@ -18,8 +18,8 @@ import DirectSponsoring from '@/pages/direct-sponsoring';
 import BinaryMatching from '@/pages/binary-matching';
 import MatrixIncome from '@/pages/matrix-income';
 import Profile from '@/pages/profile';
-import ActivationPage from '@/pages/activation';
-import ConfirmationPage from '@/pages/confirmation';
+import UserActivationPage from '@/pages/user-activation';
+import UserConfirmationPage from '@/pages/user-confirmation';
 import ReentryPage from '@/pages/reentry';
 import AdditionalReentryPage from '@/pages/additional-reentry';
 import AdminDashboard from '@/pages/admin-dashboard';
@@ -123,7 +123,7 @@ function Router() {
         {() => (
           <ProtectedRoute>
             <DashboardLayout>
-              <ActivationPage />
+              <UserActivationPage />
             </DashboardLayout>
           </ProtectedRoute>
         )}
@@ -133,7 +133,7 @@ function Router() {
         {() => (
           <ProtectedRoute>
             <DashboardLayout>
-              <ConfirmationPage />
+              <UserConfirmationPage />
             </DashboardLayout>
           </ProtectedRoute>
         )}
