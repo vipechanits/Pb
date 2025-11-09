@@ -30,6 +30,23 @@ interface PaymentProof {
   status: 'pending' | 'paid' | 'resubmit';
 }
 
+const USDT_TO_INR = 83;
+
+const formatDualCurrency = (usdtAmount: string | number | null | undefined): string => {
+  if (usdtAmount === null || usdtAmount === undefined || usdtAmount === '') {
+    return '...';
+  }
+  
+  const usdt = typeof usdtAmount === 'string' ? parseFloat(usdtAmount) : usdtAmount;
+  
+  if (isNaN(usdt) || !isFinite(usdt)) {
+    return '...';
+  }
+  
+  const inr = (usdt * USDT_TO_INR).toFixed(2);
+  return `${usdt.toFixed(2)} USDT (₹${inr})`;
+};
+
 export default function UserDashboard() {
   const [showActivation, setShowActivation] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -196,14 +213,14 @@ export default function UserDashboard() {
           <Dialog open={showActivation} onOpenChange={setShowActivation}>
             <DialogTrigger asChild>
               <Button data-testid="button-activate-account">
-                Activate Account ({activationFee || '...'} USDT)
+                Activate Account ({activationFee ? formatDualCurrency(activationFee) : '...'})
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Activate Your Account</DialogTitle>
                 <DialogDescription>
-                  Total Activation Fee: {activationFee || '...'} USDT distributed across 8 payments
+                  Total Activation Fee: {activationFee ? formatDualCurrency(activationFee) : '...'} distributed across 8 payments
                 </DialogDescription>
               </DialogHeader>
               
@@ -227,7 +244,9 @@ export default function UserDashboard() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-muted-foreground">Total Amount:</span>
-                      <span className="font-semibold">{activationFee || '...'} USDT</span>
+                      <span className="font-semibold">
+                        {activationFee ? formatDualCurrency(activationFee) : '...'}
+                      </span>
                     </div>
                     <p className="text-xs text-muted-foreground pt-2 border-t">
                       This will approve and pay the full activation fee in one transaction. All 8 payments will be distributed automatically.
@@ -246,6 +265,7 @@ export default function UserDashboard() {
                     <div className="space-y-3">
                       {activationData.receivers.map((receiver: string, index: number) => {
                         const isPaid = individualPaymentStatus[index] === 'paid';
+                        const amount = activationData.amounts?.[index] || '0';
                         return (
                           <Card key={index}>
                             <CardContent className="p-4 space-y-3">
@@ -257,7 +277,7 @@ export default function UserDashboard() {
                                   </p>
                                 </div>
                                 <div className="text-right">
-                                  <p className="font-bold">{activationData.amounts?.[index] || '0'} USDT</p>
+                                  <p className="font-bold text-sm">{formatDualCurrency(amount)}</p>
                                   <Badge variant={isPaid ? 'default' : 'outline'} className="mt-1">
                                     {isPaid ? 'Paid' : 'Pending'}
                                   </Badge>
@@ -271,7 +291,7 @@ export default function UserDashboard() {
                                 onClick={() => handleIndividualPayment(index)}
                                 data-testid={`button-pay-individual-${index}`}
                               >
-                                {isPaid ? 'Paid' : `Pay ${activationData.amounts?.[index] || '0'} USDT`}
+                                {isPaid ? 'Paid' : `Pay ${formatDualCurrency(amount)}`}
                               </Button>
                             </CardContent>
                           </Card>
@@ -294,14 +314,14 @@ export default function UserDashboard() {
                                   </p>
                                 </div>
                                 <div className="text-right">
-                                  <p className="font-bold">{amount} USDT</p>
+                                  <p className="font-bold text-sm">{formatDualCurrency(amount)}</p>
                                   <Badge variant="outline" className="mt-1">
                                     Pending
                                   </Badge>
                                 </div>
                               </div>
                               <Button size="sm" className="w-full" variant="outline" disabled>
-                                Pay {amount} USDT
+                                Pay {formatDualCurrency(amount)}
                               </Button>
                             </CardContent>
                           </Card>
@@ -341,7 +361,7 @@ export default function UserDashboard() {
                             <div className="flex items-center justify-between">
                               <div>
                                 <p className="text-sm font-semibold">Payment #{index + 1}</p>
-                                <p className="text-xs text-muted-foreground">{amount} USDT</p>
+                                <p className="text-xs text-muted-foreground">{formatDualCurrency(amount)}</p>
                               </div>
                               <Badge 
                                 variant={
