@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { DollarSign, Users, GitBranch, Grid3x3, RefreshCw, ArrowLeftRight, Share2, Link2, ExternalLink } from 'lucide-react';
+import { DollarSign, Users, GitBranch, Grid3x3, RefreshCw, ArrowLeftRight, Share2, Link2, ExternalLink, Layers, Plus } from 'lucide-react';
 import StatCard from '@/components/StatCard';
 import PaymentModeSelector from '@/components/PaymentModeSelector';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dialog';
 import { useWeb3 } from '@/context/Web3Context';
 import { useActivationData, useBinaryReport, useActivationFee, useMatrixPosition, useCreatorCards } from '@/hooks/useBlockchainData';
+import WalletButton from '@/components/WalletButton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Copy, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -30,7 +31,7 @@ interface PaymentProof {
   status: 'pending' | 'paid' | 'resubmit';
 }
 
-const USDT_TO_INR = 83;
+const USDT_TO_INR = 100;
 
 const formatDualCurrency = (usdtAmount: string | number | null | undefined): string => {
   if (usdtAmount === null || usdtAmount === undefined || usdtAmount === '') {
@@ -45,6 +46,21 @@ const formatDualCurrency = (usdtAmount: string | number | null | undefined): str
   
   const inr = (usdt * USDT_TO_INR).toFixed(2);
   return `${usdt.toFixed(2)} USDT (₹${inr})`;
+};
+
+const formatINR = (usdtAmount: string | number | null | undefined): string => {
+  if (usdtAmount === null || usdtAmount === undefined || usdtAmount === '') {
+    return '₹0.00';
+  }
+  
+  const usdt = typeof usdtAmount === 'string' ? parseFloat(usdtAmount) : usdtAmount;
+  
+  if (isNaN(usdt) || !isFinite(usdt)) {
+    return '₹0.00';
+  }
+  
+  const inr = (usdt * USDT_TO_INR).toFixed(2);
+  return `₹${inr}`;
 };
 
 export default function UserDashboard() {
@@ -69,7 +85,11 @@ export default function UserDashboard() {
 
   if (!isConnected) {
     return (
-      <div className="p-6">
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold">User Dashboard</h1>
+          <WalletButton />
+        </div>
         <Alert>
           <AlertCircle className="w-4 h-4" />
           <AlertDescription>
@@ -81,11 +101,24 @@ export default function UserDashboard() {
   }
 
   const isActivated = activationData?.activated || false;
-  const totalIncome = binaryData?.accruedUSDT || '0';
+  const binaryIncome = binaryData?.accruedUSDT || '0';
   const directLeft = binaryData?.directLeft || 0;
   const directRight = binaryData?.directRight || 0;
   const pairsMatched = binaryData?.pairsMatched || 0;
   const userId = matrixPosition?.index !== undefined ? `PB${matrixPosition.index}` : null;
+  
+  const sponsoringIncome = '0';
+  const matrixIncome = '0';
+  const reentryIncome = '0';
+  const additionalReentryIncome = '0';
+  
+  const totalIncome = (
+    parseFloat(binaryIncome) +
+    parseFloat(sponsoringIncome) +
+    parseFloat(matrixIncome) +
+    parseFloat(reentryIncome) +
+    parseFloat(additionalReentryIncome)
+  ).toString();
 
   const copyUserId = () => {
     if (userId) {
@@ -209,14 +242,18 @@ export default function UserDashboard() {
             {account ? `${account.slice(0, 6)}...${account.slice(-4)}` : 'Welcome back!'}
           </p>
         </div>
-        {!isActivated && (
-          <Dialog open={showActivation} onOpenChange={setShowActivation}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-activate-account">
-                Activate Account ({activationFee ? formatDualCurrency(activationFee) : '...'})
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center gap-3">
+          <WalletButton />
+          {!isActivated && (
+            <Button data-testid="button-activate-account" onClick={() => setShowActivation(true)}>
+              Activate Account ({activationFee ? formatDualCurrency(activationFee) : '...'})
+            </Button>
+          )}
+        </div>
+      </div>
+      
+      <Dialog open={showActivation} onOpenChange={setShowActivation}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Activate Your Account</DialogTitle>
                 <DialogDescription>
@@ -407,9 +444,7 @@ export default function UserDashboard() {
                 </TabsContent>
               </Tabs>
             </DialogContent>
-          </Dialog>
-        )}
-      </div>
+      </Dialog>
 
       {!isActivated && (
         <Alert>
@@ -428,34 +463,48 @@ export default function UserDashboard() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <StatCard
-              title="Binary Income"
-              value={`${totalIncome} USDT`}
-              subtitle={`${pairsMatched} pairs matched`}
+              title="Total Income"
+              value={formatINR(totalIncome)}
+              subtitle="All income sources combined"
               icon={DollarSign}
               iconColor="text-primary"
             />
             <StatCard
-              title="Direct Sponsoring"
-              value="Coming Soon"
-              subtitle="Requires event log parsing"
+              title="Sponsoring Income"
+              value={formatINR(sponsoringIncome)}
+              subtitle="Direct referral earnings"
               icon={Users}
               iconColor="text-chart-1"
             />
             <StatCard
-              title="Pairs Matched"
-              value={pairsMatched.toString()}
-              subtitle="Binary matches"
+              title="Binary Income"
+              value={formatINR(binaryIncome)}
+              subtitle={`${pairsMatched} pairs matched`}
               icon={GitBranch}
+              iconColor="text-chart-2"
+            />
+            <StatCard
+              title="Matrix Income"
+              value={formatINR(matrixIncome)}
+              subtitle="5-level matrix earnings"
+              icon={Layers}
               iconColor="text-chart-3"
             />
             <StatCard
-              title="Qualification"
-              value={binaryData?.qualified ? 'Yes' : 'No'}
-              subtitle={`${directLeft} left, ${directRight} right`}
-              icon={Grid3x3}
-              iconColor="text-chart-2"
+              title="Re-entry Income"
+              value={formatINR(reentryIncome)}
+              subtitle="Matrix re-entry cycles"
+              icon={RefreshCw}
+              iconColor="text-chart-4"
+            />
+            <StatCard
+              title="Additional Re-entry"
+              value={formatINR(additionalReentryIncome)}
+              subtitle="Extra positions"
+              icon={Plus}
+              iconColor="text-chart-5"
             />
           </div>
 
