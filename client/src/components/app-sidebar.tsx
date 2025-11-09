@@ -22,9 +22,6 @@ import {
   FileCheck,
   UserCog,
 } from 'lucide-react';
-import NetworkBadge from './NetworkBadge';
-import { useWeb3 } from '@/context/Web3Context';
-import { useMatrixPosition } from '@/hooks/useBlockchainData';
 import { Badge } from '@/components/ui/badge';
 import logoUrl from '@assets/Generated Image October 16, 2025 - 6_58AM (1)_1762653844897.png';
 
@@ -34,9 +31,8 @@ interface AppSidebarProps {
 
 export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   const [location] = useLocation();
-  const { account, isCorrectNetwork } = useWeb3();
-  const { data: matrixPosition } = useMatrixPosition();
-  const userId = matrixPosition?.index !== undefined ? `PB${matrixPosition.index}` : null;
+  // TODO: Replace with actual user authentication
+  const userId = null;
 
   const userMenuItems: Array<{
     title: string;
@@ -116,21 +112,8 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
             </div>
           </div>
           <div className="pt-2">
-            {userId && (
-              <div className="mb-3">
-                <div className="text-xs text-muted-foreground mb-1">User ID</div>
-                <Badge variant="default" data-testid="sidebar-user-id">
-                  <span className="font-mono text-sm">{userId}</span>
-                </Badge>
-              </div>
-            )}
-            <div className="text-xs text-muted-foreground mb-1">Connected Wallet</div>
-            <div className="font-mono text-xs">
-              {account ? `${account.slice(0, 6)}...${account.slice(-4)}` : 'Not connected'}
-            </div>
-            <div className="mt-2">
-              <NetworkBadge network="polygon-amoy" isCorrect={isCorrectNetwork} />
-            </div>
+            <div className="text-xs text-muted-foreground mb-1">Status</div>
+            <Badge variant="secondary">Non-blockchain Mode</Badge>
           </div>
         </div>
       </SidebarHeader>
