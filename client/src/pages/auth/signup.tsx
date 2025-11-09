@@ -124,7 +124,7 @@ export default function SignupPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="sponsorId">Sponsor ID (Optional)</Label>
+              <Label htmlFor="sponsorId">Sponsor ID {binaryLeg ? '(From Referral Link)' : '(Optional)'}</Label>
               <Input
                 id="sponsorId"
                 type="text"
@@ -133,6 +133,7 @@ export default function SignupPage() {
                 onChange={(e) => setSponsorId(e.target.value)}
                 data-testid="input-sponsor-id"
                 readOnly={!!binaryLeg}
+                className={binaryLeg ? 'bg-secondary/50 cursor-not-allowed' : ''}
               />
               {binaryLeg && (
                 <p className="text-xs text-muted-foreground">

@@ -5,6 +5,7 @@ PAYBACK247 is a peer-to-peer MLM platform being converted from blockchain-based 
 
 ## Current Status (November 9, 2025)
 **✅ PHASE 2 COMPLETE: Authentication & Dashboard UI Implemented**
+**✅ Landing Page & Referral System Complete**
 
 The application has been successfully converted from Web3 to traditional authentication:
 - ✅ **Phase 1 Complete**: Removed blockchain dependencies (ethers.js, Web3Context, smart contract hooks)
@@ -18,6 +19,8 @@ The application has been successfully converted from Web3 to traditional authent
   - **User ID auto-generation**: New users get sequential IDs starting from PB10000
   - **Logout functionality**: Sidebar footer with logout button
   - **User Dashboard UI**: Stats cards, welcome message, getting started guide
+- ✅ **Landing Page**: Public marketing page with hero, features, income streams, FAQ, footer
+- ✅ **Referral System**: Left/right leg placement tracking, social sharing (WhatsApp, Telegram, Facebook, X)
 - 🔄 **Phase 3 In Progress**: Rebuild MLM system pages (activation, binary matching, matrix income)
 - ⏳ **Phase 4 Pending**: Implement admin approval workflow for manual payments
 
@@ -33,9 +36,17 @@ The application has been successfully converted from Web3 to traditional authent
 - ✅ Sidebar: Shows logged-in user ID, logout button in footer
 - ✅ Removed all "Under Construction" placeholder messages
 
+**Landing Page & Referral Links:**
+- ✅ Public landing page: Hero section, benefits, income streams, 2+5 matrix info, FAQ
+- ✅ Referral link generation: Separate links for left/right leg binary placement
+- ✅ Social sharing: WhatsApp, Telegram, Facebook, X integration
+- ✅ Signup flow: Auto-populate sponsor ID and leg from URL params (?ref=PB0&leg=left)
+- ✅ Database: binary_leg enum column added to users table
+- ✅ Profile page: Tabs for Profile Details and Referral Links
+
 **Files Stubbed (Need Rebuilding for MLM System):**
 - Pages: binary-matching, matrix-income, direct-sponsoring, admin-payments, reentry, additional-reentry, admin-dashboard
-- Components: WalletButton (can be removed), NetworkBadge, PaymentModeSelector
+- Components: NetworkBadge, PaymentModeSelector
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
