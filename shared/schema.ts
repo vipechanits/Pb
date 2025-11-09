@@ -1,7 +1,24 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, decimal, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, decimal, boolean, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+export const paymentTypeEnum = pgEnum("payment_type", [
+  "direct_sponsor",
+  "binary_match",
+  "creator_fee",
+  "matrix_level_1",
+  "matrix_level_2",
+  "matrix_level_3",
+  "matrix_level_4",
+  "matrix_level_5",
+]);
+
+export const receiverTypeEnum = pgEnum("receiver_type", ["user", "admin"]);
+
+export const paymentModeEnum = pgEnum("payment_mode", ["web3", "offline"]);
+
+export const activationStatusEnum = pgEnum("activation_status", ["pending", "partial", "completed", "failed"]);
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -17,29 +34,51 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
-export const activationPaymentConfirmations = pgTable("activation_payment_confirmations", {
+export const activations = pgTable("activations", {
+  id: varchar("id", { length: 100 }).primaryKey(),
+  payerWallet: varchar("payer_wallet", { length: 42 }).notNull(),
+  sponsorWallet: varchar("sponsor_wallet", { length: 42 }),
+  binaryMatchId: varchar("binary_match_id", { length: 100 }),
+  matrixUpline1: varchar("matrix_upline_1", { length: 42 }),
+  matrixUpline2: varchar("matrix_upline_2", { length: 42 }),
+  matrixUpline3: varchar("matrix_upline_3", { length: 42 }),
+  matrixUpline4: varchar("matrix_upline_4", { length: 42 }),
+  matrixUpline5: varchar("matrix_upline_5", { length: 42 }),
+  status: activationStatusEnum("status").notNull().default('pending'),
+  blockchainTxHash: text("blockchain_tx_hash"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertActivationSchema = createInsertSchema(activations).omit({
+  createdAt: true,
+});
+
+export type InsertActivation = z.infer<typeof insertActivationSchema>;
+export type Activation = typeof activations.$inferSelect;
+
+export const activationPayments = pgTable("activation_payments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   activationId: varchar("activation_id", { length: 100 }).notNull(),
-  payerWalletAddress: varchar("payer_wallet_address", { length: 42 }).notNull(),
-  receiverWalletAddress: varchar("receiver_wallet_address", { length: 42 }).notNull(),
-  receiverIndex: varchar("receiver_index", { length: 10 }).notNull(),
+  paymentType: paymentTypeEnum("payment_type").notNull(),
+  receiverWallet: varchar("receiver_wallet", { length: 42 }).notNull(),
+  receiverType: receiverTypeEnum("receiver_type").notNull(),
   amountUsdt: decimal("amount_usdt", { precision: 18, scale: 6 }).notNull(),
-  paymentStage: varchar("payment_stage", { length: 30 }).notNull(),
-  isAdminReceiver: boolean("is_admin_receiver").notNull().default(false),
-  paymentMode: varchar("payment_mode", { length: 20 }).notNull(),
-  transactionId: text("transaction_id"),
-  transactionHash: text("transaction_hash"),
-  paymentProofUrl: text("payment_proof_url"),
+  paymentMode: paymentModeEnum("payment_mode"),
+  blockchainTxHash: text("blockchain_tx_hash"),
+  offlineUtrId: text("offline_utr_id"),
+  offlineProofUrl: text("offline_proof_url"),
   confirmed: boolean("confirmed").notNull().default(false),
   confirmedAt: timestamp("confirmed_at"),
+  confirmedBy: varchar("confirmed_by", { length: 42 }),
   notes: text("notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export const insertActivationPaymentConfirmationSchema = createInsertSchema(activationPaymentConfirmations).omit({
+export const insertActivationPaymentSchema = createInsertSchema(activationPayments).omit({
   id: true,
   createdAt: true,
 });
 
-export type InsertActivationPaymentConfirmation = z.infer<typeof insertActivationPaymentConfirmationSchema>;
-export type ActivationPaymentConfirmation = typeof activationPaymentConfirmations.$inferSelect;
+export type InsertActivationPayment = z.infer<typeof insertActivationPaymentSchema>;
+export type ActivationPayment = typeof activationPayments.$inferSelect;

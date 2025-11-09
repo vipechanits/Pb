@@ -1,10 +1,13 @@
 import { 
   type User, 
-  type InsertUser, 
-  type ActivationPaymentConfirmation, 
-  type InsertActivationPaymentConfirmation,
+  type InsertUser,
+  type Activation,
+  type InsertActivation,
+  type ActivationPayment,
+  type InsertActivationPayment,
   users,
-  activationPaymentConfirmations
+  activations,
+  activationPayments
 } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { db } from "./db";
@@ -14,14 +17,18 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   
-  createActivationPaymentConfirmation(confirmation: InsertActivationPaymentConfirmation): Promise<ActivationPaymentConfirmation>;
-  getActivationPaymentConfirmation(id: string): Promise<ActivationPaymentConfirmation | undefined>;
-  getActivationPaymentConfirmationsByActivationId(activationId: string): Promise<ActivationPaymentConfirmation[]>;
-  getActivationPaymentConfirmationsByPayer(payerWalletAddress: string): Promise<ActivationPaymentConfirmation[]>;
-  getActivationPaymentConfirmationsByReceiver(receiverWalletAddress: string): Promise<ActivationPaymentConfirmation[]>;
-  getPendingActivationPaymentConfirmations(): Promise<ActivationPaymentConfirmation[]>;
-  confirmActivationPayment(id: string): Promise<ActivationPaymentConfirmation | undefined>;
-  getAllActivationPaymentConfirmations(): Promise<ActivationPaymentConfirmation[]>;
+  createActivation(activation: InsertActivation): Promise<Activation>;
+  getActivation(id: string): Promise<Activation | undefined>;
+  getActivationsByPayer(payerWallet: string): Promise<Activation[]>;
+  updateActivationStatus(id: string, status: string): Promise<Activation | undefined>;
+  
+  createActivationPayment(payment: InsertActivationPayment): Promise<ActivationPayment>;
+  getActivationPayment(id: string): Promise<ActivationPayment | undefined>;
+  getActivationPaymentsByActivationId(activationId: string): Promise<ActivationPayment[]>;
+  getActivationPaymentsByReceiver(receiverWallet: string): Promise<ActivationPayment[]>;
+  getActivationPaymentsPendingConfirmation(receiverWallet: string): Promise<ActivationPayment[]>;
+  confirmActivationPayment(id: string, confirmedBy: string): Promise<ActivationPayment | undefined>;
+  updateActivationPaymentMode(id: string, mode: string, txHash?: string, utrId?: string, proofUrl?: string): Promise<ActivationPayment | undefined>;
 }
 
 export class DbStorage implements IStorage {
@@ -40,45 +47,84 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
-  async createActivationPaymentConfirmation(confirmation: InsertActivationPaymentConfirmation): Promise<ActivationPaymentConfirmation> {
-    const result = await db.insert(activationPaymentConfirmations).values(confirmation).returning();
+  async createActivation(activation: InsertActivation): Promise<Activation> {
+    const result = await db.insert(activations).values(activation).returning();
     return result[0];
   }
 
-  async getActivationPaymentConfirmation(id: string): Promise<ActivationPaymentConfirmation | undefined> {
-    const result = await db.select().from(activationPaymentConfirmations).where(eq(activationPaymentConfirmations.id, id)).limit(1);
+  async getActivation(id: string): Promise<Activation | undefined> {
+    const result = await db.select().from(activations).where(eq(activations.id, id)).limit(1);
     return result[0];
   }
 
-  async getActivationPaymentConfirmationsByActivationId(activationId: string): Promise<ActivationPaymentConfirmation[]> {
-    return db.select().from(activationPaymentConfirmations).where(eq(activationPaymentConfirmations.activationId, activationId));
+  async getActivationsByPayer(payerWallet: string): Promise<Activation[]> {
+    return db.select().from(activations).where(eq(activations.payerWallet, payerWallet.toLowerCase()));
   }
 
-  async getActivationPaymentConfirmationsByPayer(payerWalletAddress: string): Promise<ActivationPaymentConfirmation[]> {
-    return db.select().from(activationPaymentConfirmations).where(eq(activationPaymentConfirmations.payerWalletAddress, payerWalletAddress.toLowerCase()));
-  }
-
-  async getActivationPaymentConfirmationsByReceiver(receiverWalletAddress: string): Promise<ActivationPaymentConfirmation[]> {
-    return db.select().from(activationPaymentConfirmations).where(eq(activationPaymentConfirmations.receiverWalletAddress, receiverWalletAddress.toLowerCase()));
-  }
-
-  async getPendingActivationPaymentConfirmations(): Promise<ActivationPaymentConfirmation[]> {
-    return db.select().from(activationPaymentConfirmations).where(eq(activationPaymentConfirmations.confirmed, false));
-  }
-
-  async confirmActivationPayment(id: string): Promise<ActivationPaymentConfirmation | undefined> {
-    const result = await db.update(activationPaymentConfirmations)
-      .set({ 
-        confirmed: true, 
-        confirmedAt: new Date() 
-      })
-      .where(eq(activationPaymentConfirmations.id, id))
+  async updateActivationStatus(id: string, status: string): Promise<Activation | undefined> {
+    const result = await db.update(activations)
+      .set({ status: status as any })
+      .where(eq(activations.id, id))
       .returning();
     return result[0];
   }
 
-  async getAllActivationPaymentConfirmations(): Promise<ActivationPaymentConfirmation[]> {
-    return db.select().from(activationPaymentConfirmations);
+  async createActivationPayment(payment: InsertActivationPayment): Promise<ActivationPayment> {
+    const result = await db.insert(activationPayments).values(payment).returning();
+    return result[0];
+  }
+
+  async getActivationPayment(id: string): Promise<ActivationPayment | undefined> {
+    const result = await db.select().from(activationPayments).where(eq(activationPayments.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getActivationPaymentsByActivationId(activationId: string): Promise<ActivationPayment[]> {
+    return db.select().from(activationPayments).where(eq(activationPayments.activationId, activationId));
+  }
+
+  async getActivationPaymentsByReceiver(receiverWallet: string): Promise<ActivationPayment[]> {
+    return db.select().from(activationPayments).where(eq(activationPayments.receiverWallet, receiverWallet.toLowerCase()));
+  }
+
+  async getActivationPaymentsPendingConfirmation(receiverWallet: string): Promise<ActivationPayment[]> {
+    return db.select().from(activationPayments).where(
+      and(
+        eq(activationPayments.receiverWallet, receiverWallet.toLowerCase()),
+        eq(activationPayments.confirmed, false)
+      )
+    );
+  }
+
+  async confirmActivationPayment(id: string, confirmedBy: string): Promise<ActivationPayment | undefined> {
+    const result = await db.update(activationPayments)
+      .set({ 
+        confirmed: true, 
+        confirmedAt: new Date(),
+        confirmedBy: confirmedBy.toLowerCase()
+      })
+      .where(eq(activationPayments.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async updateActivationPaymentMode(
+    id: string, 
+    mode: string, 
+    txHash?: string, 
+    utrId?: string, 
+    proofUrl?: string
+  ): Promise<ActivationPayment | undefined> {
+    const result = await db.update(activationPayments)
+      .set({ 
+        paymentMode: mode as any,
+        blockchainTxHash: txHash,
+        offlineUtrId: utrId,
+        offlineProofUrl: proofUrl
+      })
+      .where(eq(activationPayments.id, id))
+      .returning();
+    return result[0];
   }
 }
 
