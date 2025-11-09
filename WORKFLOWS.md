@@ -114,7 +114,14 @@ System Checks: All 8 Payments Complete?
 
 ---
 
-## 🌳 3. Binary Tree Matching Flow (3:3 Pairing)
+## 🌳 3. Binary Matching Flow (GLOBAL FIFO Queue)
+
+### ⚡ Key Concept: GLOBAL FIFO MATCHING
+- **ONE GLOBAL QUEUE** for all binary matching (not individual trees)
+- Users enter queue when they meet qualification criteria
+- **First In, First Out** - oldest qualified user gets paid first
+- New user pays ₹1,000 to the NEXT qualified user in queue
+- Only **1 pair paid per new activation**
 
 ### Qualification Rules:
 - User must have **1 left + 1 right self-sponsored** referrals
@@ -122,36 +129,72 @@ System Checks: All 8 Payments Complete?
 - **1 Complete Pair = ₹1,000 income**
 
 ```
-Binary Match Payment Flow:
-  ↓
-New User Activates (Pays ₹1,000 for Binary Match)
-  ↓
-System Finds Qualified Receiver:
-  ↓
-Check Binary Match Queue:
-  │
-  ├─ Find user with 1L + 1R self-sponsored
-  ├─ Check left team: 3 people complete?
-  └─ Check right team: 3 people complete?
-  ↓
-[QUALIFIED USER FOUND]
-  ↓
-New user pays ₹1,000 to this user
-  ↓
-Receiver's pair is MATCHED ✅
-  ↓
-Receiver moves to back of queue
-  ↓
-Unmatched count carries forward
-  ↓
-Next pair will be paid by NEXT activation
+GLOBAL BINARY MATCHING QUEUE (FIFO):
 
-[NO QUALIFIED USER]
+Queue: [PB5] → [PB12] → [PB23] → [PB45] → [PB78] → ...
+       ↑ Next to receive ₹1,000
+
+New User (PB150) Activates:
+  ↓
+Payment 2: Binary Match (₹1,000)
+  ↓
+System checks GLOBAL FIFO QUEUE:
+  ↓
+[QUEUE NOT EMPTY]
+  ↓
+Get FIRST qualified user in queue: PB5
+  ↓
+New user (PB150) pays ₹1,000 → PB5
+  ↓
+PB150 uploads proof + UTR
+  ↓
+PB5 confirms receipt ✅
+Admin confirms ✅
+  ↓
+PB5's pair is MATCHED ✅
+  ↓
+Remove PB5 from queue
+  ↓
+Queue now: [PB12] → [PB23] → [PB45] → [PB78] → ...
+  ↓
+PB5 goes to back of queue (for next pair)
+  ↓
+PB5 can qualify again for another pair
+
+[QUEUE EMPTY]
   ↓
 Payment goes to Admin Wallet
 ```
 
-### Binary Tree Structure:
+### How Users Enter the Queue:
+```
+User (PB100) Working Towards Qualification:
+  ↓
+Step 1: Sponsor 1 person (LEFT)
+Step 2: Sponsor 1 person (RIGHT)
+  ↓
+Now has: 1L + 1R self-sponsored ✅
+  ↓
+Build teams (spill over helps):
+  - Left team grows to 3 people
+  - Right team grows to 3 people
+  ↓
+Qualification COMPLETE:
+  ✅ 1 Left self-sponsored
+  ✅ 1 Right self-sponsored
+  ✅ 3-person left team
+  ✅ 3-person right team
+  ↓
+AUTOMATICALLY ADDED TO GLOBAL QUEUE
+  ↓
+Queue position: FIFO (based on qualification time)
+  ↓
+Wait for next new user activation
+  ↓
+Receive ₹1,000 when your turn comes
+```
+
+### Binary Tree Structure (Individual User):
 ```
                     YOU (PB100)
                    /           \
@@ -162,10 +205,35 @@ Payment goes to Admin Wallet
        /  \      /  \      /  \      /  \
       S    S    S    S    S    S    S    S
 
-3 Left Complete + 3 Right Complete = 1 PAIR MATCHED
-Next new user pays YOU ₹1,000
+Total: 3 Left + 3 Right = QUALIFIED ✅
+Enter GLOBAL FIFO QUEUE → Wait for ₹1,000
 
-Unmatched carry forward to next cycle
+Unmatched/additional members carry forward
+Can qualify for MULTIPLE pairs over time
+```
+
+### Example Scenario:
+```
+GLOBAL QUEUE STATUS:
+
+Initial Queue: [PB5, PB12, PB23]
+
+New User PB150 activates:
+  → Pays ₹1,000 to PB5 (first in queue)
+  → PB5 removed, goes to back
+  → Queue: [PB12, PB23, PB5]
+
+New User PB151 activates:
+  → Pays ₹1,000 to PB12 (first in queue)
+  → PB12 removed, goes to back
+  → Queue: [PB23, PB5, PB12]
+
+New User PB152 activates:
+  → Pays ₹1,000 to PB23 (first in queue)
+  → PB23 removed, goes to back
+  → Queue: [PB5, PB12, PB23]
+
+This ensures FAIR distribution - oldest qualified gets paid first!
 ```
 
 ---
