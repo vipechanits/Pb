@@ -48,7 +48,17 @@ export class DbStorage implements IStorage {
   }
 
   async createActivation(activation: InsertActivation): Promise<Activation> {
-    const result = await db.insert(activations).values(activation).returning();
+    const normalized = {
+      ...activation,
+      payerWallet: activation.payerWallet.toLowerCase(),
+      sponsorWallet: activation.sponsorWallet?.toLowerCase(),
+      matrixUpline1: activation.matrixUpline1?.toLowerCase(),
+      matrixUpline2: activation.matrixUpline2?.toLowerCase(),
+      matrixUpline3: activation.matrixUpline3?.toLowerCase(),
+      matrixUpline4: activation.matrixUpline4?.toLowerCase(),
+      matrixUpline5: activation.matrixUpline5?.toLowerCase(),
+    };
+    const result = await db.insert(activations).values(normalized).returning();
     return result[0];
   }
 
@@ -70,7 +80,12 @@ export class DbStorage implements IStorage {
   }
 
   async createActivationPayment(payment: InsertActivationPayment): Promise<ActivationPayment> {
-    const result = await db.insert(activationPayments).values(payment).returning();
+    const normalized = {
+      ...payment,
+      receiverWallet: payment.receiverWallet.toLowerCase(),
+      confirmedBy: payment.confirmedBy?.toLowerCase(),
+    };
+    const result = await db.insert(activationPayments).values(normalized).returning();
     return result[0];
   }
 

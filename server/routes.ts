@@ -85,7 +85,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Activation routes
   app.post("/api/activations", async (req, res) => {
     try {
-      const activation = await storage.createActivation(req.body);
+      const { id, payerWallet, sponsorWallet, binaryMatchId, matrixUpline1, matrixUpline2, matrixUpline3, matrixUpline4, matrixUpline5, status, blockchainTxHash } = req.body;
+      
+      if (!id || !payerWallet) {
+        return res.status(400).json({ error: "id and payerWallet are required" });
+      }
+      
+      if (status && !['pending', 'partial', 'completed', 'failed'].includes(status)) {
+        return res.status(400).json({ error: "Invalid status. Must be one of: pending, partial, completed, failed" });
+      }
+      
+      const activation = await storage.createActivation({
+        id,
+        payerWallet,
+        sponsorWallet,
+        binaryMatchId,
+        matrixUpline1,
+        matrixUpline2,
+        matrixUpline3,
+        matrixUpline4,
+        matrixUpline5,
+        status,
+        blockchainTxHash,
+      });
       res.status(201).json(activation);
     } catch (error) {
       console.error("Error creating activation:", error);
@@ -116,10 +138,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/activations/:id/status", async (req, res) => {
+    try {
+      const { status } = req.body;
+      if (!status) {
+        return res.status(400).json({ error: "status is required" });
+      }
+      
+      const validStatuses = ['pending', 'partial', 'completed', 'failed'];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ error: "Invalid status. Must be one of: pending, partial, completed, failed" });
+      }
+      
+      const activation = await storage.updateActivationStatus(req.params.id, status);
+      if (!activation) {
+        return res.status(404).json({ error: "Activation not found" });
+      }
+      res.json(activation);
+    } catch (error) {
+      console.error("Error updating activation status:", error);
+      res.status(500).json({ error: "Failed to update activation status" });
+    }
+  });
+
   // Activation payment routes
   app.post("/api/activation-payments", async (req, res) => {
     try {
-      const payment = await storage.createActivationPayment(req.body);
+      const { activationId, paymentType, receiverWallet, receiverType, amountUsdt, paymentMode, blockchainTxHash, offlineUtrId, offlineProofUrl, notes } = req.body;
+      
+      if (!activationId || !paymentType || !receiverWallet || !receiverType || !amountUsdt) {
+        return res.status(400).json({ error: "activationId, paymentType, receiverWallet, receiverType, and amountUsdt are required" });
+      }
+      
+      const validPaymentTypes = ['direct_sponsor', 'binary_match', 'creator_fee', 'matrix_level_1', 'matrix_level_2', 'matrix_level_3', 'matrix_level_4', 'matrix_level_5'];
+      if (!validPaymentTypes.includes(paymentType)) {
+        return res.status(400).json({ error: "Invalid paymentType" });
+      }
+      
+      const validReceiverTypes = ['user', 'admin'];
+      if (!validReceiverTypes.includes(receiverType)) {
+        return res.status(400).json({ error: "Invalid receiverType. Must be 'user' or 'admin'" });
+      }
+      
+      if (paymentMode && !['web3', 'offline'].includes(paymentMode)) {
+        return res.status(400).json({ error: "Invalid paymentMode. Must be 'web3' or 'offline'" });
+      }
+      
+      const payment = await storage.createActivationPayment({
+        activationId,
+        paymentType: paymentType as any,
+        receiverWallet,
+        receiverType: receiverType as any,
+        amountUsdt,
+        paymentMode: paymentMode as any,
+        blockchainTxHash,
+        offlineUtrId,
+        offlineProofUrl,
+        confirmed: false,
+        notes,
+      });
       res.status(201).json(payment);
     } catch (error) {
       console.error("Error creating activation payment:", error);
@@ -180,6 +257,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { mode, txHash, utrId, proofUrl } = req.body;
       if (!mode) {
         return res.status(400).json({ error: "mode is required" });
+      }
+      
+      if (!['web3', 'offline'].includes(mode)) {
+        return res.status(400).json({ error: "Invalid mode. Must be 'web3' or 'offline'" });
       }
       
       const payment = await storage.updateActivationPaymentMode(req.params.id, mode, txHash, utrId, proofUrl);
