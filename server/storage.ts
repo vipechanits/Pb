@@ -1,6 +1,7 @@
 import { 
   type User, 
   type InsertUser,
+  type UpdateProfile,
   type Activation,
   type InsertActivation,
   type ActivationPayment,
@@ -9,19 +10,25 @@ import {
   activations,
   activationPayments
 } from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { db } from "./db";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  // User methods
+  getUserById(id: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByUserId(userId: string): Promise<User | undefined>;
+  createUser(user: Partial<InsertUser>): Promise<User>;
+  updateUserProfile(id: string, profile: UpdateProfile): Promise<User | undefined>;
+  getLastUser(): Promise<User | undefined>;
   
+  // Activation methods
   createActivation(activation: InsertActivation): Promise<Activation>;
   getActivation(id: string): Promise<Activation | undefined>;
   getActivationsByPayer(payerWallet: string): Promise<Activation[]>;
   updateActivationStatus(id: string, status: string): Promise<Activation | undefined>;
   
+  // Payment methods
   createActivationPayment(payment: InsertActivationPayment): Promise<ActivationPayment>;
   getActivationPayment(id: string): Promise<ActivationPayment | undefined>;
   getActivationPaymentsByActivationId(activationId: string): Promise<ActivationPayment[]>;
@@ -32,18 +39,42 @@ export interface IStorage {
 }
 
 export class DbStorage implements IStorage {
-  async getUser(id: string): Promise<User | undefined> {
+  // User methods
+  async getUserById(id: string): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
     return result[0];
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.username, username)).limit(1);
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
     return result[0];
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const result = await db.insert(users).values(insertUser).returning();
+  async getUserByUserId(userId: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.userId, userId)).limit(1);
+    return result[0];
+  }
+
+  async createUser(insertUser: Partial<InsertUser>): Promise<User> {
+    const result = await db.insert(users).values(insertUser as any).returning();
+    return result[0];
+  }
+
+  async updateUserProfile(id: string, profile: UpdateProfile): Promise<User | undefined> {
+    const result = await db.update(users)
+      .set({
+        ...profile,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async getLastUser(): Promise<User | undefined> {
+    const result = await db.select().from(users)
+      .orderBy(desc(users.createdAt))
+      .limit(1);
     return result[0];
   }
 

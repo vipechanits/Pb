@@ -2,14 +2,213 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema } from "@shared/schema";
+import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema } from "@shared/schema";
+import { hashPassword, verifyPassword, serializeUser } from "./auth";
+import { generateUserPaymentQR } from "./qrcode-generator";
+import { z } from "zod";
+
+// Middleware to check if user is authenticated
+function requireAuth(req: any, res: any, next: any) {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  next();
+}
+
+// Middleware to check if user is admin
+function requireAdmin(req: any, res: any, next: any) {
+  if (!req.session.userId || !req.session.isAdmin) {
+    return res.status(403).json({ error: "Forbidden - Admin access required" });
+  }
+  next();
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // put application routes here
-  // prefix all routes with /api
-
-  // use storage to perform CRUD operations on the storage interface
-  // e.g. storage.insertUser(user) or storage.getUserByUsername(username)
+  // Authentication routes
+  
+  // Signup
+  app.post("/api/auth/signup", async (req, res) => {
+    try {
+      const { email, password, sponsorId } = req.body;
+      
+      if (!email || !password) {
+        return res.status(400).json({ error: "Email and password are required" });
+      }
+      
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ error: "Email already registered" });
+      }
+      
+      // Hash password
+      const hashedPassword = await hashPassword(password);
+      
+      // Create user
+      const user = await storage.createUser({
+        email,
+        password: hashedPassword,
+        role: 'user',
+        sponsorId: sponsorId || null,
+        isActivated: false,
+      });
+      
+      // Set session
+      req.session.userId = user.id;
+      req.session.isAdmin = user.role === 'admin';
+      
+      res.status(201).json({ user: serializeUser(user) });
+    } catch (error) {
+      console.error("Error during signup:", error);
+      res.status(500).json({ error: "Failed to create account" });
+    }
+  });
+  
+  // Login
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      
+      if (!email || !password) {
+        return res.status(400).json({ error: "Email and password are required" });
+      }
+      
+      // Get user
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+      
+      // Verify password
+      const isValid = await verifyPassword(password, user.password);
+      if (!isValid) {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+      
+      // Set session
+      req.session.userId = user.id;
+      req.session.isAdmin = user.role === 'admin';
+      
+      res.json({ user: serializeUser(user) });
+    } catch (error) {
+      console.error("Error during login:", error);
+      res.status(500).json({ error: "Failed to login" });
+    }
+  });
+  
+  // Logout
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ error: "Failed to logout" });
+      }
+      res.json({ success: true });
+    });
+  });
+  
+  // Get current user
+  app.get("/api/auth/me", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json({ user: serializeUser(user) });
+    } catch (error) {
+      console.error("Error fetching current user:", error);
+      res.status(500).json({ error: "Failed to fetch user" });
+    }
+  });
+  
+  // Profile routes
+  
+  // Get user profile
+  app.get("/api/profile", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json({ user: serializeUser(user) });
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+      res.status(500).json({ error: "Failed to fetch profile" });
+    }
+  });
+  
+  // Update user profile
+  app.patch("/api/profile", requireAuth, async (req, res) => {
+    try {
+      const validationResult = updateProfileSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
+      }
+      
+      const user = await storage.updateUserProfile(req.session.userId, validationResult.data);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      res.json({ user: serializeUser(user) });
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      res.status(500).json({ error: "Failed to update profile" });
+    }
+  });
+  
+  // Generate UPI QR code for user's payment details
+  app.post("/api/profile/generate-qr", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      if (!user.upiId || !user.name || !user.mobile) {
+        return res.status(400).json({ error: "UPI ID, name, and mobile number are required" });
+      }
+      
+      const { amount } = req.body;
+      
+      const qrCode = await generateUserPaymentQR(
+        user.upiId,
+        user.name,
+        user.mobile,
+        amount
+      );
+      
+      res.json({ qrCode });
+    } catch (error) {
+      console.error("Error generating QR code:", error);
+      res.status(500).json({ error: "Failed to generate QR code" });
+    }
+  });
+  
+  // Get user by ID (for payment details)
+  app.get("/api/users/:userId", async (req, res) => {
+    try {
+      const user = await storage.getUserByUserId(req.params.userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Return only payment-related information
+      const paymentInfo = {
+        userId: user.userId,
+        name: user.name,
+        mobile: user.mobile,
+        upiId: user.upiId,
+        bankAccountHolder: user.bankAccountHolder,
+        bankAccountNumber: user.bankAccountNumber,
+        ifscCode: user.ifscCode,
+      };
+      
+      res.json(paymentInfo);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ error: "Failed to fetch user" });
+    }
+  });
 
   // Object storage route for getting upload URL
   // Note: This endpoint is intentionally unauthenticated to allow users to upload

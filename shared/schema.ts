@@ -20,19 +20,64 @@ export const paymentModeEnum = pgEnum("payment_mode", ["offline"]);
 
 export const activationStatusEnum = pgEnum("activation_status", ["pending", "partial", "completed", "failed"]);
 
+export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
+  email: text("email").notNull().unique(),
   password: text("password").notNull(),
+  role: userRoleEnum("role").notNull().default('user'),
+  
+  // User ID (PB1, PB2, etc.) - generated after activation
+  userId: varchar("user_id", { length: 20 }).unique(),
+  
+  // Profile information
+  name: text("name"),
+  mobile: varchar("mobile", { length: 15 }),
+  
+  // Payment details - for receiving payments
+  upiId: text("upi_id"),
+  bankAccountHolder: text("bank_account_holder"),
+  bankAccountNumber: varchar("bank_account_number", { length: 20 }),
+  ifscCode: varchar("ifsc_code", { length: 11 }),
+  
+  // Security
+  securityCode: varchar("security_code", { length: 6 }),
+  
+  // Referral link
+  sponsorId: varchar("sponsor_id", { length: 20 }), // PB ID of sponsor
+  
+  // Account status
+  isActivated: boolean("is_activated").notNull().default(false),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+// Insert schema for signup
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  email: z.string().email(),
+  password: z.string().min(6),
+});
+
+// Update profile schema
+export const updateProfileSchema = z.object({
+  name: z.string().optional(),
+  mobile: z.string().length(10).optional(),
+  upiId: z.string().optional(),
+  bankAccountHolder: z.string().optional(),
+  bankAccountNumber: z.string().optional(),
+  ifscCode: z.string().length(11).optional(),
+  securityCode: z.string().length(6).optional(),
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+export type UpdateProfile = z.infer<typeof updateProfileSchema>;
 
 export const activations = pgTable("activations", {
   id: varchar("id", { length: 100 }).primaryKey(),
