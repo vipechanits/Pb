@@ -1,4 +1,5 @@
-import { CheckCircle, Clock, XCircle, AlertCircle, ExternalLink } from 'lucide-react';
+import { useState } from 'react';
+import { CheckCircle, Clock, XCircle, AlertCircle, ExternalLink, Shield } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -6,10 +7,65 @@ import { Button } from '@/components/ui/button';
 import { useActivationData } from '@/hooks/useBlockchainData';
 import { useWeb3 } from '@/context/Web3Context';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { apiRequest, queryClient } from '@/lib/queryClient';
+import { useToast } from '@/hooks/use-toast';
+
+interface ActivationPaymentConfirmation {
+  id: string;
+  payerWalletAddress: string;
+  receiverWalletAddress: string;
+  receiverIndex: string;
+  amountUsdt: string;
+  paymentStage: string;
+  isAdminReceiver: boolean;
+  paymentMode: string;
+  confirmed: boolean;
+  confirmedAt: string | null;
+  createdAt: string;
+}
 
 export default function ConfirmationPage() {
-  const { isConnected } = useWeb3();
-  const { data: activationData, isLoading } = useActivationData();
+  const { isConnected, account } = useWeb3();
+  const { data: activationData, isLoading: isLoadingActivation } = useActivationData();
+  const { toast } = useToast();
+  
+  const isOfflinePayment = activationData?.modes?.[0] === 1 || activationData?.modes?.[0] === 2;
+  
+  const { data: payerConfirmations = [], isLoading: isLoadingPayerConfirmations } = useQuery<ActivationPaymentConfirmation[]>({
+    queryKey: ['activation-confirmations-payer', account],
+    enabled: isConnected && !!account && isOfflinePayment,
+  });
+
+  const { data: receiverConfirmations = [], isLoading: isLoadingReceiverConfirmations } = useQuery<ActivationPaymentConfirmation[]>({
+    queryKey: ['activation-confirmations-receiver', account],
+    enabled: isConnected && !!account,
+  });
+
+  const confirmPaymentMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest(`/api/activation-payments/confirmations/${id}/confirm`, {
+        method: 'POST',
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['activation-confirmations-payer'] });
+      queryClient.invalidateQueries({ queryKey: ['activation-confirmations-receiver'] });
+      toast({
+        title: 'Payment Confirmed',
+        description: 'You have confirmed receipt of the payment',
+      });
+    },
+    onError: () => {
+      toast({
+        title: 'Confirmation Failed',
+        description: 'Failed to confirm payment receipt',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const isLoading = isLoadingActivation || isLoadingPayerConfirmations || isLoadingReceiverConfirmations;
 
   if (!isConnected) {
     return (
@@ -177,15 +233,64 @@ export default function ConfirmationPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {activationData.receivers.map((receiver: string, index: number) => (
-                    <div 
-                      key={index} 
-                      className="flex items-center justify-between p-3 bg-muted rounded-md text-sm"
-                    >
-                      <span className="font-mono text-xs">{receiver.slice(0, 6)}...{receiver.slice(-4)}</span>
-                      <span className="font-semibold">{activationData.amounts?.[index]} USDT</span>
-                    </div>
-                  ))}
+                  {activationData.receivers.map((receiver: string, index: number) => {
+                    const confirmation = payerConfirmations.find(
+                      (c) => c.receiverIndex === index.toString()
+                    );
+                    const isCurrentUserReceiver = receiver.toLowerCase() === account?.toLowerCase();
+                    const receiverConfirmation = receiverConfirmations.find(
+                      (c) => c.receiverIndex === index.toString()
+                    );
+                    
+                    return (
+                      <div 
+                        key={index} 
+                        className="flex items-center justify-between gap-3 p-3 bg-muted rounded-md text-sm"
+                        data-testid={`payment-receiver-${index}`}
+                      >
+                        <div className="flex items-center gap-2 flex-1">
+                          <span className="font-mono text-xs">{receiver.slice(0, 6)}...{receiver.slice(-4)}</span>
+                          {confirmation?.isAdminReceiver && (
+                            <Badge variant="secondary" className="text-xs gap-1">
+                              <Shield className="w-3 h-3" />
+                              Admin
+                            </Badge>
+                          )}
+                          {isOfflinePayment && confirmation && (
+                            <Badge 
+                              variant={confirmation.confirmed ? 'default' : 'outline'}
+                              className="text-xs"
+                            >
+                              {confirmation.confirmed ? (
+                                <>
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Confirmed
+                                </>
+                              ) : (
+                                <>
+                                  <Clock className="w-3 h-3 mr-1" />
+                                  Pending
+                                </>
+                              )}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold">{activationData.amounts?.[index]} USDT</span>
+                          {isCurrentUserReceiver && isOfflinePayment && receiverConfirmation && !receiverConfirmation.confirmed && (
+                            <Button
+                              size="sm"
+                              onClick={() => confirmPaymentMutation.mutate(receiverConfirmation.id)}
+                              disabled={confirmPaymentMutation.isPending}
+                              data-testid={`button-confirm-payment-${index}`}
+                            >
+                              {confirmPaymentMutation.isPending ? 'Confirming...' : 'Confirm Receipt'}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
