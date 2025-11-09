@@ -5,14 +5,14 @@
 
 // Payment amounts in INR
 export const PAYMENT_AMOUNTS = {
-  CREATOR_FEE: 500,        // Payment 0: Admin creator fee
-  SPONSOR: 1000,           // Payment 1: Direct sponsor
-  BINARY_MATCH: 1000,      // Payment 2: Binary matching (qualified user with 1L+1R)
-  MATRIX_L1: 500,          // Payment 3: Matrix Level 1
-  MATRIX_L2: 500,          // Payment 4: Matrix Level 2
-  MATRIX_L3: 500,          // Payment 5: Matrix Level 3
-  MATRIX_L4: 500,          // Payment 6: Matrix Level 4
-  MATRIX_L5: 500,          // Payment 7: Matrix Level 5
+  SPONSOR: 1000,           // Slot 0: Direct sponsor
+  BINARY_MATCH: 1000,      // Slot 1: Binary matching
+  CREATOR_FEE: 500,        // Slot 2: Admin creator fee
+  MATRIX_L1: 500,          // Slot 3: Matrix Level 1
+  MATRIX_L2: 500,          // Slot 4: Matrix Level 2
+  MATRIX_L3: 500,          // Slot 5: Matrix Level 3
+  MATRIX_L4: 500,          // Slot 6: Matrix Level 4
+  MATRIX_L5: 500,          // Slot 7: Matrix Level 5
 } as const;
 
 // Total activation cost
@@ -41,15 +41,27 @@ export const PAYMENT_LABELS = {
 
 // Payment type to amount mapping
 export const PAYMENT_TYPE_AMOUNTS: Record<string, number> = {
-  creator_fee: PAYMENT_AMOUNTS.CREATOR_FEE,
   direct_sponsor: PAYMENT_AMOUNTS.SPONSOR,
   binary_match: PAYMENT_AMOUNTS.BINARY_MATCH,
+  creator_fee: PAYMENT_AMOUNTS.CREATOR_FEE,
   matrix_level_1: PAYMENT_AMOUNTS.MATRIX_L1,
   matrix_level_2: PAYMENT_AMOUNTS.MATRIX_L2,
   matrix_level_3: PAYMENT_AMOUNTS.MATRIX_L3,
   matrix_level_4: PAYMENT_AMOUNTS.MATRIX_L4,
   matrix_level_5: PAYMENT_AMOUNTS.MATRIX_L5,
 };
+
+// Slot index to payment type mapping (defines the order of 8 payment slots)
+export const SLOT_TO_PAYMENT_TYPE = [
+  'direct_sponsor',    // Slot 0
+  'binary_match',      // Slot 1
+  'creator_fee',       // Slot 2
+  'matrix_level_1',    // Slot 3
+  'matrix_level_2',    // Slot 4
+  'matrix_level_3',    // Slot 5
+  'matrix_level_4',    // Slot 6
+  'matrix_level_5',    // Slot 7
+] as const;
 
 // Matrix structure
 export const MATRIX_STRUCTURE = {
