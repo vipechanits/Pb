@@ -44,9 +44,7 @@ export default function ConfirmationPage() {
 
   const confirmPaymentMutation = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest(`/api/activation-payments/confirmations/${id}/confirm`, {
-        method: 'POST',
-      });
+      return apiRequest('POST', `/api/activation-payments/confirmations/${id}/confirm`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['activation-confirmations-payer'] });

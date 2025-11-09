@@ -1,585 +1,343 @@
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { CheckCircle, Clock, Shield, AlertCircle, ExternalLink } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { AlertCircle, CheckCircle, Eye, DollarSign, Users, Plus, Send } from 'lucide-react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { queryClient, apiRequest } from '@/lib/queryClient';
-import { useWeb3 } from '@/context/Web3Context';
+import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { useWeb3 } from '@/context/Web3Context';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { format } from 'date-fns';
-import { ObjectUploader } from '@/components/ObjectUploader';
-import type { UploadResult } from '@uppy/core';
 
-interface FallbackPayment {
+interface ActivationPaymentConfirmation {
   id: string;
-  paymentType: string;
-  userWalletAddress: string;
+  payerWalletAddress: string;
+  receiverWalletAddress: string;
+  receiverIndex: string;
   amountUsdt: string;
-  amountInr: string;
+  paymentStage: string;
+  isAdminReceiver: boolean;
+  paymentMode: string;
   transactionId: string | null;
+  transactionHash: string | null;
   paymentProofUrl: string | null;
-  adminConfirmed: boolean;
-  adminConfirmedAt: Date | null;
-  adminWalletAddress: string | null;
-  userConfirmed: boolean;
-  userConfirmedAt: Date | null;
+  confirmed: boolean;
+  confirmedAt: string | null;
   notes: string | null;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
 }
 
-const USDT_TO_INR = 100;
-
-const formatDualCurrency = (usdtAmount: string | number): string => {
-  const usdt = typeof usdtAmount === 'string' ? parseFloat(usdtAmount) : usdtAmount;
-  const inr = (usdt * USDT_TO_INR).toFixed(2);
-  return `${usdt} USDT / ₹${inr}`;
-};
-
 export default function AdminPayments() {
-  const { account } = useWeb3();
+  const { account, isConnected } = useWeb3();
   const { toast } = useToast();
-  const [selectedPayment, setSelectedPayment] = useState<FallbackPayment | null>(null);
-  const [showProofDialog, setShowProofDialog] = useState(false);
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [formData, setFormData] = useState({
-    paymentType: 'binary',
-    userWalletAddress: '',
-    amountUsdt: '',
-    transactionId: '',
-    notes: '',
-    paymentProofUrl: '',
-  });
 
-  const { data: allPayments, isLoading: allLoading } = useQuery<FallbackPayment[]>({
-    queryKey: ['/api/fallback-payments'],
+  const { data: receiverConfirmations = [], isLoading: isLoadingReceiver } = useQuery<ActivationPaymentConfirmation[]>({
+    queryKey: ['activation-confirmations-receiver', account],
+    enabled: isConnected && !!account,
     refetchInterval: 30000,
   });
 
-  const { data: pendingPayments, isLoading: pendingLoading } = useQuery<FallbackPayment[]>({
-    queryKey: ['/api/fallback-payments/pending'],
+  const { data: allConfirmations = [], isLoading: isLoadingAll } = useQuery<ActivationPaymentConfirmation[]>({
+    queryKey: ['/api/activation-payments/confirmations'],
+    enabled: isConnected && !!account,
     refetchInterval: 30000,
   });
 
-  const createMutation = useMutation({
-    mutationFn: async (data: typeof formData) => {
-      const amountInr = (parseFloat(data.amountUsdt) * USDT_TO_INR).toString();
-      return await apiRequest('POST', '/api/fallback-payments', {
-        ...data,
-        amountInr,
-      });
+  const confirmPaymentMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest('POST', `/api/activation-payments/confirmations/${id}/confirm`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/fallback-payments'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/fallback-payments/pending'] });
-      setShowCreateDialog(false);
-      setFormData({
-        paymentType: 'binary',
-        userWalletAddress: '',
-        amountUsdt: '',
-        transactionId: '',
-        notes: '',
-        paymentProofUrl: '',
-      });
+      queryClient.invalidateQueries({ queryKey: ['activation-confirmations-receiver'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/activation-payments/confirmations'] });
       toast({
-        title: "Payment Created",
-        description: "Fallback payment has been created successfully",
+        title: 'Payment Confirmed',
+        description: 'You have confirmed receipt of the payment',
       });
     },
     onError: () => {
       toast({
-        title: "Creation Failed",
-        description: "Failed to create fallback payment",
-        variant: "destructive",
+        title: 'Confirmation Failed',
+        description: 'Failed to confirm payment receipt',
+        variant: 'destructive',
       });
     },
   });
 
-  const confirmMutation = useMutation({
-    mutationFn: async (paymentId: string) => {
-      return await apiRequest('POST', '/api/fallback-payments/' + paymentId + '/confirm-admin', { adminWalletAddress: account });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/fallback-payments'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/fallback-payments/pending'] });
-      toast({
-        title: "Payment Confirmed",
-        description: "You have confirmed sending this payment",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Confirmation Failed",
-        description: "Failed to confirm payment",
-        variant: "destructive",
-      });
-    },
-  });
+  if (!isConnected) {
+    return (
+      <div className="p-6">
+        <Alert>
+          <AlertCircle className="w-4 h-4" />
+          <AlertDescription>
+            Please connect your wallet to view payment confirmations
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
-  const handleConfirm = async (paymentId: string) => {
-    if (!account) {
-      toast({
-        title: "Wallet Not Connected",
-        description: "Please connect your admin wallet",
-        variant: "destructive",
-      });
-      return;
-    }
-    await confirmMutation.mutateAsync(paymentId);
-  };
+  if (isLoadingReceiver || isLoadingAll) {
+    return (
+      <div className="p-6 space-y-6">
+        <Skeleton className="h-12 w-64" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
 
-  const handleCreate = async () => {
-    if (!account) {
-      toast({
-        title: "Wallet Not Connected",
-        description: "Please connect your admin wallet",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    if (!formData.userWalletAddress || !formData.amountUsdt) {
-      toast({
-        title: "Missing Information",
-        description: "Please fill in user wallet address and amount",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Validate wallet address format
-    if (!/^0x[a-fA-F0-9]{40}$/.test(formData.userWalletAddress)) {
-      toast({
-        title: "Invalid Wallet Address",
-        description: "Please enter a valid Ethereum wallet address",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Validate amount is a valid positive number
-    const amount = parseFloat(formData.amountUsdt);
-    if (isNaN(amount) || !isFinite(amount) || amount <= 0) {
-      toast({
-        title: "Invalid Amount",
-        description: "Please enter a valid positive amount",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    await createMutation.mutateAsync(formData);
-  };
-
-  const handleProofUpload = async (result: UploadResult) => {
-    try {
-      if (result.successful.length > 0) {
-        const uploadedFile = result.successful[0];
-        const response = await fetch('/api/payment-proofs', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ uploadedPath: uploadedFile.uploadURL }),
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          setFormData(prev => ({ ...prev, paymentProofUrl: data.objectPath }));
-          toast({
-            title: "Proof Uploaded",
-            description: "Payment proof has been uploaded successfully",
-          });
-        } else {
-          throw new Error('Failed to process uploaded file');
-        }
-      } else if (result.failed.length > 0) {
-        throw new Error(result.failed[0].error || 'Upload failed');
-      }
-    } catch (error) {
-      toast({
-        title: "Upload Failed",
-        description: error instanceof Error ? error.message : "Failed to upload payment proof. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const viewProof = (payment: FallbackPayment) => {
-    setSelectedPayment(payment);
-    setShowProofDialog(true);
-  };
-
-  const renderPaymentCard = (payment: FallbackPayment) => (
-    <Card key={payment.id}>
-      <CardContent className="p-4 space-y-3">
-        <div className="flex items-start justify-between">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Badge variant={payment.paymentType === 'binary' ? 'default' : 'secondary'}>
-                {payment.paymentType.toUpperCase()}
-              </Badge>
-              <Badge variant={payment.adminConfirmed ? 'default' : payment.userConfirmed ? 'secondary' : 'outline'}>
-                {payment.adminConfirmed && payment.userConfirmed
-                  ? 'Completed'
-                  : payment.adminConfirmed
-                  ? 'Sent - Awaiting User'
-                  : payment.userConfirmed
-                  ? 'User Confirmed'
-                  : 'Not Sent'}
-              </Badge>
-            </div>
-            <div>
-              <p className="text-sm font-semibold">User: {payment.userWalletAddress.slice(0, 10)}...{payment.userWalletAddress.slice(-8)}</p>
-              <p className="text-xs text-muted-foreground">
-                {format(new Date(payment.createdAt), 'MMM dd, yyyy HH:mm')}
-              </p>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="font-bold">{formatDualCurrency(payment.amountUsdt)}</p>
-            {payment.transactionId && (
-              <p className="text-xs text-muted-foreground font-mono mt-1">
-                TX: {payment.transactionId.slice(0, 8)}...
-              </p>
-            )}
-          </div>
-        </div>
-
-        {payment.notes && (
-          <Alert>
-            <AlertDescription className="text-xs">{payment.notes}</AlertDescription>
-          </Alert>
-        )}
-
-        <div className="flex gap-2">
-          {payment.paymentProofUrl && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => viewProof(payment)}
-              data-testid={`button-view-proof-${payment.id}`}
-            >
-              <Eye className="w-4 h-4 mr-2" />
-              View Proof
-            </Button>
-          )}
-          {!payment.adminConfirmed && (
-            <Button
-              size="sm"
-              onClick={() => handleConfirm(payment.id)}
-              disabled={confirmMutation.isPending}
-              data-testid={`button-confirm-${payment.id}`}
-            >
-              <Send className="w-4 h-4 mr-2" />
-              Confirm Sent
-            </Button>
-          )}
-        </div>
-
-        {payment.adminConfirmed && payment.adminConfirmedAt && (
-          <div className="pt-2 border-t text-xs text-muted-foreground space-y-1">
-            <p>Payment sent: {format(new Date(payment.adminConfirmedAt), 'MMM dd, yyyy HH:mm')}</p>
-            {payment.adminWalletAddress && (
-              <p className="font-mono">Sent by: {payment.adminWalletAddress.slice(0, 10)}...{payment.adminWalletAddress.slice(-8)}</p>
-            )}
-          </div>
-        )}
-        {payment.userConfirmed && payment.userConfirmedAt && (
-          <div className="text-xs text-muted-foreground">
-            <p>User confirmed receipt: {format(new Date(payment.userConfirmedAt), 'MMM dd, yyyy HH:mm')}</p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-
-  const pendingCount = pendingPayments?.length || 0;
-  const totalBinaryAmount = allPayments?.filter(p => p.paymentType === 'binary').reduce((sum, p) => sum + parseFloat(p.amountUsdt), 0) || 0;
-  const totalMatrixAmount = allPayments?.filter(p => p.paymentType === 'matrix').reduce((sum, p) => sum + parseFloat(p.amountUsdt), 0) || 0;
+  const pendingConfirmations = receiverConfirmations.filter(c => !c.confirmed);
+  const confirmedPayments = receiverConfirmations.filter(c => c.confirmed);
+  const adminReceiverConfirmations = allConfirmations.filter(c => c.isAdminReceiver);
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Fallback Payment Management</h1>
-          <p className="text-muted-foreground">Create and confirm binary/matrix fallback payments</p>
-        </div>
-        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-create-payment">
-              <Plus className="w-4 h-4 mr-2" />
-              Create Payment
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Create Fallback Payment</DialogTitle>
-              <DialogDescription>
-                Record a binary or matrix fallback payment that couldn't be distributed on-chain
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="paymentType">Payment Type</Label>
-                <Select
-                  value={formData.paymentType}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, paymentType: value }))}
-                >
-                  <SelectTrigger id="paymentType" data-testid="select-payment-type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="binary">Binary Income</SelectItem>
-                    <SelectItem value="matrix">Matrix Income</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="userWalletAddress">User Wallet Address</Label>
-                <Input
-                  id="userWalletAddress"
-                  placeholder="0x..."
-                  value={formData.userWalletAddress}
-                  onChange={(e) => setFormData(prev => ({ ...prev, userWalletAddress: e.target.value }))}
-                  data-testid="input-user-wallet"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="amountUsdt">Amount (USDT)</Label>
-                <Input
-                  id="amountUsdt"
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={formData.amountUsdt}
-                  onChange={(e) => setFormData(prev => ({ ...prev, amountUsdt: e.target.value }))}
-                  data-testid="input-amount"
-                />
-                {formData.amountUsdt && (
-                  <p className="text-sm text-muted-foreground">
-                    ₹{(parseFloat(formData.amountUsdt) * USDT_TO_INR).toFixed(2)} INR
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="transactionId">Transaction ID / UTR (Optional)</Label>
-                <Input
-                  id="transactionId"
-                  placeholder="Transaction reference"
-                  value={formData.transactionId}
-                  onChange={(e) => setFormData(prev => ({ ...prev, transactionId: e.target.value }))}
-                  data-testid="input-transaction-id"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Payment Proof (Optional)</Label>
-                <ObjectUploader
-                  onComplete={handleProofUpload}
-                  allowedFileTypes={['image/*', '.pdf']}
-                  maxFileSize={10 * 1024 * 1024}
-                  maxNumberOfFiles={1}
-                />
-                {formData.paymentProofUrl && (
-                  <Alert>
-                    <CheckCircle className="w-4 h-4" />
-                    <AlertDescription className="text-xs">
-                      Payment proof uploaded successfully
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="notes">Notes (Optional)</Label>
-                <Textarea
-                  id="notes"
-                  placeholder="Additional notes about this payment"
-                  value={formData.notes}
-                  onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                  rows={3}
-                  data-testid="textarea-notes"
-                />
-              </div>
-
-              <div className="flex gap-2 justify-end">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowCreateDialog(false)}
-                  data-testid="button-cancel"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleCreate}
-                  disabled={createMutation.isPending}
-                  data-testid="button-submit-payment"
-                >
-                  {createMutation.isPending ? 'Creating...' : 'Create Payment'}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+      <div>
+        <h1 className="text-3xl font-bold">Payment Confirmation Queue</h1>
+        <p className="text-muted-foreground">
+          Manage activation payment confirmations where you are the receiver
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Pending Payments</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pending Confirmations</CardTitle>
+            <Clock className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{pendingCount}</div>
-            <p className="text-xs text-muted-foreground">Not yet sent to users</p>
+            <div className="text-2xl font-bold">{pendingConfirmations.length}</div>
+            <p className="text-xs text-muted-foreground">
+              Awaiting your confirmation
+            </p>
           </CardContent>
         </Card>
+        
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <DollarSign className="w-4 h-4" />
-              Binary Total
-            </CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Confirmed</CardTitle>
+            <CheckCircle className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalBinaryAmount.toFixed(2)} USDT</div>
-            <p className="text-xs text-muted-foreground">₹{(totalBinaryAmount * USDT_TO_INR).toFixed(2)}</p>
+            <div className="text-2xl font-bold">{confirmedPayments.length}</div>
+            <p className="text-xs text-muted-foreground">
+              Successfully confirmed
+            </p>
           </CardContent>
         </Card>
+
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              Matrix Total
-            </CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Admin Receiver</CardTitle>
+            <Shield className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalMatrixAmount.toFixed(2)} USDT</div>
-            <p className="text-xs text-muted-foreground">₹{(totalMatrixAmount * USDT_TO_INR).toFixed(2)}</p>
+            <div className="text-2xl font-bold">{adminReceiverConfirmations.length}</div>
+            <p className="text-xs text-muted-foreground">
+              Where admin is receiver
+            </p>
           </CardContent>
         </Card>
       </div>
 
       <Tabs defaultValue="pending" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="pending">Pending ({pendingCount})</TabsTrigger>
-          <TabsTrigger value="binary">Binary Payments</TabsTrigger>
-          <TabsTrigger value="matrix">Matrix Payments</TabsTrigger>
+        <TabsList>
+          <TabsTrigger value="pending" data-testid="tab-pending">
+            Pending ({pendingConfirmations.length})
+          </TabsTrigger>
+          <TabsTrigger value="confirmed" data-testid="tab-confirmed">
+            Confirmed ({confirmedPayments.length})
+          </TabsTrigger>
+          <TabsTrigger value="admin-receiver" data-testid="tab-admin-receiver">
+            Admin Receiver ({adminReceiverConfirmations.length})
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="pending" className="space-y-4">
-          {pendingLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map(i => (
-                <Skeleton key={i} className="h-40 w-full" />
-              ))}
-            </div>
-          ) : pendingPayments && pendingPayments.length > 0 ? (
-            <div className="space-y-3">
-              {pendingPayments.map(payment => renderPaymentCard(payment))}
-            </div>
+          {pendingConfirmations.length === 0 ? (
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-center text-muted-foreground">No pending confirmations</p>
+              </CardContent>
+            </Card>
           ) : (
-            <Alert>
-              <CheckCircle className="w-4 h-4" />
-              <AlertDescription>
-                No pending fallback payments. Create a payment above to record binary or matrix income that couldn't be distributed on-chain.
-              </AlertDescription>
-            </Alert>
+            pendingConfirmations.map((confirmation) => (
+              <Card key={confirmation.id} data-testid={`confirmation-${confirmation.id}`}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1">
+                      <CardTitle className="text-lg">
+                        Payment from {confirmation.payerWalletAddress.slice(0, 6)}...{confirmation.payerWalletAddress.slice(-4)}
+                      </CardTitle>
+                      <CardDescription>
+                        {confirmation.paymentStage} • Created {format(new Date(confirmation.createdAt), 'PPp')}
+                      </CardDescription>
+                    </div>
+                    <Badge variant="outline" className="gap-1">
+                      <Clock className="w-3 h-3" />
+                      Pending
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Amount</p>
+                      <p className="text-lg font-semibold">{confirmation.amountUsdt} USDT</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Payment Mode</p>
+                      <p className="font-medium text-sm">{confirmation.paymentMode}</p>
+                    </div>
+                  </div>
+
+                  {confirmation.transactionId && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Transaction ID</p>
+                      <p className="font-mono text-sm">{confirmation.transactionId}</p>
+                    </div>
+                  )}
+
+                  {confirmation.paymentProofUrl && (
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Payment Proof</p>
+                      <a
+                        href={confirmation.paymentProofUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-primary hover:underline flex items-center gap-1"
+                      >
+                        View Proof
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  )}
+
+                  {confirmation.notes && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Notes</p>
+                      <p className="text-sm">{confirmation.notes}</p>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end pt-2">
+                    <Button
+                      onClick={() => confirmPaymentMutation.mutate(confirmation.id)}
+                      disabled={confirmPaymentMutation.isPending}
+                      data-testid={`button-confirm-${confirmation.id}`}
+                    >
+                      {confirmPaymentMutation.isPending ? 'Confirming...' : 'Confirm Receipt'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
           )}
         </TabsContent>
 
-        <TabsContent value="binary" className="space-y-4">
-          {allLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map(i => (
-                <Skeleton key={i} className="h-40 w-full" />
-              ))}
-            </div>
-          ) : allPayments && allPayments.filter(p => p.paymentType === 'binary').length > 0 ? (
-            <div className="space-y-3">
-              {allPayments.filter(p => p.paymentType === 'binary').map(payment => renderPaymentCard(payment))}
-            </div>
+        <TabsContent value="confirmed" className="space-y-4">
+          {confirmedPayments.length === 0 ? (
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-center text-muted-foreground">No confirmed payments yet</p>
+              </CardContent>
+            </Card>
           ) : (
-            <Alert>
-              <AlertCircle className="w-4 h-4" />
-              <AlertDescription>
-                No binary fallback payments found
-              </AlertDescription>
-            </Alert>
+            confirmedPayments.map((confirmation) => (
+              <Card key={confirmation.id}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1">
+                      <CardTitle className="text-lg">
+                        Payment from {confirmation.payerWalletAddress.slice(0, 6)}...{confirmation.payerWalletAddress.slice(-4)}
+                      </CardTitle>
+                      <CardDescription>
+                        {confirmation.paymentStage} • Confirmed {confirmation.confirmedAt && format(new Date(confirmation.confirmedAt), 'PPp')}
+                      </CardDescription>
+                    </div>
+                    <Badge className="gap-1">
+                      <CheckCircle className="w-3 h-3" />
+                      Confirmed
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Amount</p>
+                      <p className="text-lg font-semibold">{confirmation.amountUsdt} USDT</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Payment Mode</p>
+                      <p className="font-medium text-sm">{confirmation.paymentMode}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
           )}
         </TabsContent>
 
-        <TabsContent value="matrix" className="space-y-4">
-          {allLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map(i => (
-                <Skeleton key={i} className="h-40 w-full" />
-              ))}
-            </div>
-          ) : allPayments && allPayments.filter(p => p.paymentType === 'matrix').length > 0 ? (
-            <div className="space-y-3">
-              {allPayments.filter(p => p.paymentType === 'matrix').map(payment => renderPaymentCard(payment))}
-            </div>
+        <TabsContent value="admin-receiver" className="space-y-4">
+          {adminReceiverConfirmations.length === 0 ? (
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-center text-muted-foreground">No payments where admin is the receiver</p>
+              </CardContent>
+            </Card>
           ) : (
-            <Alert>
-              <AlertCircle className="w-4 h-4" />
-              <AlertDescription>
-                No matrix fallback payments found
-              </AlertDescription>
-            </Alert>
+            adminReceiverConfirmations.map((confirmation) => (
+              <Card key={confirmation.id}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1 flex-1">
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-lg">
+                          Payment from {confirmation.payerWalletAddress.slice(0, 6)}...{confirmation.payerWalletAddress.slice(-4)}
+                        </CardTitle>
+                        <Badge variant="secondary" className="gap-1">
+                          <Shield className="w-3 h-3" />
+                          Admin Receiver
+                        </Badge>
+                      </div>
+                      <CardDescription>
+                        {confirmation.paymentStage} • {confirmation.confirmed ? `Confirmed ${format(new Date(confirmation.confirmedAt!), 'PPp')}` : `Created ${format(new Date(confirmation.createdAt), 'PPp')}`}
+                      </CardDescription>
+                    </div>
+                    <Badge variant={confirmation.confirmed ? 'default' : 'outline'} className="gap-1">
+                      {confirmation.confirmed ? (
+                        <>
+                          <CheckCircle className="w-3 h-3" />
+                          Confirmed
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="w-3 h-3" />
+                          Pending
+                        </>
+                      )}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Amount</p>
+                      <p className="text-lg font-semibold">{confirmation.amountUsdt} USDT</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Payment Mode</p>
+                      <p className="font-medium text-sm">{confirmation.paymentMode}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
           )}
         </TabsContent>
       </Tabs>
-
-      <Dialog open={showProofDialog} onOpenChange={setShowProofDialog}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Payment Proof</DialogTitle>
-            <DialogDescription>
-              {selectedPayment && `${selectedPayment.paymentType.toUpperCase()} Payment - ${formatDualCurrency(selectedPayment.amountUsdt)}`}
-            </DialogDescription>
-          </DialogHeader>
-          {selectedPayment && selectedPayment.paymentProofUrl && (
-            <div className="space-y-4">
-              <div className="relative w-full max-h-96 bg-muted rounded-md overflow-hidden">
-                <img
-                  src={selectedPayment.paymentProofUrl}
-                  alt="Payment proof"
-                  className="w-full h-full object-contain"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.style.display = 'none';
-                  }}
-                />
-              </div>
-              {selectedPayment.transactionId && (
-                <div className="space-y-2">
-                  <Label>Transaction ID / UTR</Label>
-                  <Input value={selectedPayment.transactionId} readOnly className="font-mono text-sm" />
-                </div>
-              )}
-              <Button
-                variant="outline"
-                onClick={() => window.open(selectedPayment.paymentProofUrl!, '_blank')}
-                className="w-full"
-              >
-                <Eye className="w-4 h-4 mr-2" />
-                Open in New Tab
-              </Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
