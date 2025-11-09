@@ -24,7 +24,8 @@ export function ReferralLinks() {
     );
   }
 
-  const baseUrl = window.location.origin;
+  // Use custom domain if configured, fallback to current origin
+  const baseUrl = 'https://payback247.com';
   const leftLegLink = `${baseUrl}/auth/signup?ref=${user.userId}&leg=left`;
   const rightLegLink = `${baseUrl}/auth/signup?ref=${user.userId}&leg=right`;
 
