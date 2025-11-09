@@ -121,7 +121,7 @@ export default function ConfirmationPage() {
                 <div className="flex items-center justify-between p-3 bg-muted rounded-md">
                   <span className="text-sm text-muted-foreground">Payment Mode</span>
                   <span className="font-semibold text-sm">
-                    {activationData.modes?.[0] === 0 ? 'Web3 (On-Chain)' : 'Offline Payment'}
+                    {activationData?.modes?.[0] === 0 ? 'Web3 (On-Chain)' : 'Offline Payment'}
                   </span>
                 </div>
                 
@@ -147,7 +147,7 @@ export default function ConfirmationPage() {
                 </div>
               </div>
 
-              {activationData.proofs?.[0] && (
+              {activationData?.proofs?.[0] && (
                 <div className="pt-4 border-t">
                   <p className="text-sm font-semibold mb-2">Payment Proof</p>
                   <div className="p-3 bg-muted rounded-md">
@@ -169,7 +169,7 @@ export default function ConfirmationPage() {
           </Card>
 
           {/* Distribution Details */}
-          {activationData.receivers && activationData.receivers.length > 0 && (
+          {activationData?.receivers && activationData.receivers.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>Payment Distribution</CardTitle>
@@ -183,7 +183,7 @@ export default function ConfirmationPage() {
                       className="flex items-center justify-between p-3 bg-muted rounded-md text-sm"
                     >
                       <span className="font-mono text-xs">{receiver.slice(0, 6)}...{receiver.slice(-4)}</span>
-                      <span className="font-semibold">{activationData.amounts[index]} USDT</span>
+                      <span className="font-semibold">{activationData.amounts?.[index]} USDT</span>
                     </div>
                   ))}
                 </div>

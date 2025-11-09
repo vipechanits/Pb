@@ -1,9 +1,13 @@
 import { useState } from 'react';
-import { DollarSign, Users, GitBranch, Grid3x3, RefreshCw, ArrowLeftRight } from 'lucide-react';
+import { DollarSign, Users, GitBranch, Grid3x3, RefreshCw, ArrowLeftRight, Share2, Link2, ExternalLink } from 'lucide-react';
 import StatCard from '@/components/StatCard';
 import PaymentModeSelector from '@/components/PaymentModeSelector';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -13,20 +17,24 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { useWeb3 } from '@/context/Web3Context';
-import { useActivationData, useBinaryReport, useActivationFee, useMatrixPosition } from '@/hooks/useBlockchainData';
+import { useActivationData, useBinaryReport, useActivationFee, useMatrixPosition, useCreatorCards } from '@/hooks/useBlockchainData';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Copy, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useContract } from '@/hooks/useContract';
 
 export default function UserDashboard() {
   const [showActivation, setShowActivation] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedLink, setCopiedLink] = useState<'left' | 'right' | null>(null);
   const { account, isConnected } = useWeb3();
   const { data: activationData, isLoading: activationLoading } = useActivationData();
   const { data: binaryData, isLoading: binaryLoading } = useBinaryReport();
   const { data: activationFee } = useActivationFee();
   const { data: matrixPosition } = useMatrixPosition();
+  const { data: creatorCards } = useCreatorCards();
   const { toast } = useToast();
+  const { approveUSDT, paySlotWeb3, submitOfflineProof, isLoading } = useContract();
 
 
   if (!isConnected) {
@@ -58,6 +66,20 @@ export default function UserDashboard() {
         description: `User ID ${userId} copied to clipboard`,
       });
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const copyAffiliateLink = (side: 'left' | 'right') => {
+    if (account) {
+      const baseUrl = window.location.origin;
+      const link = `${baseUrl}/?ref=${account}&side=${side}`;
+      navigator.clipboard.writeText(link);
+      setCopiedLink(side);
+      toast({
+        title: "Link Copied!",
+        description: `${side === 'left' ? 'Left' : 'Right'} referral link copied to clipboard`,
+      });
+      setTimeout(() => setCopiedLink(null), 2000);
     }
   };
 
@@ -94,18 +116,126 @@ export default function UserDashboard() {
                 Activate Account ({activationFee || '...'} USDT)
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Activate Your Account</DialogTitle>
                 <DialogDescription>
-                  Activation Fee: {activationFee || '...'} USDT. Choose your preferred payment method.
+                  Total Activation Fee: {activationFee || '...'} USDT distributed across 8 payments
                 </DialogDescription>
               </DialogHeader>
-              <PaymentModeSelector
-                onSuccess={() => {
-                  setShowActivation(false);
-                }}
-              />
+              
+              <Tabs defaultValue="one-shot" className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="one-shot">One-Shot On-Chain</TabsTrigger>
+                  <TabsTrigger value="individual">Individual On-Chain</TabsTrigger>
+                  <TabsTrigger value="offline">Offline</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="one-shot" className="space-y-4">
+                  <Alert>
+                    <AlertDescription>
+                      Pay the entire activation fee in a single transaction. All 8 payments will be processed automatically.
+                    </AlertDescription>
+                  </Alert>
+                  <div className="p-4 bg-muted rounded-md">
+                    <div className="flex justify-between mb-2">
+                      <span className="text-sm text-muted-foreground">Total Amount:</span>
+                      <span className="font-semibold">{activationFee || '...'} USDT</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      This will approve and pay the full activation fee in one transaction.
+                    </p>
+                  </div>
+                  <PaymentModeSelector onSuccess={() => setShowActivation(false)} />
+                </TabsContent>
+
+                <TabsContent value="individual" className="space-y-4">
+                  <Alert>
+                    <AlertDescription>
+                      Pay each of the 8 receivers individually on-chain. You'll need to approve and send 8 separate transactions.
+                    </AlertDescription>
+                  </Alert>
+                  {activationData?.receivers && activationData.receivers.length > 0 ? (
+                    <div className="space-y-3">
+                      {activationData.receivers.map((receiver: string, index: number) => (
+                        <Card key={index}>
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-semibold">Payment {index + 1}</span>
+                              <span className="font-bold">{activationData.amounts?.[index] || '0'} USDT</span>
+                            </div>
+                            <div className="text-xs text-muted-foreground mb-2">
+                              To: {receiver.slice(0, 10)}...{receiver.slice(-8)}
+                            </div>
+                            <Button size="sm" className="w-full" variant="outline">
+                              Pay {activationData.amounts?.[index] || '0'} USDT
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {Array.from({ length: 8 }).map((_, index) => {
+                        const amount = activationFee ? (parseFloat(activationFee) / 8).toFixed(2) : '0';
+                        return (
+                          <Card key={index}>
+                            <CardContent className="p-4">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-semibold">Payment {index + 1}</span>
+                                <span className="font-bold">{amount} USDT</span>
+                              </div>
+                              <div className="text-xs text-muted-foreground mb-2">
+                                Receiver address will be assigned upon activation
+                              </div>
+                              <Button size="sm" className="w-full" variant="outline" disabled>
+                                Pay {amount} USDT
+                              </Button>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="offline" className="space-y-4">
+                  <Alert>
+                    <AlertDescription>
+                      Submit payment proof for offline payment. Admin will verify and activate your account.
+                    </AlertDescription>
+                  </Alert>
+                  {creatorCards && creatorCards[0] && (
+                    <div className="p-4 bg-muted rounded-md text-sm space-y-1">
+                      <p className="font-semibold">Payment Details:</p>
+                      <p>Name: {creatorCards[0].holderName}</p>
+                      <p>Bank: {creatorCards[0].bankName}</p>
+                      <p>Account: {creatorCards[0].accountNumber}</p>
+                      {creatorCards[0].ifscOrSwift && <p>IFSC: {creatorCards[0].ifscOrSwift}</p>}
+                      {creatorCards[0].upiId && <p>UPI: {creatorCards[0].upiId}</p>}
+                    </div>
+                  )}
+                  <div className="space-y-3">
+                    <p className="text-sm font-semibold">Submit 8 Payment Proofs:</p>
+                    {Array.from({ length: 8 }).map((_, index) => {
+                      const amount = activationFee ? (parseFloat(activationFee) / 8).toFixed(2) : '0';
+                      return (
+                        <Card key={index}>
+                          <CardContent className="p-4 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-semibold">Payment {index + 1}</span>
+                              <span className="font-bold">{amount} USDT</span>
+                            </div>
+                            <Input placeholder="Transaction ID / UTR" size={1} />
+                            <Input placeholder="Payment proof URL" size={1} />
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                    <Button className="w-full">Submit All Proofs</Button>
+                  </div>
+                </TabsContent>
+              </Tabs>
             </DialogContent>
           </Dialog>
         )}
@@ -184,6 +314,85 @@ export default function UserDashboard() {
           </div>
         </>
       )}
+
+      {/* Affiliate Links Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Share2 className="w-5 h-5" />
+            Affiliate Links
+          </CardTitle>
+          <CardDescription>Share your referral links to build your team</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Left Link */}
+            <div className="space-y-2">
+              <Label htmlFor="left-link">Left Team Link</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="left-link"
+                  value={account ? `${window.location.origin}/?ref=${account}&side=left` : ''}
+                  readOnly
+                  className="font-mono text-sm"
+                  data-testid="input-left-link"
+                />
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={() => copyAffiliateLink('left')}
+                  data-testid="button-copy-left-link"
+                >
+                  {copiedLink === 'left' ? (
+                    <Check className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Share this link to add members to your left team
+              </p>
+            </div>
+
+            {/* Right Link */}
+            <div className="space-y-2">
+              <Label htmlFor="right-link">Right Team Link</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="right-link"
+                  value={account ? `${window.location.origin}/?ref=${account}&side=right` : ''}
+                  readOnly
+                  className="font-mono text-sm"
+                  data-testid="input-right-link"
+                />
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={() => copyAffiliateLink('right')}
+                  data-testid="button-copy-right-link"
+                >
+                  {copiedLink === 'right' ? (
+                    <Check className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Share this link to add members to your right team
+              </p>
+            </div>
+          </div>
+
+          <Alert>
+            <Link2 className="w-4 h-4" />
+            <AlertDescription>
+              Build a balanced team by sharing both links. Your binary income depends on matching pairs from left and right teams.
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
 
       <div>
         <h2 className="text-xl font-semibold mb-4">Recent Transactions</h2>

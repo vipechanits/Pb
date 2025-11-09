@@ -13,6 +13,10 @@ import DirectSponsoring from '@/pages/direct-sponsoring';
 import BinaryMatching from '@/pages/binary-matching';
 import MatrixIncome from '@/pages/matrix-income';
 import Profile from '@/pages/profile';
+import ActivationPage from '@/pages/activation';
+import ConfirmationPage from '@/pages/confirmation';
+import ReentryPage from '@/pages/reentry';
+import AdditionalReentryPage from '@/pages/additional-reentry';
 import AdminDashboard from '@/pages/admin-dashboard';
 import AdminPayments from '@/pages/admin-payments';
 import { Web3Provider } from '@/context/Web3Context';
@@ -82,6 +86,38 @@ function Router() {
         {() => (
           <DashboardLayout>
             <Profile />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      <Route path="/user/activation">
+        {() => (
+          <DashboardLayout>
+            <ActivationPage />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      <Route path="/user/confirmation">
+        {() => (
+          <DashboardLayout>
+            <ConfirmationPage />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      <Route path="/user/reentry">
+        {() => (
+          <DashboardLayout>
+            <ReentryPage />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      <Route path="/user/additional-reentry">
+        {() => (
+          <DashboardLayout>
+            <AdditionalReentryPage />
           </DashboardLayout>
         )}
       </Route>
