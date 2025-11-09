@@ -1,36 +1,40 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import MatrixGrid from '@/components/MatrixGrid';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { RefreshCw } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
+import { AlertCircle } from 'lucide-react';
+import { useWeb3 } from '@/context/Web3Context';
+import { useMatrixPosition } from '@/hooks/useBlockchainData';
+import WalletButton from '@/components/WalletButton';
 
 export default function MatrixIncome() {
-  // todo: remove mock functionality
-  const mockPositions = [
-    { index: 1, address: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7', level: 1, isCurrentUser: true, filled: true },
-    { index: 2, address: '0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199', level: 2, filled: true },
-    { index: 3, address: '0xAbCdEf1234567890aBcDeF1234567890AbCdEf12', level: 2, filled: true },
-    { index: 4, address: '0x1234567890123456789012345678901234567890', level: 3, filled: true },
-    { index: 5, address: '0x9876543210987654321098765432109876543210', level: 3, filled: false },
-  ];
+  const { account, isConnected } = useWeb3();
+  const { data: matrixPosition, isLoading } = useMatrixPosition();
 
-  const mockLevelPayouts = [
-    { level: 1, amount: '5 USDT', recipient: '0x8626...1199', recipientName: 'User A', status: 'paid' },
-    { level: 2, amount: '5 USDT', recipient: '0xAbCd...dEf12', recipientName: 'User B', status: 'paid' },
-    { level: 3, amount: '5 USDT', recipient: '0x1234...7890', recipientName: 'User C', status: 'pending' },
-    { level: 4, amount: '5 USDT', recipient: 'N/A', recipientName: 'Not filled', status: 'pending' },
-    { level: 5, amount: '5 USDT', recipient: 'N/A', recipientName: 'Not filled', status: 'pending' },
-  ];
+  if (!isConnected) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Matrix Income</h1>
+            <p className="text-muted-foreground">Track your 5-level matrix position and earnings</p>
+          </div>
+          <WalletButton />
+        </div>
+        <Alert>
+          <AlertCircle className="w-4 h-4" />
+          <AlertDescription>
+            Please connect your wallet to view your matrix data
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
-  const matrixFull = false; // todo: remove mock functionality
+  const userIndex = matrixPosition?.index || 0;
+  const parentIndex = matrixPosition?.parentIndex || 0;
+  const matrixLevel = matrixPosition?.level || 0;
+  const leftChildIndex = matrixPosition?.leftChildIndex || 0;
+  const rightChildIndex = matrixPosition?.rightChildIndex || 0;
 
   return (
     <div className="p-6 space-y-6">
@@ -39,83 +43,94 @@ export default function MatrixIncome() {
           <h1 className="text-3xl font-bold">Matrix Income</h1>
           <p className="text-muted-foreground">Track your 5-level matrix position and earnings</p>
         </div>
-        {matrixFull && (
-          <Button data-testid="button-reentry">
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Buy Re-Entry
-          </Button>
-        )}
       </div>
 
-      {matrixFull && (
-        <Card className="border-primary">
-          <CardHeader>
-            <CardTitle>Matrix Complete!</CardTitle>
-            <CardDescription>
-              Your 5-level matrix is full. Purchase a re-entry to continue earning.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <MatrixGrid positions={mockPositions} maxLevel={5} />
-
-        <Card>
-          <CardHeader>
-            <CardTitle>5-Level Payout Statistics</CardTitle>
-            <CardDescription>Track your earnings from each matrix level</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Level</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Recipient</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {mockLevelPayouts.map((payout) => (
-                  <TableRow key={payout.level}>
-                    <TableCell className="font-medium">Level {payout.level}</TableCell>
-                    <TableCell>{payout.amount}</TableCell>
-                    <TableCell>
-                      <div>{payout.recipientName}</div>
-                      <div className="text-xs font-mono text-muted-foreground">
-                        {payout.recipient}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={payout.status === 'paid' ? 'default' : 'secondary'}>
-                        {payout.status}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </div>
+      <Alert>
+        <AlertCircle className="w-4 h-4" />
+        <AlertDescription>
+          <strong>Note:</strong> Matrix income is distributed across 5 levels when users activate under you in the matrix structure. 
+          Each level receives a portion of the activation fee based on the smart contract's distribution rules.
+        </AlertDescription>
+      </Alert>
 
       <Card>
         <CardHeader>
           <CardTitle>Matrix Position Info</CardTitle>
+          <CardDescription>Your current position in the global matrix</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="p-4 border rounded-md">
             <div className="text-sm text-muted-foreground mb-1">Your Index</div>
-            <div className="text-2xl font-bold font-mono">1</div>
+            {isLoading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold font-mono" data-testid="text-matrix-index">{userIndex}</div>
+            )}
           </div>
           <div className="p-4 border rounded-md">
             <div className="text-sm text-muted-foreground mb-1">Parent Index</div>
-            <div className="text-2xl font-bold font-mono">0</div>
+            {isLoading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold font-mono" data-testid="text-parent-index">{parentIndex}</div>
+            )}
           </div>
           <div className="p-4 border rounded-md">
             <div className="text-sm text-muted-foreground mb-1">Matrix Level</div>
-            <div className="text-2xl font-bold">1</div>
+            {isLoading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold" data-testid="text-matrix-level">{matrixLevel}</div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Child Positions</CardTitle>
+          <CardDescription>Matrix indices of your direct children</CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="p-4 border rounded-md">
+            <div className="text-sm text-muted-foreground mb-1">Left Child Index</div>
+            {isLoading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold font-mono" data-testid="text-left-child">{leftChildIndex}</div>
+            )}
+            {leftChildIndex === 0 && !isLoading && (
+              <p className="text-xs text-muted-foreground mt-1">No left child yet</p>
+            )}
+          </div>
+          <div className="p-4 border rounded-md">
+            <div className="text-sm text-muted-foreground mb-1">Right Child Index</div>
+            {isLoading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold font-mono" data-testid="text-right-child">{rightChildIndex}</div>
+            )}
+            {rightChildIndex === 0 && !isLoading && (
+              <p className="text-xs text-muted-foreground mt-1">No right child yet</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Income History</CardTitle>
+          <CardDescription>
+            Historical payout data will be available once the event indexer backend is implemented
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-12 text-muted-foreground">
+            <p className="mb-2">Matrix income history coming soon</p>
+            <p className="text-sm">
+              The current blockchain integration provides real-time position data. 
+              Historical payout records require an event indexer service which will be added in a future update.
+            </p>
           </div>
         </CardContent>
       </Card>

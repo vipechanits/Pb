@@ -1,54 +1,40 @@
-import { DollarSign } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import IncomeTable from '@/components/IncomeTable';
+import { DollarSign, AlertCircle } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useWeb3 } from '@/context/Web3Context';
+import { useBinaryReport } from '@/hooks/useBlockchainData';
+import WalletButton from '@/components/WalletButton';
+
+const USDT_TO_INR = 100;
 
 export default function DirectSponsoring() {
-  // todo: remove mock functionality
-  const mockTransactions = [
-    {
-      id: '1',
-      type: 'Sponsoring Income',
-      from: '0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199',
-      amount: '10 USDT',
-      amountInr: '₹1,000',
-      date: '2025-11-07',
-      status: 'confirmed' as const,
-      mode: 'web3' as const,
-    },
-    {
-      id: '2',
-      type: 'Sponsoring Income',
-      from: '0xAbCdEf1234567890aBcDeF1234567890AbCdEf12',
-      amount: '10 USDT',
-      amountInr: '₹1,000',
-      date: '2025-11-06',
-      status: 'confirmed' as const,
-      mode: 'offline' as const,
-    },
-    {
-      id: '3',
-      type: 'Sponsoring Income',
-      from: '0x1234567890123456789012345678901234567890',
-      amount: '10 USDT',
-      amountInr: '₹1,000',
-      date: '2025-11-05',
-      status: 'pending' as const,
-      mode: 'web3' as const,
-    },
-    {
-      id: '4',
-      type: 'Sponsoring Income',
-      from: '0x9876543210987654321098765432109876543210',
-      amount: '10 USDT',
-      amountInr: '₹1,000',
-      date: '2025-11-04',
-      status: 'confirmed' as const,
-      mode: 'offline' as const,
-    },
-  ];
+  const { account, isConnected } = useWeb3();
+  const { data: binaryData, isLoading } = useBinaryReport();
 
-  const totalSponsors = mockTransactions.length;
-  const totalIncome = mockTransactions.filter(t => t.status === 'confirmed').length * 10;
+  if (!isConnected) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Direct Sponsoring</h1>
+            <p className="text-muted-foreground">Track your direct sponsoring income and team</p>
+          </div>
+          <WalletButton />
+        </div>
+        <Alert>
+          <AlertCircle className="w-4 h-4" />
+          <AlertDescription>
+            Please connect your wallet to view your sponsoring data
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  const directLeft = binaryData?.directLeft || 0;
+  const directRight = binaryData?.directRight || 0;
+  const totalSponsors = directLeft + directRight;
 
   return (
     <div className="p-6 space-y-6">
@@ -61,49 +47,85 @@ export default function DirectSponsoring() {
         <Card>
           <CardHeader className="space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total Sponsors
+              Left Team Direct
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{totalSponsors}</div>
-            <p className="text-xs text-muted-foreground">Direct referrals</p>
+            {isLoading ? (
+              <Skeleton className="h-9 w-20" />
+            ) : (
+              <>
+                <div className="text-3xl font-bold" data-testid="text-left-direct">{directLeft}</div>
+                <p className="text-xs text-muted-foreground">Direct left referrals</p>
+              </>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total Income
+              Right Team Direct
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{totalIncome} USDT</div>
-            <p className="text-xs text-muted-foreground">₹{totalIncome * 100} INR</p>
+            {isLoading ? (
+              <Skeleton className="h-9 w-20" />
+            ) : (
+              <>
+                <div className="text-3xl font-bold" data-testid="text-right-direct">{directRight}</div>
+                <p className="text-xs text-muted-foreground">Direct right referrals</p>
+              </>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Avg per Sponsor
+              Total Direct
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">10 USDT</div>
-            <p className="text-xs text-muted-foreground">₹1,000 INR</p>
+            {isLoading ? (
+              <Skeleton className="h-9 w-20" />
+            ) : (
+              <>
+                <div className="text-3xl font-bold" data-testid="text-total-direct">{totalSponsors}</div>
+                <p className="text-xs text-muted-foreground">Combined direct referrals</p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
+
+      <Alert>
+        <AlertCircle className="w-4 h-4" />
+        <AlertDescription>
+          <strong>Note:</strong> Direct sponsoring income is earned through binary pairing rather than per-referral bonuses. 
+          Your direct referrals contribute to your binary tree (left and right teams) which generate income through the 3:3 matching system. 
+          View your total binary income in the Binary Matching page.
+        </AlertDescription>
+      </Alert>
 
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <DollarSign className="w-5 h-5" />
-            Sponsoring History
+            Transaction History
           </CardTitle>
+          <CardDescription>
+            Historical transaction data will be available once the event indexer backend is implemented
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <IncomeTable transactions={mockTransactions} />
+          <div className="text-center py-12 text-muted-foreground">
+            <p className="mb-2">Transaction history coming soon</p>
+            <p className="text-sm">
+              The current blockchain integration provides real-time stats. 
+              Historical transaction logs require an event indexer service which will be added in a future update.
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>
