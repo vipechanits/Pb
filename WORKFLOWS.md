@@ -128,15 +128,16 @@ System Checks: All 8 Payments Complete?
 - New user pays ₹1,000 to the NEXT qualified user in queue
 - Only **1 pair paid per new activation**
 
-### Qualification Rules (ONE TIME):
-- User must self-sponsor **1 left + 1 right** (ONE TIME requirement to enter queue)
-- After initial qualification, user stays in queue permanently
+### Qualification Rules:
+- **ONE TIME**: User must self-sponsor **1 left + 1 right** (to be eligible)
+- **PER PAIR**: User enters queue ONLY when 3:3 team is COMPLETE
 
 ### Income (CONTINUOUS):
-- Each **3:3 team complete** = ₹1,000 income
-- User cycles to back of queue after receiving payment
-- Can earn unlimited ₹1,000 payments for multiple 3:3 pairs
-- Spill over helps build additional pairs
+- Build 3:3 pair → **ENTER queue** → Wait for turn
+- Receive ₹1,000 → **EXIT queue**
+- Build another 3:3 pair → **RE-ENTER queue** → Receive ₹1,000 again
+- Unlimited cycles possible
+- Spill over helps build pairs faster
 
 ```
 GLOBAL BINARY MATCHING QUEUE (FIFO):
@@ -165,13 +166,16 @@ PB5's pair is MATCHED ✅
   ↓
 PB5 receives ₹1,000
   ↓
-Remove PB5 from front of queue
+REMOVE PB5 from queue (EXITS completely)
   ↓
-PB5 goes to BACK of queue
+Queue now: [PB12] → [PB23] → [PB45] → [PB78] → ...
   ↓
-Queue now: [PB12] → [PB23] → [PB45] → [PB78] → ... [PB5]
+PB5 NOT in queue anymore
   ↓
-✅ PB5 can qualify AGAIN with next 3:3 pair
+When PB5 completes NEXT 3:3 pair:
+  → PB5 RE-ENTERS queue at the back
+  → Waits for turn again
+  → Receives ₹1,000 again
   ↓
 Binary matching income = CONTINUOUS (unlimited pairs)
 
@@ -182,14 +186,14 @@ Payment goes to Admin Wallet
 
 ### How Binary Matching Works:
 ```
-User (PB100) Initial Qualification (ONE TIME):
+User (PB100) Initial Eligibility (ONE TIME):
   ↓
 Step 1: Self-sponsor 1 person (LEFT)
 Step 2: Self-sponsor 1 person (RIGHT)
   ↓
-✅ QUALIFIED - Enter Global FIFO Queue
+✅ ELIGIBLE for binary matching
   ↓
-Now in queue permanently, waiting for turn
+NOT in queue yet - must complete 3:3 first
 
 Building First 3:3 Pair:
   ↓
@@ -197,11 +201,15 @@ Team grows (spill over helps):
   - Left team: 3 people complete
   - Right team: 3 people complete
   ↓
-3:3 PAIR MATCHED!
+3:3 PAIR COMPLETE!
   ↓
-Next new user pays PB100 ₹1,000
+PB100 ENTERS queue (added to back)
   ↓
-PB100 moves to BACK of queue
+Wait for turn in queue
+  ↓
+PB100's turn comes → Receive ₹1,000
+  ↓
+PB100 EXITS queue (removed completely)
 
 Building Second 3:3 Pair:
   ↓
@@ -209,9 +217,11 @@ Continue building teams
   - Left grows another 3
   - Right grows another 3
   ↓
-Another 3:3 PAIR MATCHED!
+Another 3:3 PAIR COMPLETE!
   ↓
-When PB100's turn comes again → Earn another ₹1,000
+PB100 RE-ENTERS queue (added to back again)
+  ↓
+Wait for turn → Earn another ₹1,000 → EXIT queue
   ↓
 Cycles continue - UNLIMITED income potential!
 ```
@@ -227,12 +237,14 @@ Cycles continue - UNLIMITED income potential!
        /  \      /  \      /  \      /  \
       S    S    S    S    S    S    S    S
 
-Total: 3 Left + 3 Right = QUALIFIED ✅
-Enter GLOBAL FIFO QUEUE → Wait for ₹1,000
-
-✅ CONTINUOUS INCOME
-After receiving ₹1,000 → Goes to back of queue
-Can build another 3:3 pair → Re-enter queue → Earn ₹1,000 again
+Total: 3 Left + 3 Right = 3:3 PAIR COMPLETE ✅
+  ↓
+ENTER GLOBAL FIFO QUEUE (at back)
+  ↓
+Wait for turn → Receive ₹1,000 → EXIT queue
+  ↓
+Build another 3:3 pair → RE-ENTER queue → Earn ₹1,000 again
+  ↓
 Unlimited binary income potential
 ```
 
@@ -244,21 +256,25 @@ Initial Queue: [PB5, PB12, PB23]
 
 New User PB150 activates:
   → Pays ₹1,000 to PB5 (first in queue)
-  → PB5 moves to back ✅
-  → Queue: [PB12, PB23, PB5]
+  → PB5 EXITS queue ✅
+  → Queue: [PB12, PB23]
 
 New User PB151 activates:
   → Pays ₹1,000 to PB12 (first in queue)
-  → PB12 moves to back ✅
-  → Queue: [PB23, PB5, PB12]
+  → PB12 EXITS queue ✅
+  → Queue: [PB23]
 
 New User PB152 activates:
   → Pays ₹1,000 to PB23 (first in queue)
-  → PB23 moves to back ✅
-  → Queue: [PB5, PB12, PB23]
+  → PB23 EXITS queue ✅
+  → Queue: []
 
-✅ Users cycle through queue continuously!
-Each 3:3 pair = ₹1,000 income (unlimited)
+Later... PB5 completes another 3:3 pair:
+  → PB5 RE-ENTERS queue at back
+  → Queue: [PB5]
+  → Next activation pays PB5 again
+
+✅ Enter queue when 3:3 complete → Get paid → Exit → Repeat!
 ```
 
 ---

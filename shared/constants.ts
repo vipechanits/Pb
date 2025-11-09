@@ -98,22 +98,23 @@ export const CONFIRMATION_WORKFLOW = {
 
 // Binary matching qualification
 export const BINARY_QUALIFICATION = {
-  // ONE TIME qualification requirement (to enter queue)
-  SELF_SPONSORED_LEFT: 1,      // Must sponsor 1 on left (ONE TIME)
-  SELF_SPONSORED_RIGHT: 1,     // Must sponsor 1 on right (ONE TIME)
+  // ONE TIME eligibility requirement
+  SELF_SPONSORED_LEFT: 1,      // Must sponsor 1 on left (ONE TIME to become eligible)
+  SELF_SPONSORED_RIGHT: 1,     // Must sponsor 1 on right (ONE TIME to become eligible)
   
-  // CONTINUOUS income requirements (each pair)
+  // PER PAIR requirements (to enter queue)
   LEFT_TEAM_PER_PAIR: 3,       // 3:3 left team per pair
   RIGHT_TEAM_PER_PAIR: 3,      // 3:3 right team per pair
   INCOME_PER_PAIR: 1000,       // ₹1,000 per pair matched
   
   CONTINUOUS_INCOME: true,     // User can earn unlimited pairs
   NOTES: [
-    'ONE TIME: Self-sponsor 1 left + 1 right to ENTER queue',
-    'CONTINUOUS: Each 3:3 pair = ₹1,000 income',
-    'After receiving payment, user goes to BACK of queue',
-    'User can build unlimited 3:3 pairs for unlimited income',
-    'Spill over helps build additional pairs faster',
+    'ONE TIME: Self-sponsor 1 left + 1 right to become ELIGIBLE',
+    'PER PAIR: User ENTERS queue only when 3:3 pair is COMPLETE',
+    'After receiving ₹1,000, user EXITS queue completely',
+    'Build another 3:3 → RE-ENTER queue → Earn ₹1,000 again',
+    'Users are NOT in queue while building pairs',
+    'Spill over helps build pairs faster',
   ],
 } as const;
 
