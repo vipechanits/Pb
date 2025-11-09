@@ -313,7 +313,7 @@ export default function ActivationPage() {
                         <div className="text-sm text-muted-foreground">
                           To: {receiver.address}
                           {receiver.isAdmin && (
-                            <Badge variant="secondary" className="ml-2">Admin</Badge>
+                            <Badge variant="secondary" className="ml-2" data-testid={`badge-admin-${index}`}>Admin Wallet</Badge>
                           )}
                         </div>
                         {activationData.modes[index] && (
@@ -373,7 +373,12 @@ export default function ActivationPage() {
             <div className="space-y-4">
               <div className="p-4 bg-muted rounded-lg">
                 <div className="text-sm text-muted-foreground mb-1">Receiver</div>
-                <div className="font-medium">{getReceiverInfo(selectedSlot).address}</div>
+                <div className="font-medium flex items-center gap-2">
+                  {getReceiverInfo(selectedSlot).address}
+                  {getReceiverInfo(selectedSlot).isAdmin && (
+                    <Badge variant="secondary" data-testid="badge-admin-dialog">Admin Wallet</Badge>
+                  )}
+                </div>
                 <div className="text-sm text-muted-foreground mt-2">Amount</div>
                 <div className="text-2xl font-bold">
                   ${activationData.amounts[selectedSlot]} USDT
