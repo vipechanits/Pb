@@ -6,6 +6,7 @@ PAYBACK247 is a peer-to-peer MLM platform being converted from blockchain-based 
 ## Current Status (November 9, 2025)
 **✅ PHASE 3 COMPLETE: Payment Activation & Confirmation System**
 **✅ Landing Page & Referral System Complete**
+**✅ Activation Request Flow: Transactional & Race-Condition Safe**
 
 The application has been successfully converted from Web3 to traditional authentication with complete payment workflow:
 - ✅ **Phase 1 Complete**: Removed blockchain dependencies (ethers.js, Web3Context, smart contract hooks)
@@ -22,7 +23,10 @@ The application has been successfully converted from Web3 to traditional authent
 - ✅ **Landing Page**: Public marketing page with hero, features, income streams, FAQ, footer
 - ✅ **Referral System**: Left/right leg placement tracking, social sharing (WhatsApp, Telegram, Facebook, X)
 - ✅ **Phase 3 Complete**: Payment activation and confirmation workflow
-  - **8-Slot Payment System**: Direct Sponsor, Binary Match, Creator Fee, Matrix Levels 1-5
+  - **8-Slot Payment System**: Direct Sponsor (₹1,000), Binary Match (₹1,000), Creator Fee (₹500), Matrix Levels 1-5 (₹500 each)
+  - **Transactional Creation**: Activation + 8 payments created atomically in single database transaction
+  - **Race Condition Prevention**: Unique constraint on `activations.payer_wallet` prevents duplicate requests
+  - **Collision-Safe IDs**: UUID-based activation IDs (ACT-{userId}-{uuid}) prevent timestamp collisions
   - **Payment Submission**: Users submit UTR/Transaction ID with optional proof upload
   - **Payment Confirmation**: Receivers can confirm or reject payments with reasons
   - **Unlimited Resubmission**: Rejected payments can be resubmitted indefinitely
@@ -90,16 +94,20 @@ Preferred communication style: Simple, everyday language.
 - **ORM**: Drizzle ORM for type-safe operations.
 - **Schema**: 
   - `users` table for authentication with user IDs (PB10000+)
+    - Unique constraints: `email`, `user_id`
   - `activations` table tracking activation lifecycle (payer, sponsor, binary match, 5 matrix uplines)
+    - Unique constraint: `payer_wallet` (prevents duplicate activations)
+    - ID format: ACT-{userId}-{uuid}
   - `activation_payments` table tracking individual payment obligations with:
     - 8 payment slots per activation (slot_index 0-7)
-    - Payment status enum: pending, submitted, confirmed, rejected
+    - Payment status enum (column: `payment_status`): pending, submitted, confirmed, rejected
     - Payer and receiver user IDs
     - UTR/Transaction ID and proof URL
     - Submission count and rejection tracking
     - Timestamps for submission, confirmation, and rejection
 - **Migrations**: Drizzle Kit with `npm run db:push --force` for schema synchronization.
 - **Validation**: Zod schemas enforce enum types and required fields for all payment operations.
+- **Transaction Guarantees**: `createActivationWithPayments()` ensures atomic activation + payment creation.
 
 ### Object Storage
 - **Provider**: Replit Object Storage (Google Cloud Storage-backed).

@@ -25,7 +25,7 @@ export default function UserActivationPage() {
 
   // Mutation to request activation
   const requestActivationMutation = useMutation({
-    mutationFn: () => apiRequest('/api/activations/request', 'POST', {}),
+    mutationFn: () => apiRequest('POST', '/api/activations/request', {}),
     onSuccess: () => {
       toast({
         title: 'Activation Requested',
