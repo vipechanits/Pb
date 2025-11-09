@@ -81,11 +81,18 @@ export default function ActivationPage() {
   const loadActivationData = async () => {
     try {
       const data = await getUserActivationData();
-      console.log('🔍 Activation Data from Contract:', data);
+      console.log('🔍 Activation Data from Contract:', JSON.stringify(data, null, 2));
       if (data && data.receivers) {
         console.log('📋 Receivers Array:', data.receivers);
         data.receivers.forEach((receiver: string, idx: number) => {
-          console.log(`Receiver[${idx}]:`, receiver, 'isZero:', receiver.toLowerCase() === '0x0000000000000000000000000000000000000000');
+          console.log(`Receiver[${idx}]:`, {
+            value: receiver,
+            type: typeof receiver,
+            length: receiver?.length,
+            isZeroStrict: receiver === '0x0000000000000000000000000000000000000000',
+            isZeroLower: receiver?.toLowerCase() === '0x0000000000000000000000000000000000000000',
+            charCodes: receiver ? Array.from(receiver.slice(0, 10)).map(c => c.charCodeAt(0)) : []
+          });
         });
       }
       setActivationData(data);
