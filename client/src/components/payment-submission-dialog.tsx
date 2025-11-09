@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Upload, AlertCircle } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Upload, AlertCircle, Copy, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 
@@ -24,6 +26,16 @@ interface PaymentSubmissionDialogProps {
   onSuccess: () => void;
 }
 
+interface ReceiverDetails {
+  userId: string;
+  name: string | null;
+  mobile: string | null;
+  upiId: string | null;
+  bankAccountHolder: string | null;
+  ifscCode: string | null;
+  paymentQrUrl: string | null;
+}
+
 export function PaymentSubmissionDialog({
   open,
   onOpenChange,
@@ -34,6 +46,23 @@ export function PaymentSubmissionDialog({
   const [utrId, setUtrId] = useState('');
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  // Fetch receiver details
+  const { data: receiverDetails } = useQuery<ReceiverDetails>({
+    queryKey: ['/api/users/payment-details', payment.receiverUserId],
+    enabled: open && payment.receiverType === 'user' && !!payment.receiverUserId,
+  });
+
+  const copyToClipboard = (text: string, fieldName: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldName);
+    setTimeout(() => setCopiedField(null), 2000);
+    toast({
+      title: 'Copied',
+      description: `${fieldName} copied to clipboard`,
+    });
+  };
 
   const handleSubmit = async () => {
     if (!utrId.trim()) {
@@ -52,10 +81,11 @@ export function PaymentSubmissionDialog({
 
       // Upload proof file if provided
       if (proofFile) {
-        const uploadResponse = await apiRequest<{ uploadUrl: string; publicUrl: string }>('/api/objects/upload', 'POST', {
+        const response = await apiRequest('POST', '/api/objects/upload', {
           filename: proofFile.name,
           contentType: proofFile.type,
         });
+        const uploadResponse = await response.json() as { uploadUrl: string; publicUrl: string };
 
         // Upload file to presigned URL
         await fetch(uploadResponse.uploadUrl, {
@@ -70,7 +100,7 @@ export function PaymentSubmissionDialog({
       }
 
       // Submit payment proof
-      await apiRequest(`/api/activation-payments/${payment.id}/submit`, 'PATCH', {
+      await apiRequest('PATCH', `/api/activation-payments/${payment.id}/submit`, {
         offlineUtrId: utrId,
         offlineProofUrl: proofUrl || undefined,
       });
@@ -101,7 +131,7 @@ export function PaymentSubmissionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isRejected ? 'Resubmit Payment Proof' : 'Submit Payment Proof'}
@@ -129,6 +159,126 @@ export function PaymentSubmissionDialog({
               <strong>Receiver:</strong> {payment.receiverType === 'admin' ? 'Admin Wallet' : payment.receiverUserId}
             </p>
           </div>
+
+          {/* Receiver Payment Details */}
+          {payment.receiverType === 'user' && receiverDetails && (
+            <Card>
+              <CardContent className="pt-6 space-y-4">
+                <h3 className="font-semibold text-sm">Receiver Payment Details</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Left Column: Payment Details */}
+                  <div className="space-y-3">
+                    {receiverDetails.name && (
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Account Holder Name</Label>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium">{receiverDetails.name}</p>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => copyToClipboard(receiverDetails.name!, 'Name')}
+                          >
+                            {copiedField === 'Name' ? (
+                              <CheckCircle className="h-3 w-3 text-green-600" />
+                            ) : (
+                              <Copy className="h-3 w-3" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {receiverDetails.mobile && (
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Mobile Number</Label>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-mono">{receiverDetails.mobile}</p>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => copyToClipboard(receiverDetails.mobile!, 'Mobile')}
+                          >
+                            {copiedField === 'Mobile' ? (
+                              <CheckCircle className="h-3 w-3 text-green-600" />
+                            ) : (
+                              <Copy className="h-3 w-3" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {receiverDetails.upiId && (
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">UPI ID</Label>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-mono break-all">{receiverDetails.upiId}</p>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => copyToClipboard(receiverDetails.upiId!, 'UPI ID')}
+                          >
+                            {copiedField === 'UPI ID' ? (
+                              <CheckCircle className="h-3 w-3 text-green-600" />
+                            ) : (
+                              <Copy className="h-3 w-3" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {receiverDetails.ifscCode && (
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">IFSC Code</Label>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-mono">{receiverDetails.ifscCode}</p>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => copyToClipboard(receiverDetails.ifscCode!, 'IFSC Code')}
+                          >
+                            {copiedField === 'IFSC Code' ? (
+                              <CheckCircle className="h-3 w-3 text-green-600" />
+                            ) : (
+                              <Copy className="h-3 w-3" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {receiverDetails.bankAccountHolder && (
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Bank Account Holder</Label>
+                        <p className="text-sm font-medium">{receiverDetails.bankAccountHolder}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right Column: QR Code */}
+                  {receiverDetails.paymentQrUrl && (
+                    <div className="flex flex-col items-center justify-center space-y-2">
+                      <Label className="text-xs text-muted-foreground">Scan to Pay</Label>
+                      <div className="border rounded-lg p-2 bg-white">
+                        <img 
+                          src={receiverDetails.paymentQrUrl} 
+                          alt="Payment QR Code" 
+                          className="w-40 h-40"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground text-center">Scan with any UPI app</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="utr">UTR / Transaction ID *</Label>

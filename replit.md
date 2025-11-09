@@ -163,30 +163,32 @@ Preferred communication style: Simple, everyday language.
 - **Summary Dashboard**: Shows total payments (8), completed count, pending count
 - **Payment Checklist**: Lists all 8 payment slots with:
   - Payment label (Direct Sponsor, Binary Match, Creator Fee, Matrix Levels 1-5)
-  - Receiver wallet address or "Admin Wallet" badge (when receiver unavailable)
-  - Amount in USDT and INR (1:100 conversion ratio)
-  - Payment status: Completed ✅, Pending Verification ⚠️, Pending ⭕
+  - Receiver user ID or "Admin Wallet" badge (when receiver unavailable)
+  - Amount in INR (₹1,000 / ₹500)
+  - Payment status: Confirmed ✅, Pending Review ⚠️, Rejected ❌, Not Paid ⭕
   - "Pay Now" button for unpaid slots
   
-- **Payment Dialog**: 
-  - Radio selection: Web3 Payment (on-chain) or Offline Payment (with proof)
-  - Web3 mode: Approve USDT → Execute payment
-  - Offline mode: Enter UTR → Upload proof (optional) → Submit
-  - Real-time amount display in dual currency
+- **Payment Submission Dialog**: 
+  - **Receiver Payment Details** (displayed in card):
+    - Account Holder Name (with copy-to-clipboard)
+    - Mobile Number (with copy-to-clipboard)
+    - UPI ID (with copy-to-clipboard)
+    - IFSC Code (with copy-to-clipboard)
+    - Bank Account Holder
+    - **QR Code**: Auto-generated UPI QR code for scanning with payment apps
+  - **UTR Entry**: Enter transaction ID from payment app (required)
+  - **Proof Upload**: Upload payment screenshot or PDF (optional, max 10MB)
+  - **Resubmission**: Rejected payments can be resubmitted with new UTR/proof
   
 - **Object Storage Integration**: 
-  - File upload via Uppy/ObjectUploader component
+  - File upload for payment proofs
   - Supports images and PDFs up to 10MB
   - Stores proofs in Replit Object Storage
-  - Returns public URL for admin verification
+  - Returns public URL for receiver verification
   
-- **Smart Contract Integration**:
-  - Fetches activation data: `contract.getActivation(address)`
-  - Fetches activation fee: `contract.activationFeeUSDT()`
-  - Web3 payment: `contract.payIndividuallyWeb3(slotIndex)`
-  - Offline proof: `contract.submitOfflineProof(slotIndex, utr, proofUrl)`
+- **API Endpoint**: `GET /api/users/payment-details/:userId` - Fetches receiver's payment info and generates QR code
   
-- **Test IDs**: All interactive elements tagged for automated testing (payment-slot-{0-7}, button-pay-{0-7}, radio-web3, radio-offline, etc.)
+- **Test IDs**: All interactive elements tagged for automated testing (payment-slot-{0-7}, button-pay-{0-7}, input-utr, input-proof-file, etc.)
 
 ### Confirmation Page (`/user/confirmation`)
 **Purpose**: Shows payments pending user confirmation

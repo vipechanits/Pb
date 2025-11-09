@@ -218,12 +218,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Get user by ID (for payment details)
-  app.get("/api/users/:userId", async (req, res) => {
+  // Get user payment details by userId
+  app.get("/api/users/payment-details/:userId", requireAuth, async (req, res) => {
     try {
       const user = await storage.getUserByUserId(req.params.userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Generate QR code if user has UPI details
+      let paymentQrUrl = null;
+      if (user.upiId && user.name && user.mobile) {
+        try {
+          paymentQrUrl = await generateUserPaymentQR(
+            user.upiId,
+            user.name,
+            user.mobile
+          );
+        } catch (error) {
+          console.error("Error generating QR code:", error);
+          // Continue without QR code if generation fails
+        }
       }
       
       // Return only payment-related information
@@ -233,11 +248,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         mobile: user.mobile,
         upiId: user.upiId,
         bankAccountHolder: user.bankAccountHolder,
-        bankAccountNumber: user.bankAccountNumber,
         ifscCode: user.ifscCode,
+        paymentQrUrl,
       };
       
       res.json(paymentInfo);
+    } catch (error) {
+      console.error("Error fetching user payment details:", error);
+      res.status(500).json({ error: "Failed to fetch payment details" });
+    }
+  });
+  
+  // Get user by ID (for general user info)
+  app.get("/api/users/:userId", async (req, res) => {
+    try {
+      const user = await storage.getUserByUserId(req.params.userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Return only basic user information
+      const userInfo = {
+        userId: user.userId,
+        name: user.name,
+        email: user.email,
+      };
+      
+      res.json(userInfo);
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ error: "Failed to fetch user" });
