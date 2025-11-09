@@ -86,18 +86,23 @@ Submit Payment
   ↓
 Status: "Pending Confirmation" ⚠️
   ↓
-┌─────────────────┬─────────────────┐
-│                 │                 │
-Receiver         Admin            
-Confirmation     Confirmation      
-Dashboard        Dashboard         
-│                 │                 │
-Review           Review            
-Payment          Payment           
-│                 │                 │
-[CONFIRM]        [CONFIRM]         
-│                 │                 │
-└─────────────────┴─────────────────┘
+┌─────────────────────────────────────┐
+│  Payment Type Determines Flow:      │
+└─────────────────────────────────────┘
+  ↓
+[CREATOR FEE - Payment 0]
+  ↓
+Admin Dashboard Only
+  ↓
+Admin Reviews + Confirms ✅
+  ↓
+Status: "Completed" ✅
+
+[ALL OTHER PAYMENTS - Payments 1-7]
+  ↓
+Receiver Dashboard Only
+  ↓
+Receiver Reviews + Confirms ✅
   ↓
 Status: "Completed" ✅
   ↓
@@ -179,15 +184,17 @@ Build teams (spill over helps):
   - Left team grows to 3 people
   - Right team grows to 3 people
   ↓
-Qualification COMPLETE:
+BOTH TEAMS COMPLETE:
   ✅ 1 Left self-sponsored
   ✅ 1 Right self-sponsored
-  ✅ 3-person left team
-  ✅ 3-person right team
+  ✅ 3-person left team MATCHED ✅
+  ✅ 3-person right team MATCHED ✅
   ↓
-AUTOMATICALLY ADDED TO GLOBAL QUEUE
+3:3 TEAM MATCHING COMPLETE!
   ↓
-Queue position: FIFO (based on qualification time)
+ONLY NOW → AUTOMATICALLY ADDED TO GLOBAL QUEUE
+  ↓
+Queue position: FIFO (based on 3:3 completion time)
   ↓
 Wait for next new user activation
   ↓
@@ -299,33 +306,34 @@ TOTAL POTENTIAL: ₹31,000
 
 ---
 
-## 🔄 5. Admin Payment Confirmation Flow
+## 🔄 5. Admin Payment Confirmation Flow (Creator Fee ONLY)
 
 ```
 Admin Dashboard
   ↓
 "Payment Confirmations" Tab
   ↓
-List of Pending Payments:
+⚠️ ONLY CREATOR FEE PAYMENTS (₹500):
   │
-  For Each Payment:
+  For Each Creator Fee Payment:
   ├─ User ID (Payer)
-  ├─ Receiver ID (or Admin)
-  ├─ Amount (₹)
-  ├─ Payment Type (Creator/Sponsor/Binary/Matrix L1-L5)
+  ├─ Amount: ₹500
+  ├─ Payment Type: Creator Fee
   ├─ UTR/Transaction ID
   ├─ Payment Proof (Image/PDF)
   ├─ Timestamp
   └─ Status
   
+Note: Payments 1-7 confirmed by RECEIVERS only
+  
 Admin Actions:
   ↓
-Click "Review Payment"
+Click "Review Creator Fee Payment"
   ↓
 View Full Details:
   - Proof image/PDF viewer
   - UTR verification
-  - Receiver details
+  - Payment details
   ↓
 [CONFIRM PAYMENT]              [REJECT PAYMENT]
   ↓                               ↓
@@ -338,7 +346,7 @@ Check: All 8 paid?            User can resubmit
 [YES] → Activate User
   │
   ├─ Place in Matrix (FIFO)
-  ├─ Add to Binary Queue
+  ├─ Check if qualifies for Binary Queue
   └─ Send activation email
   ↓
 [NO] → Wait for remaining

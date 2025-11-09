@@ -82,14 +82,27 @@ export const BINARY_RULES = {
 
 // Payment confirmation workflow
 export const CONFIRMATION_WORKFLOW = {
-  REQUIRED_CONFIRMATIONS: 2,   // Receiver + Admin both must confirm
+  CREATOR_FEE: {
+    CONFIRMATIONS: ['admin'],  // Admin only confirms creator fee
+  },
+  OTHER_PAYMENTS: {
+    CONFIRMATIONS: ['receiver'],  // Receiver only confirms payments 1-7
+  },
   STATUSES: {
     PENDING: 'pending',
-    RECEIVER_CONFIRMED: 'receiver_confirmed',
-    ADMIN_CONFIRMED: 'admin_confirmed',
+    CONFIRMED: 'confirmed',
     COMPLETED: 'completed',
     REJECTED: 'rejected',
   }
+} as const;
+
+// Binary matching qualification
+export const BINARY_QUALIFICATION = {
+  SELF_SPONSORED_LEFT: 1,      // Must sponsor 1 on left
+  SELF_SPONSORED_RIGHT: 1,     // Must sponsor 1 on right
+  LEFT_TEAM_MATCHED: 3,        // 3:3 left team must be complete
+  RIGHT_TEAM_MATCHED: 3,       // 3:3 right team must be complete
+  NOTE: 'User enters GLOBAL FIFO queue ONLY AFTER 3:3 team matching is complete',
 } as const;
 
 // User ID format
