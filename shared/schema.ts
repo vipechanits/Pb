@@ -17,29 +17,28 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
-export const fallbackPayments = pgTable("fallback_payments", {
+export const activationPaymentConfirmations = pgTable("activation_payment_confirmations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  paymentType: varchar("payment_type", { length: 20 }).notNull(), // 'binary' or 'matrix'
-  userWalletAddress: varchar("user_wallet_address", { length: 42 }).notNull(),
+  payerWalletAddress: varchar("payer_wallet_address", { length: 42 }).notNull(),
+  receiverWalletAddress: varchar("receiver_wallet_address", { length: 42 }).notNull(),
+  receiverIndex: varchar("receiver_index", { length: 10 }).notNull(),
   amountUsdt: decimal("amount_usdt", { precision: 18, scale: 6 }).notNull(),
-  amountInr: decimal("amount_inr", { precision: 18, scale: 2 }).notNull(),
+  paymentStage: varchar("payment_stage", { length: 30 }).notNull(),
+  isAdminReceiver: boolean("is_admin_receiver").notNull().default(false),
+  paymentMode: varchar("payment_mode", { length: 20 }).notNull(),
   transactionId: text("transaction_id"),
+  transactionHash: text("transaction_hash"),
   paymentProofUrl: text("payment_proof_url"),
-  adminConfirmed: boolean("admin_confirmed").notNull().default(false),
-  adminConfirmedAt: timestamp("admin_confirmed_at"),
-  adminWalletAddress: varchar("admin_wallet_address", { length: 42 }),
-  userConfirmed: boolean("user_confirmed").notNull().default(false),
-  userConfirmedAt: timestamp("user_confirmed_at"),
+  confirmed: boolean("confirmed").notNull().default(false),
+  confirmedAt: timestamp("confirmed_at"),
   notes: text("notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-export const insertFallbackPaymentSchema = createInsertSchema(fallbackPayments).omit({
+export const insertActivationPaymentConfirmationSchema = createInsertSchema(activationPaymentConfirmations).omit({
   id: true,
   createdAt: true,
-  updatedAt: true,
 });
 
-export type InsertFallbackPayment = z.infer<typeof insertFallbackPaymentSchema>;
-export type FallbackPayment = typeof fallbackPayments.$inferSelect;
+export type InsertActivationPaymentConfirmation = z.infer<typeof insertActivationPaymentConfirmationSchema>;
+export type ActivationPaymentConfirmation = typeof activationPaymentConfirmations.$inferSelect;
