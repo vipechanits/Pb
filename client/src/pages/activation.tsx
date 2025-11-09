@@ -215,17 +215,23 @@ export default function ActivationPage() {
     }
 
     const receiver = activationData.receivers[slotIndex];
-    // Check for zero address or address that looks like all zeros
-    const normalizedReceiver = receiver.toLowerCase().replace(/^0x/, '');
-    const isZeroAddress = normalizedReceiver === '0'.repeat(40) || 
-                          receiver.toLowerCase() === '0x0000000000000000000000000000000000000000';
+    
+    // Multiple checks for zero address to handle different formats
+    const receiverLower = receiver.toLowerCase();
+    const isZeroAddress = 
+      receiverLower === '0x0000000000000000000000000000000000000000' ||
+      receiverLower === '0x' + '0'.repeat(40) ||
+      receiver === '0x0000000000000000000000000000000000000000' ||
+      /^0x0+$/.test(receiverLower); // Regex to match 0x followed by any number of zeros
     
     // Debug logging
     console.log(`🔍 Slot ${slotIndex}:`, {
-      original: receiver,
-      normalized: normalizedReceiver,
-      isZero: isZeroAddress,
-      length: receiver.length
+      receiver,
+      receiverLower,
+      isZeroAddress,
+      check1: receiverLower === '0x0000000000000000000000000000000000000000',
+      check2: receiverLower === '0x' + '0'.repeat(40),
+      check3: /^0x0+$/.test(receiverLower)
     });
     
     return {
