@@ -197,3 +197,35 @@ Preferred communication style: Simple, everyday language.
 - JetBrains Mono for monospace display of addresses and code
 
 **Date-fns**: Date manipulation and formatting library for transaction timestamps and UI date displays.
+
+## Recent Changes
+
+### Mock Data Removal (November 2025)
+
+All mock/placeholder data has been removed from the income tracking pages to display real blockchain data exclusively:
+
+**Pages Updated:**
+- `client/src/pages/direct-sponsoring.tsx`: Now displays real-time direct referral counts from binary report
+- `client/src/pages/matrix-income.tsx`: Now displays real-time matrix position data from smart contract
+- `client/src/pages/binary-matching.tsx`: Now displays real-time binary matching statistics and qualification status
+
+**Data Sources:**
+- All pages use custom React Query hooks (`useBinaryReport`, `useMatrixPosition`, `useBinaryMatchingCriteria`) to fetch live blockchain data
+- Data refreshes automatically every 30-60 seconds via configured refetch intervals
+- Proper loading states with Skeleton components during data fetching
+- Wallet connection guards to ensure users are connected before displaying data
+
+**Current Limitations:**
+- Historical transaction data (transaction logs, payout history) is not yet available
+- Smart contract provides current-state snapshots but not historical event data
+- Transaction tables replaced with "coming soon" messaging
+
+**Future Enhancement - Event Indexer:**
+Planned backend service to enable historical transaction views:
+- Listen to blockchain events (ActivationCreated, BinaryPairsMatched, BinaryMatchEarningUpdated, BinaryUnitsBubbled)
+- Store event data in PostgreSQL database for efficient querying
+- Create API endpoints for historical transaction queries
+- Re-enable transaction history tables with real historical data
+- Provide full binary tree visualization with all downline members
+
+This two-phase approach prioritizes displaying accurate real-time data immediately while scheduling comprehensive historical data features for future implementation.
