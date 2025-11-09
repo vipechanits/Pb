@@ -13,16 +13,20 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { useWeb3 } from '@/context/Web3Context';
-import { useActivationData, useBinaryReport, useActivationFee } from '@/hooks/useBlockchainData';
+import { useActivationData, useBinaryReport, useActivationFee, useMatrixPosition } from '@/hooks/useBlockchainData';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Copy, Check } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 export default function UserDashboard() {
   const [showActivation, setShowActivation] = useState(false);
+  const [copied, setCopied] = useState(false);
   const { account, isConnected } = useWeb3();
   const { data: activationData, isLoading: activationLoading } = useActivationData();
   const { data: binaryData, isLoading: binaryLoading } = useBinaryReport();
   const { data: activationFee } = useActivationFee();
+  const { data: matrixPosition } = useMatrixPosition();
+  const { toast } = useToast();
 
 
   if (!isConnected) {
@@ -43,12 +47,42 @@ export default function UserDashboard() {
   const directLeft = binaryData?.directLeft || 0;
   const directRight = binaryData?.directRight || 0;
   const pairsMatched = binaryData?.pairsMatched || 0;
+  const userId = matrixPosition?.index !== undefined ? `PB${matrixPosition.index}` : null;
+
+  const copyUserId = () => {
+    if (userId) {
+      navigator.clipboard.writeText(userId);
+      setCopied(true);
+      toast({
+        title: "Copied!",
+        description: `User ID ${userId} copied to clipboard`,
+      });
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">User Dashboard</h1>
+          <div className="flex items-center gap-3 mb-2">
+            <h1 className="text-3xl font-bold">User Dashboard</h1>
+            {userId && (
+              <Button
+                variant="secondary"
+                size="default"
+                onClick={copyUserId}
+                data-testid="button-copy-user-id"
+              >
+                {userId}
+                {copied ? (
+                  <Check className="w-4 h-4 ml-2" />
+                ) : (
+                  <Copy className="w-4 h-4 ml-2" />
+                )}
+              </Button>
+            )}
+          </div>
           <p className="text-muted-foreground">
             {account ? `${account.slice(0, 6)}...${account.slice(-4)}` : 'Welcome back!'}
           </p>
