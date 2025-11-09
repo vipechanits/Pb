@@ -1,16 +1,19 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CheckCircle, Circle, Clock, Info, AlertCircle, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { useToast } from '@/hooks/use-toast';
 import { PaymentSubmissionDialog } from '@/components/payment-submission-dialog';
+import { apiRequest, queryClient } from '@/lib/queryClient';
 import type { ActivationPayment } from '@shared/schema';
 
 export default function UserActivationPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [selectedPayment, setSelectedPayment] = useState<ActivationPayment | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -18,6 +21,27 @@ export default function UserActivationPage() {
   const { data: payments, isLoading, refetch } = useQuery<ActivationPayment[]>({
     queryKey: ['/api/activation-payments/payer', user?.userId],
     enabled: !!user?.userId,
+  });
+
+  // Mutation to request activation
+  const requestActivationMutation = useMutation({
+    mutationFn: () => apiRequest('/api/activations/request', 'POST', {}),
+    onSuccess: () => {
+      toast({
+        title: 'Activation Requested',
+        description: 'Your payment slots have been created. Start making payments!',
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/activation-payments'] });
+      refetch();
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.message || 'Failed to request activation';
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    },
   });
 
   const getPaymentSlotLabel = (slotIndex: number): string => {
@@ -70,12 +94,66 @@ export default function UserActivationPage() {
     setDialogOpen(true);
   };
 
+  const hasPayments = payments && payments.length > 0;
+
   if (isLoading) {
     return (
       <div className="container mx-auto p-6">
         <div className="flex items-center justify-center py-12">
           <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
+      </div>
+    );
+  }
+
+  // Show request activation button if no payments exist
+  if (!hasPayments) {
+    return (
+      <div className="container mx-auto p-6 space-y-6">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold">Account Activation</h1>
+          <p className="text-muted-foreground">
+            Activate your account to start earning
+          </p>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Ready to Activate?</CardTitle>
+            <CardDescription>
+              Complete the ₹5,000 activation fee through 8 peer-to-peer payments
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Activation Breakdown:</p>
+              <ul className="text-sm space-y-1 text-muted-foreground ml-4">
+                <li>• Direct Sponsor: ₹1,000</li>
+                <li>• Binary Match: ₹1,000</li>
+                <li>• Admin Fee: ₹500</li>
+                <li>• Matrix Levels 1-5: ₹500 each (₹2,500 total)</li>
+              </ul>
+            </div>
+            
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                Once you click "Request Activation", 8 payment slots will be created. 
+                You'll make direct payments to your sponsor and other members using Google Pay, Paytm, or PhonePe.
+              </AlertDescription>
+            </Alert>
+
+            <Button 
+              onClick={() => requestActivationMutation.mutate()}
+              disabled={requestActivationMutation.isPending}
+              size="lg"
+              className="w-full"
+              data-testid="button-request-activation"
+            >
+              {requestActivationMutation.isPending ? 'Processing...' : 'Request Activation'}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }

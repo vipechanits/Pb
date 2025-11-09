@@ -317,6 +317,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Activation routes
+  
+  // Request activation - creates activation record and 8 payment slots
+  app.post("/api/activations/request", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      if (!user.userId) {
+        return res.status(400).json({ error: "User ID not assigned" });
+      }
+      
+      // Create activation record and payment slots transactionally
+      // Database unique constraint on payerWallet prevents duplicates at DB level
+      // Using crypto.randomUUID() for collision-safe ID generation
+      const activationId = `ACT-${user.userId}-${crypto.randomUUID().substring(0, 8)}`;
+      const result = await storage.createActivationWithPayments(
+        {
+          id: activationId,
+          payerWallet: user.userId, // Store as-is (not lowercased)
+          sponsorWallet: user.sponsorId || null, // Store as-is (not lowercased)
+          status: 'pending',
+        },
+        user.userId,
+        user.sponsorId || null
+      );
+      
+      res.status(201).json(result);
+    } catch (error: any) {
+      console.error("Error requesting activation:", error);
+      
+      // Handle unique constraint violation
+      if (error.code === '23505' || error.message?.includes('duplicate key') || error.message?.includes('unique constraint')) {
+        return res.status(400).json({ 
+          error: "Activation already requested for this user" 
+        });
+      }
+      
+      res.status(500).json({ error: "Failed to request activation" });
+    }
+  });
+  
   app.post("/api/activations", async (req, res) => {
     try {
       const validationResult = insertActivationSchema.safeParse(req.body);

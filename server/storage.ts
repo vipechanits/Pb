@@ -10,6 +10,7 @@ import {
   activations,
   activationPayments
 } from "@shared/schema";
+import { SLOT_TO_PAYMENT_TYPE, PAYMENT_TYPE_AMOUNTS } from "@shared/constants";
 import { eq, and, desc } from "drizzle-orm";
 import { db } from "./db";
 
@@ -24,12 +25,14 @@ export interface IStorage {
   
   // Activation methods
   createActivation(activation: InsertActivation): Promise<Activation>;
+  createActivationWithPayments(activation: InsertActivation, payerUserId: string, sponsorUserId: string | null): Promise<{ activation: Activation; payments: ActivationPayment[] }>;
   getActivation(id: string): Promise<Activation | undefined>;
   getActivationsByPayer(payerWallet: string): Promise<Activation[]>;
   updateActivationStatus(id: string, status: string): Promise<Activation | undefined>;
   
   // Payment methods
   createActivationPayment(payment: InsertActivationPayment): Promise<ActivationPayment>;
+  createActivationPayments(activationId: string, payerUserId: string, sponsorUserId: string | null): Promise<ActivationPayment[]>;
   getActivationPayment(id: string): Promise<ActivationPayment | undefined>;
   getActivationPaymentsByActivationId(activationId: string): Promise<ActivationPayment[]>;
   getActivationPaymentsByPayerUserId(payerUserId: string): Promise<ActivationPayment[]>;
@@ -81,18 +84,67 @@ export class DbStorage implements IStorage {
   }
 
   async createActivation(activation: InsertActivation): Promise<Activation> {
-    const normalized = {
-      ...activation,
-      payerWallet: activation.payerWallet.toLowerCase(),
-      sponsorWallet: activation.sponsorWallet?.toLowerCase(),
-      matrixUpline1: activation.matrixUpline1?.toLowerCase(),
-      matrixUpline2: activation.matrixUpline2?.toLowerCase(),
-      matrixUpline3: activation.matrixUpline3?.toLowerCase(),
-      matrixUpline4: activation.matrixUpline4?.toLowerCase(),
-      matrixUpline5: activation.matrixUpline5?.toLowerCase(),
-    };
-    const result = await db.insert(activations).values(normalized).returning();
+    // Note: Not lowercasing because we're now storing user IDs (PB...), not wallet addresses
+    const result = await db.insert(activations).values(activation).returning();
     return result[0];
+  }
+
+  // Create activation and payments transactionally (prevents orphaned activations)
+  async createActivationWithPayments(
+    activation: InsertActivation,
+    payerUserId: string,
+    sponsorUserId: string | null
+  ): Promise<{ activation: Activation; payments: ActivationPayment[] }> {
+    return await db.transaction(async (tx) => {
+      // Insert activation first
+      const activationResult = await tx.insert(activations).values(activation).returning();
+      const createdActivation = activationResult[0];
+      
+      // Generate all 8 payment slots
+      const paymentsToCreate: InsertActivationPayment[] = [];
+      
+      for (let slotIndex = 0; slotIndex < SLOT_TO_PAYMENT_TYPE.length; slotIndex++) {
+        const paymentType = SLOT_TO_PAYMENT_TYPE[slotIndex];
+        const amount = PAYMENT_TYPE_AMOUNTS[paymentType];
+        
+        let receiverUserId: string | null = null;
+        let receiverType: 'user' | 'admin' = 'admin';
+        
+        if (paymentType === 'direct_sponsor') {
+          if (sponsorUserId) {
+            receiverUserId = sponsorUserId;
+            receiverType = 'user';
+          }
+        } else if (paymentType === 'binary_match') {
+          receiverType = 'admin';
+        } else if (paymentType === 'creator_fee') {
+          receiverType = 'admin';
+        } else if (paymentType.startsWith('matrix_level_')) {
+          receiverType = 'admin';
+        }
+        
+        paymentsToCreate.push({
+          activationId: createdActivation.id,
+          slotIndex,
+          payerUserId,
+          receiverUserId,
+          paymentType: paymentType as any,
+          receiverType,
+          amountInr: amount.toString(),
+          paymentMode: 'offline',
+          status: 'pending',
+          submissionCount: 0,
+        });
+      }
+      
+      // Insert all payments in the same transaction
+      const paymentsResult = await tx.insert(activationPayments).values(paymentsToCreate).returning();
+      
+      return {
+        activation: createdActivation,
+        payments: paymentsResult,
+      };
+    });
   }
 
   async getActivation(id: string): Promise<Activation | undefined> {
@@ -101,7 +153,8 @@ export class DbStorage implements IStorage {
   }
 
   async getActivationsByPayer(payerWallet: string): Promise<Activation[]> {
-    return db.select().from(activations).where(eq(activations.payerWallet, payerWallet.toLowerCase()));
+    // Note: Not lowercasing because we're now querying by user ID (PB...), not wallet address
+    return db.select().from(activations).where(eq(activations.payerWallet, payerWallet));
   }
 
   async updateActivationStatus(id: string, status: string): Promise<Activation | undefined> {
@@ -115,6 +168,63 @@ export class DbStorage implements IStorage {
   async createActivationPayment(payment: InsertActivationPayment): Promise<ActivationPayment> {
     const result = await db.insert(activationPayments).values(payment).returning();
     return result[0];
+  }
+
+  // DEPRECATED: Do not use directly - use createActivationWithPayments() instead
+  // This method exists only for backward compatibility with legacy code
+  async createActivationPayments(
+    activationId: string, 
+    payerUserId: string, 
+    sponsorUserId: string | null
+  ): Promise<ActivationPayment[]> {
+    console.warn('DEPRECATED: createActivationPayments() called directly. Use createActivationWithPayments() instead to ensure transactional safety.');
+    const paymentsToCreate: InsertActivationPayment[] = [];
+    
+    // Create all 8 payment slots based on SLOT_TO_PAYMENT_TYPE mapping
+    for (let slotIndex = 0; slotIndex < SLOT_TO_PAYMENT_TYPE.length; slotIndex++) {
+      const paymentType = SLOT_TO_PAYMENT_TYPE[slotIndex];
+      const amount = PAYMENT_TYPE_AMOUNTS[paymentType];
+      
+      // Determine receiver based on payment type
+      let receiverUserId: string | null = null;
+      let receiverType: 'user' | 'admin' = 'admin';
+      
+      if (paymentType === 'direct_sponsor') {
+        // Slot 0: Direct Sponsor
+        if (sponsorUserId) {
+          receiverUserId = sponsorUserId;
+          receiverType = 'user';
+        }
+      } else if (paymentType === 'binary_match') {
+        // Slot 1: Binary Match - for now, falls back to admin
+        // TODO: Implement binary matching logic to find next qualified user
+        receiverType = 'admin';
+      } else if (paymentType === 'creator_fee') {
+        // Slot 2: Creator Fee - always to admin
+        receiverType = 'admin';
+      } else if (paymentType.startsWith('matrix_level_')) {
+        // Slots 3-7: Matrix uplines - for now, falls back to admin
+        // TODO: Implement matrix placement logic to find uplines
+        receiverType = 'admin';
+      }
+      
+      paymentsToCreate.push({
+        activationId,
+        slotIndex,
+        payerUserId,
+        receiverUserId,
+        paymentType: paymentType as any,
+        receiverType,
+        amountInr: amount.toString(),
+        paymentMode: 'offline',
+        status: 'pending',
+        submissionCount: 0,
+      });
+    }
+    
+    // Insert all payments in one transaction
+    const result = await db.insert(activationPayments).values(paymentsToCreate).returning();
+    return result;
   }
 
   async getActivationPayment(id: string): Promise<ActivationPayment | undefined> {
