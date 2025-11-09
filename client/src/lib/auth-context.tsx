@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { User } from '@shared/schema';
 import { useToast } from '@/hooks/use-toast';
+import { apiRequest, fetchCsrfToken } from './queryClient';
 
 interface AuthContextType {
   user: Omit<User, 'password'> | null;
@@ -40,49 +41,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Login failed');
+    try {
+      const response = await apiRequest('POST', '/api/auth/login', { email, password });
+      const data = await response.json();
+      setUser(data.user);
+      toast({
+        title: 'Welcome back!',
+        description: 'You have successfully logged in.',
+      });
+      return data.user;
+    } catch (error: any) {
+      // If CSRF token is invalid (403), refresh it and retry once
+      if (error.message?.includes('403')) {
+        await fetchCsrfToken();
+        const response = await apiRequest('POST', '/api/auth/login', { email, password });
+        const data = await response.json();
+        setUser(data.user);
+        toast({
+          title: 'Welcome back!',
+          description: 'You have successfully logged in.',
+        });
+        return data.user;
+      }
+      throw error;
     }
-
-    const data = await response.json();
-    setUser(data.user);
-    toast({
-      title: 'Welcome back!',
-      description: 'You have successfully logged in.',
-    });
-    return data.user;
   };
 
   const signup = async (email: string, password: string, sponsorId?: string) => {
-    const response = await fetch('/api/auth/signup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, sponsorId }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Signup failed');
+    try {
+      const response = await apiRequest('POST', '/api/auth/signup', { email, password, sponsorId });
+      const data = await response.json();
+      setUser(data.user);
+      toast({
+        title: 'Account created!',
+        description: 'Welcome to PAYBACK247.',
+      });
+      return data.user;
+    } catch (error: any) {
+      // If CSRF token is invalid (403), refresh it and retry once
+      if (error.message?.includes('403')) {
+        await fetchCsrfToken();
+        const response = await apiRequest('POST', '/api/auth/signup', { email, password, sponsorId });
+        const data = await response.json();
+        setUser(data.user);
+        toast({
+          title: 'Account created!',
+          description: 'Welcome to PAYBACK247.',
+        });
+        return data.user;
+      }
+      throw error;
     }
-
-    const data = await response.json();
-    setUser(data.user);
-    toast({
-      title: 'Account created!',
-      description: 'Welcome to PAYBACK247.',
-    });
-    return data.user;
   };
 
   const logout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    try {
+      await apiRequest('POST', '/api/auth/logout');
+    } catch (error) {
+      // Ignore logout errors, still clear local state
+      console.error('Logout error:', error);
+    }
     setUser(null);
     toast({
       title: 'Logged out',

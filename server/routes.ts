@@ -24,6 +24,11 @@ function requireAdmin(req: any, res: any, next: any) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // CSRF token endpoint
+  app.get("/api/csrf-token", (req: any, res) => {
+    res.json({ csrfToken: req.csrfToken() });
+  });
+
   // Authentication routes
   
   // Signup

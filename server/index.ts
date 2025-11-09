@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
+import csrf from "csurf";
 import { Pool } from "@neondatabase/serverless";
 import { neonConfig } from "@neondatabase/serverless";
 import ws from "ws";
@@ -11,29 +12,16 @@ import "./types";
 // Configure WebSocket for Neon
 neonConfig.webSocketConstructor = ws;
 
+// Require SESSION_SECRET at boot - fail fast if missing
+if (!process.env.SESSION_SECRET) {
+  throw new Error('SESSION_SECRET environment variable is required');
+}
+
 const app = express();
 
 // Setup PostgreSQL session store
 const PgSession = connectPgSimple(session);
 const sessionPool = new Pool({ connectionString: process.env.DATABASE_URL });
-
-app.use(
-  session({
-    store: new PgSession({
-      pool: sessionPool,
-      createTableIfMissing: true,
-    }),
-    secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-    },
-  })
-);
 
 declare module 'http' {
   interface IncomingMessage {
@@ -46,6 +34,28 @@ app.use(express.json({
   }
 }));
 app.use(express.urlencoded({ extended: false }));
+
+app.use(
+  session({
+    store: new PgSession({
+      pool: sessionPool,
+      createTableIfMissing: true,
+    }),
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+    },
+  })
+);
+
+// CSRF protection for state-changing routes
+const csrfProtection = csrf({ cookie: false });
+app.use(csrfProtection);
 
 app.use((req, res, next) => {
   const start = Date.now();
