@@ -13,6 +13,7 @@ import DirectSponsoring from '@/pages/direct-sponsoring';
 import BinaryMatching from '@/pages/binary-matching';
 import MatrixIncome from '@/pages/matrix-income';
 import Profile from '@/pages/profile';
+import ActivationPage from '@/pages/activation';
 import ConfirmationPage from '@/pages/confirmation';
 import ReentryPage from '@/pages/reentry';
 import AdditionalReentryPage from '@/pages/additional-reentry';
@@ -85,6 +86,14 @@ function Router() {
         {() => (
           <DashboardLayout>
             <Profile />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      <Route path="/user/activation">
+        {() => (
+          <DashboardLayout>
+            <ActivationPage />
           </DashboardLayout>
         )}
       </Route>
