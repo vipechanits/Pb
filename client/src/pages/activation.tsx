@@ -215,14 +215,22 @@ export default function ActivationPage() {
     }
 
     const receiver = activationData.receivers[slotIndex];
-    const isAdmin = receiver.toLowerCase() === '0x0000000000000000000000000000000000000000';
+    // Check for zero address or address that looks like all zeros
+    const normalizedReceiver = receiver.toLowerCase().replace(/^0x/, '');
+    const isZeroAddress = normalizedReceiver === '0'.repeat(40) || 
+                          receiver.toLowerCase() === '0x0000000000000000000000000000000000000000';
     
     // Debug logging
-    console.log(`Slot ${slotIndex}: Receiver = ${receiver}, isAdmin = ${isAdmin}`);
+    console.log(`🔍 Slot ${slotIndex}:`, {
+      original: receiver,
+      normalized: normalizedReceiver,
+      isZero: isZeroAddress,
+      length: receiver.length
+    });
     
     return {
-      address: isAdmin ? 'Admin Wallet' : `${receiver.slice(0, 6)}...${receiver.slice(-4)}`,
-      isAdmin,
+      address: isZeroAddress ? 'Admin Wallet' : `${receiver.slice(0, 6)}...${receiver.slice(-4)}`,
+      isAdmin: isZeroAddress,
     };
   };
 
