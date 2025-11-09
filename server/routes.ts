@@ -49,11 +49,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Hash password
       const hashedPassword = await hashPassword(password);
       
+      // Generate next userId starting from PB10000
+      const lastUser = await storage.getLastUser();
+      let nextUserNumber = 10000; // Start from PB10000
+      
+      if (lastUser && lastUser.userId) {
+        // Extract number from userId (e.g., "PB10005" -> 10005)
+        const match = lastUser.userId.match(/PB(\d+)/);
+        if (match) {
+          nextUserNumber = parseInt(match[1], 10) + 1;
+        }
+      }
+      
+      const userId = `PB${nextUserNumber}`;
+      
       // Create user
       const user = await storage.createUser({
         email,
         password: hashedPassword,
         role: 'user',
+        userId,
         sponsorId: sponsorId || null,
         isActivated: false,
       });

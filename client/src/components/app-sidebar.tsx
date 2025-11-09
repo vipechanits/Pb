@@ -9,6 +9,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarFooter,
 } from '@/components/ui/sidebar';
 import {
   LayoutDashboard,
@@ -21,8 +22,10 @@ import {
   Shield,
   FileCheck,
   UserCog,
+  LogOut,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/lib/auth-context';
 import logoUrl from '@assets/Generated Image October 16, 2025 - 6_58AM (1)_1762653844897.png';
 
 interface AppSidebarProps {
@@ -30,9 +33,13 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
-  const [location] = useLocation();
-  // TODO: Replace with actual user authentication
-  const userId = null;
+  const [location, setLocation] = useLocation();
+  const { user, logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    setLocation('/auth/login');
+  };
 
   const userMenuItems: Array<{
     title: string;
@@ -111,10 +118,12 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
               <div className="text-xs text-muted-foreground">HybridP2P Platform</div>
             </div>
           </div>
-          <div className="pt-2">
-            <div className="text-xs text-muted-foreground mb-1">Status</div>
-            <Badge variant="secondary">Non-blockchain Mode</Badge>
-          </div>
+          {user && (
+            <div className="pt-2 border-t border-sidebar-border">
+              <div className="text-xs text-muted-foreground">Logged in as</div>
+              <div className="font-mono text-sm font-semibold">{user.userId || 'Not assigned'}</div>
+            </div>
+          )}
         </div>
       </SidebarHeader>
       <SidebarContent>
@@ -136,6 +145,16 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter className="p-4 border-t border-sidebar-border">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={handleLogout} data-testid="button-logout">
+              <LogOut className="w-4 h-4" />
+              <span>Logout</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
     </Sidebar>
   );
 }
