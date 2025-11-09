@@ -1,175 +1,292 @@
-import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/lib/auth-context';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { updateProfileSchema } from '@shared/schema';
+import type { UpdateProfile } from '@shared/schema';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { User, CreditCard } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { CheckCircle, QrCode } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Profile() {
+  const { user, refreshUser } = useAuth();
   const { toast } = useToast();
-  const [profileData, setProfileData] = useState({
-    name: 'John Doe',
-    email: 'john@example.com',
-    mobile: '+91 9876543210',
+  const [loading, setLoading] = useState(false);
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [showQR, setShowQR] = useState(false);
+
+  const form = useForm<UpdateProfile>({
+    resolver: zodResolver(updateProfileSchema),
+    defaultValues: {
+      name: user?.name || '',
+      mobile: user?.mobile || '',
+      upiId: user?.upiId || '',
+      bankAccountHolder: user?.bankAccountHolder || '',
+      bankAccountNumber: user?.bankAccountNumber || '',
+      ifscCode: user?.ifscCode || '',
+      securityCode: user?.securityCode || '',
+    },
   });
 
-  const [paymentCard, setPaymentCard] = useState({
-    holderName: 'John Doe',
-    bankName: 'HDFC Bank',
-    accountNumber: '123456789012',
-    ifsc: 'HDFC0001234',
-    upi: 'john@upi',
-  });
+  // Update form when user data changes
+  useEffect(() => {
+    if (user) {
+      form.reset({
+        name: user.name || '',
+        mobile: user.mobile || '',
+        upiId: user.upiId || '',
+        bankAccountHolder: user.bankAccountHolder || '',
+        bankAccountNumber: user.bankAccountNumber || '',
+        ifscCode: user.ifscCode || '',
+        securityCode: user.securityCode || '',
+      });
+    }
+  }, [user, form]);
+  const onSubmit = async (data: UpdateProfile) => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
 
-  const handleUpdateProfile = () => {
-    console.log('Profile updated:', profileData);
-    toast({
-      title: 'Profile Updated',
-      description: 'Your profile has been successfully updated.',
-    });
+      if (!response.ok) {
+        throw new Error('Failed to update profile');
+      }
+
+      await refreshUser();
+      toast({
+        title: 'Profile updated',
+        description: 'Your profile has been successfully updated.',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update profile. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleUpdatePaymentCard = () => {
-    console.log('Payment card updated:', paymentCard);
-    toast({
-      title: 'Payment Card Updated',
-      description: 'Your payment card details have been saved.',
-    });
+  const generateQRCode = async () => {
+    try {
+      const response = await fetch('/api/profile/generate-qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate QR code');
+      }
+
+      const data = await response.json();
+      setQrCode(data.qrCode);
+      setShowQR(true);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to generate QR code. Make sure you have filled in your UPI ID, name, and mobile number.',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="container max-w-4xl mx-auto p-6 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Profile & Settings</h1>
-        <p className="text-muted-foreground">Manage your account information and payment details</p>
+        <h1 className="text-3xl font-bold" data-testid="text-profile-title">Profile Settings</h1>
+        <p className="text-muted-foreground">Manage your payment details and account information</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Profile Picture</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col items-center gap-4">
-            <Avatar className="w-24 h-24">
-              <AvatarFallback className="text-2xl">JD</AvatarFallback>
-            </Avatar>
-            <Button variant="outline" size="sm" data-testid="button-upload-avatar">
-              <User className="w-4 h-4 mr-2" />
-              Upload Avatar
-            </Button>
-          </CardContent>
-        </Card>
+      {user?.userId && (
+        <Alert className="bg-primary/10 border-primary/20">
+          <CheckCircle className="h-4 w-4 text-primary" />
+          <AlertDescription>
+            <span className="font-semibold">User ID:</span> {user.userId}
+          </AlertDescription>
+        </Alert>
+      )}
 
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Personal Information</CardTitle>
-            <CardDescription>Update your profile details</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
-                <Input
-                  id="name"
-                  value={profileData.name}
-                  onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
-                  data-testid="input-name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={profileData.email}
-                  onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                  data-testid="input-email"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="mobile">Mobile Number</Label>
-              <Input
-                id="mobile"
-                value={profileData.mobile}
-                onChange={(e) => setProfileData({ ...profileData, mobile: e.target.value })}
-                data-testid="input-mobile"
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Personal Information</CardTitle>
+              <CardDescription>Your basic contact details</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Full Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="John Doe" {...field} data-testid="input-name" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-            <Button onClick={handleUpdateProfile} data-testid="button-update-profile">
-              Save Profile
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CreditCard className="w-5 h-5" />
-            Payment Card Details
-          </CardTitle>
-          <CardDescription>
-            Configure your bank account or UPI for receiving payments
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="holder">Account Holder Name</Label>
-              <Input
-                id="holder"
-                value={paymentCard.holderName}
-                onChange={(e) => setPaymentCard({ ...paymentCard, holderName: e.target.value })}
-                data-testid="input-holder-name"
+              <FormField
+                control={form.control}
+                name="mobile"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Mobile Number</FormLabel>
+                    <FormControl>
+                      <Input placeholder="9876543210" maxLength={10} {...field} data-testid="input-mobile" />
+                    </FormControl>
+                    <FormDescription>10-digit mobile number without country code</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="bank">Bank Name</Label>
-              <Input
-                id="bank"
-                value={paymentCard.bankName}
-                onChange={(e) => setPaymentCard({ ...paymentCard, bankName: e.target.value })}
-                data-testid="input-bank-name"
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>UPI Payment Details</CardTitle>
+              <CardDescription>For receiving payments via UPI</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <FormField
+                control={form.control}
+                name="upiId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>UPI ID</FormLabel>
+                    <FormControl>
+                      <Input placeholder="yourname@paytm" {...field} data-testid="input-upi-id" />
+                    </FormControl>
+                    <FormDescription>Your UPI ID for Google Pay, Paytm, or PhonePe</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
+
+              {user?.upiId && user?.name && user?.mobile && (
+                <div className="pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={generateQRCode}
+                    data-testid="button-generate-qr"
+                  >
+                    <QrCode className="mr-2 h-4 w-4" />
+                    Generate UPI QR Code
+                  </Button>
+
+                  {showQR && qrCode && (
+                    <div className="mt-4 p-4 border rounded-lg bg-white dark:bg-card">
+                      <p className="text-sm font-medium mb-2">Your UPI QR Code:</p>
+                      <img src={qrCode} alt="UPI QR Code" className="mx-auto" data-testid="img-qr-code" />
+                      <p className="text-xs text-muted-foreground text-center mt-2">
+                        Users can scan this to pay you
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Bank Account Details</CardTitle>
+              <CardDescription>For receiving payments via bank transfer</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <FormField
+                control={form.control}
+                name="bankAccountHolder"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Account Holder Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="John Doe" {...field} data-testid="input-account-holder" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="bankAccountNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Account Number</FormLabel>
+                    <FormControl>
+                      <Input placeholder="1234567890" {...field} data-testid="input-account-number" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="ifscCode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>IFSC Code</FormLabel>
+                    <FormControl>
+                      <Input placeholder="SBIN0001234" maxLength={11} {...field} data-testid="input-ifsc" />
+                    </FormControl>
+                    <FormDescription>11-character bank IFSC code</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Security</CardTitle>
+              <CardDescription>Set a 6-digit security code for transactions</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <FormField
+                control={form.control}
+                name="securityCode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>6-Digit Security Code</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="password"
+                        placeholder="******"
+                        maxLength={6}
+                        {...field}
+                        data-testid="input-security-code"
+                      />
+                    </FormControl>
+                    <FormDescription>Used to verify important transactions</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-end">
+            <Button type="submit" disabled={loading} data-testid="button-save-profile">
+              {loading ? 'Saving...' : 'Save Changes'}
+            </Button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="account">Account Number</Label>
-              <Input
-                id="account"
-                value={paymentCard.accountNumber}
-                onChange={(e) => setPaymentCard({ ...paymentCard, accountNumber: e.target.value })}
-                data-testid="input-account-number"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="ifsc">IFSC / SWIFT Code</Label>
-              <Input
-                id="ifsc"
-                value={paymentCard.ifsc}
-                onChange={(e) => setPaymentCard({ ...paymentCard, ifsc: e.target.value })}
-                data-testid="input-ifsc"
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="upi">UPI ID</Label>
-            <Input
-              id="upi"
-              value={paymentCard.upi}
-              onChange={(e) => setPaymentCard({ ...paymentCard, upi: e.target.value })}
-              data-testid="input-upi"
-            />
-          </div>
-          <Button onClick={handleUpdatePaymentCard} data-testid="button-update-payment">
-            Update Payment Details
-          </Button>
-        </CardContent>
-      </Card>
+        </form>
+      </Form>
     </div>
   );
 }

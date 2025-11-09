@@ -6,8 +6,13 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/app-sidebar';
 import ThemeToggle from '@/components/ThemeToggle';
+import { AuthProvider } from '@/lib/auth-context';
+import { ProtectedRoute } from '@/components/protected-route';
 import NotFound from '@/pages/not-found';
 import Landing from '@/pages/landing';
+import LoginPage from '@/pages/auth/login';
+import SignupPage from '@/pages/auth/signup';
+import ForgotPasswordPage from '@/pages/auth/forgot-password';
 import UserDashboard from '@/pages/user-dashboard';
 import DirectSponsoring from '@/pages/direct-sponsoring';
 import BinaryMatching from '@/pages/binary-matching';
@@ -47,92 +52,137 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Landing} />
+      <Route path="/auth/login" component={LoginPage} />
+      <Route path="/auth/signup" component={SignupPage} />
+      <Route path="/auth/forgot-password" component={ForgotPasswordPage} />
+      
+      <Route path="/user/dashboard">
+        {() => (
+          <ProtectedRoute>
+            <DashboardLayout>
+              <UserDashboard />
+            </DashboardLayout>
+          </ProtectedRoute>
+        )}
+      </Route>
       
       <Route path="/user">
         {() => (
-          <DashboardLayout>
-            <UserDashboard />
-          </DashboardLayout>
+          <ProtectedRoute>
+            <DashboardLayout>
+              <UserDashboard />
+            </DashboardLayout>
+          </ProtectedRoute>
         )}
       </Route>
       
       <Route path="/user/sponsoring">
         {() => (
-          <DashboardLayout>
-            <DirectSponsoring />
-          </DashboardLayout>
+          <ProtectedRoute>
+            <DashboardLayout>
+              <DirectSponsoring />
+            </DashboardLayout>
+          </ProtectedRoute>
         )}
       </Route>
       
       <Route path="/user/binary">
         {() => (
-          <DashboardLayout>
-            <BinaryMatching />
-          </DashboardLayout>
+          <ProtectedRoute>
+            <DashboardLayout>
+              <BinaryMatching />
+            </DashboardLayout>
+          </ProtectedRoute>
         )}
       </Route>
       
       <Route path="/user/matrix">
         {() => (
-          <DashboardLayout>
-            <MatrixIncome />
-          </DashboardLayout>
+          <ProtectedRoute>
+            <DashboardLayout>
+              <MatrixIncome />
+            </DashboardLayout>
+          </ProtectedRoute>
         )}
       </Route>
       
       <Route path="/user/profile">
         {() => (
-          <DashboardLayout>
-            <Profile />
-          </DashboardLayout>
+          <ProtectedRoute>
+            <DashboardLayout>
+              <Profile />
+            </DashboardLayout>
+          </ProtectedRoute>
         )}
       </Route>
       
       <Route path="/user/activation">
         {() => (
-          <DashboardLayout>
-            <ActivationPage />
-          </DashboardLayout>
+          <ProtectedRoute>
+            <DashboardLayout>
+              <ActivationPage />
+            </DashboardLayout>
+          </ProtectedRoute>
         )}
       </Route>
       
       <Route path="/user/confirmation">
         {() => (
-          <DashboardLayout>
-            <ConfirmationPage />
-          </DashboardLayout>
+          <ProtectedRoute>
+            <DashboardLayout>
+              <ConfirmationPage />
+            </DashboardLayout>
+          </ProtectedRoute>
         )}
       </Route>
       
       <Route path="/user/reentry">
         {() => (
-          <DashboardLayout>
-            <ReentryPage />
-          </DashboardLayout>
+          <ProtectedRoute>
+            <DashboardLayout>
+              <ReentryPage />
+            </DashboardLayout>
+          </ProtectedRoute>
         )}
       </Route>
       
       <Route path="/user/additional-reentry">
         {() => (
-          <DashboardLayout>
-            <AdditionalReentryPage />
-          </DashboardLayout>
+          <ProtectedRoute>
+            <DashboardLayout>
+              <AdditionalReentryPage />
+            </DashboardLayout>
+          </ProtectedRoute>
+        )}
+      </Route>
+      
+      <Route path="/admin/dashboard">
+        {() => (
+          <ProtectedRoute requireAdmin={true}>
+            <DashboardLayout isAdmin={true}>
+              <AdminDashboard />
+            </DashboardLayout>
+          </ProtectedRoute>
         )}
       </Route>
       
       <Route path="/admin">
         {() => (
-          <DashboardLayout isAdmin={true}>
-            <AdminDashboard />
-          </DashboardLayout>
+          <ProtectedRoute requireAdmin={true}>
+            <DashboardLayout isAdmin={true}>
+              <AdminDashboard />
+            </DashboardLayout>
+          </ProtectedRoute>
         )}
       </Route>
       
       <Route path="/admin/payments">
         {() => (
-          <DashboardLayout isAdmin={true}>
-            <AdminPayments />
-          </DashboardLayout>
+          <ProtectedRoute requireAdmin={true}>
+            <DashboardLayout isAdmin={true}>
+              <AdminPayments />
+            </DashboardLayout>
+          </ProtectedRoute>
         )}
       </Route>
       
@@ -144,10 +194,12 @@ function Router() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Router />
-      </TooltipProvider>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Router />
+        </TooltipProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
