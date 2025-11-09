@@ -34,8 +34,13 @@ export default function SignupPage() {
 
     setLoading(true);
     try {
-      await signup(email, password, sponsorId || undefined);
-      setLocation('/user/dashboard');
+      const user = await signup(email, password, sponsorId || undefined);
+      // Redirect based on role (though new signups are always users, not admins)
+      if (user.role === 'admin') {
+        setLocation('/admin/dashboard');
+      } else {
+        setLocation('/user/dashboard');
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to create account');
     } finally {

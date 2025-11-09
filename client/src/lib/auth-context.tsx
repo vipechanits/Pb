@@ -5,9 +5,9 @@ import { useToast } from '@/hooks/use-toast';
 interface AuthContextType {
   user: Omit<User, 'password'> | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<Omit<User, 'password'>>;
   logout: () => Promise<void>;
-  signup: (email: string, password: string, sponsorId?: string) => Promise<void>;
+  signup: (email: string, password: string, sponsorId?: string) => Promise<Omit<User, 'password'>>;
   refreshUser: () => Promise<void>;
 }
 
@@ -57,6 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       title: 'Welcome back!',
       description: 'You have successfully logged in.',
     });
+    return data.user;
   };
 
   const signup = async (email: string, password: string, sponsorId?: string) => {
@@ -77,6 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       title: 'Account created!',
       description: 'Welcome to PAYBACK247.',
     });
+    return data.user;
   };
 
   const logout = async () => {

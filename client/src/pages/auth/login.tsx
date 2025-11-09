@@ -10,7 +10,7 @@ import { AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
-  const { login, user } = useAuth();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -22,9 +22,9 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await login(email, password);
-      // Redirect based on role
-      if (user?.role === 'admin') {
+      const user = await login(email, password);
+      // Redirect based on role returned from login
+      if (user.role === 'admin') {
         setLocation('/admin/dashboard');
       } else {
         setLocation('/user/dashboard');

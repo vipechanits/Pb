@@ -53,11 +53,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isActivated: false,
       });
       
-      // Set session
+      // Set session and save it before responding
       req.session.userId = user.id;
       req.session.isAdmin = user.role === 'admin';
       
-      res.status(201).json({ user: serializeUser(user) });
+      // Ensure session is saved before sending response
+      req.session.save((err) => {
+        if (err) {
+          console.error("Error saving session:", err);
+          return res.status(500).json({ error: "Failed to create session" });
+        }
+        res.status(201).json({ user: serializeUser(user) });
+      });
     } catch (error) {
       console.error("Error during signup:", error);
       res.status(500).json({ error: "Failed to create account" });
@@ -85,11 +92,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Invalid email or password" });
       }
       
-      // Set session
+      // Set session and save it before responding
       req.session.userId = user.id;
       req.session.isAdmin = user.role === 'admin';
       
-      res.json({ user: serializeUser(user) });
+      // Ensure session is saved before sending response
+      req.session.save((err) => {
+        if (err) {
+          console.error("Error saving session:", err);
+          return res.status(500).json({ error: "Failed to create session" });
+        }
+        res.json({ user: serializeUser(user) });
+      });
     } catch (error) {
       console.error("Error during login:", error);
       res.status(500).json({ error: "Failed to login" });
