@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
@@ -15,8 +15,23 @@ export default function SignupPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [sponsorId, setSponsorId] = useState('');
+  const [binaryLeg, setBinaryLeg] = useState<'left' | 'right' | undefined>();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Read URL parameters for referral
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const refParam = params.get('ref');
+    const legParam = params.get('leg');
+    
+    if (refParam) {
+      setSponsorId(refParam);
+    }
+    if (legParam === 'left' || legParam === 'right') {
+      setBinaryLeg(legParam);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,7 +132,13 @@ export default function SignupPage() {
                 value={sponsorId}
                 onChange={(e) => setSponsorId(e.target.value)}
                 data-testid="input-sponsor-id"
+                readOnly={!!binaryLeg}
               />
+              {binaryLeg && (
+                <p className="text-xs text-muted-foreground">
+                  You'll be placed on the <strong className="text-foreground">{binaryLeg.toUpperCase()}</strong> leg of {sponsorId}'s binary tree
+                </p>
+              )}
             </div>
 
             <Button type="submit" className="w-full" disabled={loading} data-testid="button-signup">

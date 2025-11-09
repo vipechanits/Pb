@@ -11,6 +11,8 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CheckCircle, QrCode } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { ReferralLinks } from '@/components/referral-links';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function Profile() {
   const { user, refreshUser } = useAuth();
@@ -102,7 +104,7 @@ export default function Profile() {
     <div className="container max-w-4xl mx-auto p-6 space-y-6">
       <div>
         <h1 className="text-3xl font-bold" data-testid="text-profile-title">Profile Settings</h1>
-        <p className="text-muted-foreground">Manage your payment details and account information</p>
+        <p className="text-muted-foreground">Manage your payment details, account information, and referral links</p>
       </div>
 
       {user?.userId && (
@@ -113,6 +115,14 @@ export default function Profile() {
           </AlertDescription>
         </Alert>
       )}
+
+      <Tabs defaultValue="profile" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="profile" data-testid="tab-profile">Profile Details</TabsTrigger>
+          <TabsTrigger value="referrals" data-testid="tab-referrals">Referral Links</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="profile" className="space-y-6 mt-6">
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -287,6 +297,12 @@ export default function Profile() {
           </div>
         </form>
       </Form>
+        </TabsContent>
+
+        <TabsContent value="referrals" className="mt-6">
+          <ReferralLinks />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

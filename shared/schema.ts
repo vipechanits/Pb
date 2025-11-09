@@ -22,6 +22,8 @@ export const activationStatusEnum = pgEnum("activation_status", ["pending", "par
 
 export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
 
+export const binaryLegEnum = pgEnum("binary_leg", ["left", "right"]);
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
@@ -46,6 +48,7 @@ export const users = pgTable("users", {
   
   // Referral link
   sponsorId: varchar("sponsor_id", { length: 20 }), // PB ID of sponsor
+  binaryLeg: binaryLegEnum("binary_leg"), // Which leg (left/right) user was placed on
   
   // Account status
   isActivated: boolean("is_activated").notNull().default(false),
