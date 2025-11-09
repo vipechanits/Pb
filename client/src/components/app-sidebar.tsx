@@ -23,6 +23,8 @@ import {
   FileCheck,
   UserCog,
   LogOut,
+  Wallet,
+  CheckSquare,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth-context';
@@ -50,6 +52,16 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       title: 'Dashboard',
       url: '/user',
       icon: LayoutDashboard,
+    },
+    {
+      title: 'Activation',
+      url: '/user/activation',
+      icon: Wallet,
+    },
+    {
+      title: 'Confirmations',
+      url: '/user/confirmation',
+      icon: CheckSquare,
     },
     {
       title: 'Direct Sponsoring',
