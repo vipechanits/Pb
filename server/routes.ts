@@ -518,7 +518,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "User ID not found" });
       }
       
-      const payments = await storage.getActivationPaymentsPendingConfirmation(user.userId);
+      // If admin, get both admin payments and user's own payments
+      let payments: any[] = [];
+      if (user.role === 'admin') {
+        const adminPayments = await storage.getAdminPendingConfirmations();
+        const userPayments = await storage.getActivationPaymentsPendingConfirmation(user.userId);
+        payments = [...adminPayments, ...userPayments];
+      } else {
+        payments = await storage.getActivationPaymentsPendingConfirmation(user.userId);
+      }
+      
       res.json(payments);
     } catch (error) {
       console.error("Error fetching pending payments:", error);

@@ -38,6 +38,7 @@ export interface IStorage {
   getActivationPaymentsByPayerUserId(payerUserId: string): Promise<ActivationPayment[]>;
   getActivationPaymentsByReceiverUserId(receiverUserId: string): Promise<ActivationPayment[]>;
   getActivationPaymentsPendingConfirmation(receiverUserId: string): Promise<ActivationPayment[]>;
+  getAdminPendingConfirmations(): Promise<ActivationPayment[]>;
   submitPaymentProof(id: string, utrId: string, proofUrl?: string): Promise<ActivationPayment | undefined>;
   confirmActivationPayment(id: string, notes?: string): Promise<ActivationPayment | undefined>;
   rejectActivationPayment(id: string, rejectionReason: string): Promise<ActivationPayment | undefined>;
@@ -191,6 +192,15 @@ export class DbStorage implements IStorage {
     return db.select().from(activationPayments).where(
       and(
         eq(activationPayments.receiverUserId, receiverUserId),
+        eq(activationPayments.status, 'submitted')
+      )
+    );
+  }
+  
+  async getAdminPendingConfirmations(): Promise<ActivationPayment[]> {
+    return db.select().from(activationPayments).where(
+      and(
+        eq(activationPayments.receiverType, 'admin'),
         eq(activationPayments.status, 'submitted')
       )
     );
