@@ -143,7 +143,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get current user
   app.get("/api/auth/me", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUserById(req.session.userId);
+      const user = await storage.getUserById(req.session.userId!);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -159,7 +159,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get user profile
   app.get("/api/profile", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUserById(req.session.userId);
+      const user = await storage.getUserById(req.session.userId!);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -178,7 +178,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
       
-      const user = await storage.updateUserProfile(req.session.userId, validationResult.data);
+      const user = await storage.updateUserProfile(req.session.userId!, validationResult.data);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -193,7 +193,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Generate UPI QR code for user's payment details
   app.post("/api/profile/generate-qr", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUserById(req.session.userId);
+      const user = await storage.getUserById(req.session.userId!);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }

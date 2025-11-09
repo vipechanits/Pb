@@ -149,14 +149,14 @@ export default function SignupPage() {
         </CardContent>
         <CardFooter className="flex justify-center gap-2 text-sm text-muted-foreground">
           Already have an account?
-          <Button
-            variant="link"
-            className="p-0 h-auto text-primary"
+          <button
+            type="button"
+            className="text-primary hover:underline"
             onClick={() => setLocation('/auth/login')}
             data-testid="link-login"
           >
             Log in
-          </Button>
+          </button>
         </CardFooter>
       </Card>
     </div>
