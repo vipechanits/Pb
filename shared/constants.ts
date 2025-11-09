@@ -98,16 +98,22 @@ export const CONFIRMATION_WORKFLOW = {
 
 // Binary matching qualification
 export const BINARY_QUALIFICATION = {
-  SELF_SPONSORED_LEFT: 1,      // Must sponsor 1 on left
-  SELF_SPONSORED_RIGHT: 1,     // Must sponsor 1 on right
-  LEFT_TEAM_MATCHED: 3,        // 3:3 left team must be complete
-  RIGHT_TEAM_MATCHED: 3,       // 3:3 right team must be complete
-  ONE_TIME_ONLY: true,         // User can qualify ONLY ONCE
-  INCOME: 1000,                // ₹1,000 one time income
+  // ONE TIME qualification requirement (to enter queue)
+  SELF_SPONSORED_LEFT: 1,      // Must sponsor 1 on left (ONE TIME)
+  SELF_SPONSORED_RIGHT: 1,     // Must sponsor 1 on right (ONE TIME)
+  
+  // CONTINUOUS income requirements (each pair)
+  LEFT_TEAM_PER_PAIR: 3,       // 3:3 left team per pair
+  RIGHT_TEAM_PER_PAIR: 3,      // 3:3 right team per pair
+  INCOME_PER_PAIR: 1000,       // ₹1,000 per pair matched
+  
+  CONTINUOUS_INCOME: true,     // User can earn unlimited pairs
   NOTES: [
-    'User enters GLOBAL FIFO queue ONLY AFTER 3:3 team matching is complete',
-    'Once user receives ₹1,000 payment, they are REMOVED from queue permanently',
-    'User CANNOT re-enter queue or qualify again for binary matching',
+    'ONE TIME: Self-sponsor 1 left + 1 right to ENTER queue',
+    'CONTINUOUS: Each 3:3 pair = ₹1,000 income',
+    'After receiving payment, user goes to BACK of queue',
+    'User can build unlimited 3:3 pairs for unlimited income',
+    'Spill over helps build additional pairs faster',
   ],
 } as const;
 

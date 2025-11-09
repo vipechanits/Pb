@@ -128,10 +128,15 @@ System Checks: All 8 Payments Complete?
 - New user pays ₹1,000 to the NEXT qualified user in queue
 - Only **1 pair paid per new activation**
 
-### Qualification Rules:
-- User must have **1 left + 1 right self-sponsored** referrals
-- Each side must complete **3:3 team** (spill over included)
-- **1 Complete Pair = ₹1,000 income**
+### Qualification Rules (ONE TIME):
+- User must self-sponsor **1 left + 1 right** (ONE TIME requirement to enter queue)
+- After initial qualification, user stays in queue permanently
+
+### Income (CONTINUOUS):
+- Each **3:3 team complete** = ₹1,000 income
+- User cycles to back of queue after receiving payment
+- Can earn unlimited ₹1,000 payments for multiple 3:3 pairs
+- Spill over helps build additional pairs
 
 ```
 GLOBAL BINARY MATCHING QUEUE (FIFO):
@@ -158,47 +163,57 @@ Admin confirms ✅
   ↓
 PB5's pair is MATCHED ✅
   ↓
-Remove PB5 from queue PERMANENTLY
+PB5 receives ₹1,000
   ↓
-Queue now: [PB12] → [PB23] → [PB45] → [PB78] → ...
+Remove PB5 from front of queue
   ↓
-⚠️ PB5 CANNOT re-enter queue
+PB5 goes to BACK of queue
   ↓
-Binary matching = ONE TIME ONLY per user
+Queue now: [PB12] → [PB23] → [PB45] → [PB78] → ... [PB5]
+  ↓
+✅ PB5 can qualify AGAIN with next 3:3 pair
+  ↓
+Binary matching income = CONTINUOUS (unlimited pairs)
 
 [QUEUE EMPTY]
   ↓
 Payment goes to Admin Wallet
 ```
 
-### How Users Enter the Queue:
+### How Binary Matching Works:
 ```
-User (PB100) Working Towards Qualification:
+User (PB100) Initial Qualification (ONE TIME):
   ↓
-Step 1: Sponsor 1 person (LEFT)
-Step 2: Sponsor 1 person (RIGHT)
+Step 1: Self-sponsor 1 person (LEFT)
+Step 2: Self-sponsor 1 person (RIGHT)
   ↓
-Now has: 1L + 1R self-sponsored ✅
+✅ QUALIFIED - Enter Global FIFO Queue
   ↓
-Build teams (spill over helps):
-  - Left team grows to 3 people
-  - Right team grows to 3 people
+Now in queue permanently, waiting for turn
+
+Building First 3:3 Pair:
   ↓
-BOTH TEAMS COMPLETE:
-  ✅ 1 Left self-sponsored
-  ✅ 1 Right self-sponsored
-  ✅ 3-person left team MATCHED ✅
-  ✅ 3-person right team MATCHED ✅
+Team grows (spill over helps):
+  - Left team: 3 people complete
+  - Right team: 3 people complete
   ↓
-3:3 TEAM MATCHING COMPLETE!
+3:3 PAIR MATCHED!
   ↓
-ONLY NOW → AUTOMATICALLY ADDED TO GLOBAL QUEUE
+Next new user pays PB100 ₹1,000
   ↓
-Queue position: FIFO (based on 3:3 completion time)
+PB100 moves to BACK of queue
+
+Building Second 3:3 Pair:
   ↓
-Wait for next new user activation
+Continue building teams
+  - Left grows another 3
+  - Right grows another 3
   ↓
-Receive ₹1,000 when your turn comes
+Another 3:3 PAIR MATCHED!
+  ↓
+When PB100's turn comes again → Earn another ₹1,000
+  ↓
+Cycles continue - UNLIMITED income potential!
 ```
 
 ### Binary Tree Structure (Individual User):
@@ -215,9 +230,10 @@ Receive ₹1,000 when your turn comes
 Total: 3 Left + 3 Right = QUALIFIED ✅
 Enter GLOBAL FIFO QUEUE → Wait for ₹1,000
 
-⚠️ ONE TIME QUALIFICATION ONLY
-After receiving ₹1,000 → REMOVED from queue permanently
-Cannot re-qualify for binary matching again
+✅ CONTINUOUS INCOME
+After receiving ₹1,000 → Goes to back of queue
+Can build another 3:3 pair → Re-enter queue → Earn ₹1,000 again
+Unlimited binary income potential
 ```
 
 ### Example Scenario:
@@ -228,21 +244,21 @@ Initial Queue: [PB5, PB12, PB23]
 
 New User PB150 activates:
   → Pays ₹1,000 to PB5 (first in queue)
-  → PB5 removed PERMANENTLY ✅
-  → Queue: [PB12, PB23]
+  → PB5 moves to back ✅
+  → Queue: [PB12, PB23, PB5]
 
 New User PB151 activates:
   → Pays ₹1,000 to PB12 (first in queue)
-  → PB12 removed PERMANENTLY ✅
-  → Queue: [PB23]
+  → PB12 moves to back ✅
+  → Queue: [PB23, PB5, PB12]
 
 New User PB152 activates:
   → Pays ₹1,000 to PB23 (first in queue)
-  → PB23 removed PERMANENTLY ✅
-  → Queue: []
+  → PB23 moves to back ✅
+  → Queue: [PB5, PB12, PB23]
 
-⚠️ Each user gets paid ONCE only!
-This ensures ONE TIME binary income per qualification!
+✅ Users cycle through queue continuously!
+Each 3:3 pair = ₹1,000 income (unlimited)
 ```
 
 ---
