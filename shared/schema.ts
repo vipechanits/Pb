@@ -184,12 +184,12 @@ export const systemConfig = pgTable("system_config", {
   // Payment amounts (in INR)
   sponsorPaymentAmount: decimal("sponsor_payment_amount", { precision: 10, scale: 2 }).notNull().default('1000'),
   binaryMatchPaymentAmount: decimal("binary_match_payment_amount", { precision: 10, scale: 2 }).notNull().default('1000'),
-  creatorFeeAmount: decimal("creator_fee_amount", { precision: 10, scale: 2 }).notNull().default('625'),
-  matrixLevel1Amount: decimal("matrix_level_1_amount", { precision: 10, scale: 2 }).notNull().default('625'),
-  matrixLevel2Amount: decimal("matrix_level_2_amount", { precision: 10, scale: 2 }).notNull().default('625'),
-  matrixLevel3Amount: decimal("matrix_level_3_amount", { precision: 10, scale: 2 }).notNull().default('625'),
-  matrixLevel4Amount: decimal("matrix_level_4_amount", { precision: 10, scale: 2 }).notNull().default('625'),
-  matrixLevel5Amount: decimal("matrix_level_5_amount", { precision: 10, scale: 2 }).notNull().default('625'),
+  creatorFeeAmount: decimal("creator_fee_amount", { precision: 10, scale: 2 }).notNull().default('500'),
+  matrixLevel1Amount: decimal("matrix_level_1_amount", { precision: 10, scale: 2 }).notNull().default('500'),
+  matrixLevel2Amount: decimal("matrix_level_2_amount", { precision: 10, scale: 2 }).notNull().default('500'),
+  matrixLevel3Amount: decimal("matrix_level_3_amount", { precision: 10, scale: 2 }).notNull().default('500'),
+  matrixLevel4Amount: decimal("matrix_level_4_amount", { precision: 10, scale: 2 }).notNull().default('500'),
+  matrixLevel5Amount: decimal("matrix_level_5_amount", { precision: 10, scale: 2 }).notNull().default('500'),
   
   // Binary matching configuration
   binaryLeftQualification: integer("binary_left_qualification").notNull().default(1),
