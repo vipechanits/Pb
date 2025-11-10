@@ -55,6 +55,23 @@ export interface IStorage {
 }
 
 export class DbStorage implements IStorage {
+  // Initialize system configuration (ensure singleton row exists)
+  async initializeSystemConfig(): Promise<void> {
+    try {
+      const existing = await db.select().from(systemConfig).limit(1);
+      if (!existing || existing.length === 0) {
+        console.log('[INIT] Creating default system configuration...');
+        await db.insert(systemConfig).values({
+          id: 'default-config-singleton',
+        });
+        console.log('[INIT] System configuration initialized successfully');
+      }
+    } catch (error) {
+      console.error('[INIT] Error initializing system configuration:', error);
+      // Don't throw - allow server to start even if config init fails
+    }
+  }
+
   // User methods
   async getUserById(id: string): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.id, id)).limit(1);

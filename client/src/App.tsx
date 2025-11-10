@@ -26,6 +26,7 @@ import AdminDashboard from '@/pages/admin-dashboard';
 import AdminPayments from '@/pages/admin-payments';
 import AdminSettings from '@/pages/admin-settings';
 import AdminUsers from '@/pages/admin-users';
+import AdminConfig from '@/pages/admin-config';
 import { useEffect } from 'react';
 function DashboardLayout({ children, isAdmin = false }: { children: React.ReactNode; isAdmin?: boolean }) {
   const style = {
@@ -194,6 +195,16 @@ function Router() {
           <ProtectedRoute requireAdmin={true}>
             <DashboardLayout isAdmin={true}>
               <AdminSettings />
+            </DashboardLayout>
+          </ProtectedRoute>
+        )}
+      </Route>
+      
+      <Route path="/admin/config">
+        {() => (
+          <ProtectedRoute requireAdmin={true}>
+            <DashboardLayout isAdmin={true}>
+              <AdminConfig />
             </DashboardLayout>
           </ProtectedRoute>
         )}

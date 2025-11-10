@@ -7,6 +7,7 @@ import { neonConfig } from "@neondatabase/serverless";
 import ws from "ws";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { storage } from "./storage";
 import "./types";
 
 // Configure WebSocket for Neon
@@ -96,6 +97,9 @@ app.use((req, res, next) => {
 
 (async () => {
   const server = await registerRoutes(app);
+
+  // Initialize system configuration (ensure singleton row exists)
+  await storage.initializeSystemConfig();
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

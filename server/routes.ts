@@ -380,6 +380,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "User ID not assigned" });
       }
       
+      // Check profile completion before allowing activation
+      const isProfileComplete = await storage.checkProfileComplete(user.userId);
+      if (!isProfileComplete) {
+        return res.status(400).json({ 
+          error: "Profile incomplete. Please update your profile with name, mobile, UPI/bank details, and security code before requesting activation." 
+        });
+      }
+      
       // Create activation record and payment slots transactionally
       // Database unique constraint on payerWallet prevents duplicates at DB level
       // Using crypto.randomUUID() for collision-safe ID generation
@@ -655,6 +663,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error rejecting payment:", error);
       res.status(500).json({ error: "Failed to reject payment" });
+    }
+  });
+
+  // Admin: Get system configuration
+  app.get("/api/admin/config", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Forbidden - Admin access required" });
+      }
+
+      const config = await storage.getSystemConfig();
+      res.json(config);
+    } catch (error) {
+      console.error("Error fetching system config:", error);
+      res.status(500).json({ error: "Failed to fetch system configuration" });
+    }
+  });
+
+  // Admin: Update system configuration
+  app.patch("/api/admin/config", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Forbidden - Admin access required" });
+      }
+
+      // Prevent ID changes via API
+      const { id, ...configData } = req.body;
+      
+      const config = await storage.updateSystemConfig(configData);
+      res.json(config);
+    } catch (error) {
+      console.error("Error updating system config:", error);
+      res.status(500).json({ error: "Failed to update system configuration" });
+    }
+  });
+
+  // Admin: Get all confirmed payments
+  app.get("/api/admin/payments/confirmed", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Forbidden - Admin access required" });
+      }
+
+      const payments = await storage.getAllConfirmedPayments();
+      res.json(payments);
+    } catch (error) {
+      console.error("Error fetching confirmed payments:", error);
+      res.status(500).json({ error: "Failed to fetch confirmed payments" });
     }
   });
 
