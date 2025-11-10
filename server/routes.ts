@@ -68,6 +68,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const userId = `PB${nextUserNumber}`;
       
+      // Auto-assign binary leg if sponsor provided but leg not specified
+      let assignedBinaryLeg = binaryLeg;
+      if (sponsorId && !binaryLeg) {
+        assignedBinaryLeg = await storage.determineBestLeg(sponsorId);
+        console.log(`[SIGNUP] Auto-assigned ${userId} to ${assignedBinaryLeg} leg under sponsor ${sponsorId}`);
+      }
+      
       // Create user
       const user = await storage.createUser({
         email,
@@ -75,7 +82,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: 'user',
         userId,
         sponsorId: sponsorId || null,
-        binaryLeg: binaryLeg || null,
+        binaryLeg: assignedBinaryLeg || null,
         isActivated: false,
       });
       

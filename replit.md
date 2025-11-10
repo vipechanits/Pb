@@ -41,6 +41,7 @@ Preferred communication style: Simple, everyday language.
 - **Session Management**: Express sessions with PostgreSQL store.
 - **Role Detection**: Admin/user roles stored in database.
 - **User IDs**: Auto-generated sequential IDs (PB10000+), admin is PB0.
+- **Binary Leg Auto-Assignment**: If user signs up with a sponsor but no leg specified, automatically assigns to the leg with fewer members for balanced tree growth.
 - **Logout**: Destroys session and redirects to login.
 
 ### Payment Processing

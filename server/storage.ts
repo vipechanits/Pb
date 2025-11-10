@@ -22,6 +22,7 @@ export interface IStorage {
   createUser(user: Partial<InsertUser>): Promise<User>;
   updateUserProfile(id: string, profile: UpdateProfile): Promise<User | undefined>;
   getLastUser(): Promise<User | undefined>;
+  determineBestLeg(sponsorUserId: string): Promise<'left' | 'right'>;
   
   // Activation methods
   // REMOVED: createActivation() - use createActivationWithPayments() to ensure transactional safety
@@ -82,6 +83,15 @@ export class DbStorage implements IStorage {
       .orderBy(desc(users.createdAt))
       .limit(1);
     return result[0];
+  }
+
+  async determineBestLeg(sponsorUserId: string): Promise<'left' | 'right'> {
+    const sponsor = await this.getUserByUserId(sponsorUserId);
+    if (!sponsor) {
+      return 'left';
+    }
+    
+    return sponsor.leftLegCount <= sponsor.rightLegCount ? 'left' : 'right';
   }
 
   // REMOVED: createActivation() - use createActivationWithPayments() to ensure data consistency
