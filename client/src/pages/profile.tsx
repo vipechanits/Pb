@@ -13,6 +13,7 @@ import { CheckCircle, QrCode } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ReferralLinks } from '@/components/referral-links';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { apiRequest } from '@/lib/queryClient';
 
 export default function Profile() {
   const { user, refreshUser } = useAuth();
@@ -51,16 +52,7 @@ export default function Profile() {
   const onSubmit = async (data: UpdateProfile) => {
     setLoading(true);
     try {
-      const response = await fetch('/api/profile', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update profile');
-      }
-
+      await apiRequest('PATCH', '/api/profile', data);
       await refreshUser();
       toast({
         title: 'Profile updated',
@@ -79,15 +71,7 @@ export default function Profile() {
 
   const generateQRCode = async () => {
     try {
-      const response = await fetch('/api/profile/generate-qr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to generate QR code');
-      }
-
+      const response = await apiRequest('POST', '/api/profile/generate-qr');
       const data = await response.json();
       setQrCode(data.qrCode);
       setShowQR(true);

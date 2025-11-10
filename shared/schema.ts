@@ -83,12 +83,18 @@ export const insertUserSchema = createInsertSchema(users).omit({
 // Update profile schema
 export const updateProfileSchema = z.object({
   name: z.string().optional(),
-  mobile: z.string().length(10).optional(),
+  mobile: z.string().optional().refine((val) => !val || val.length === 10, {
+    message: "Mobile number must be exactly 10 digits"
+  }),
   upiId: z.string().optional(),
   bankAccountHolder: z.string().optional(),
   bankAccountNumber: z.string().optional(),
-  ifscCode: z.string().length(11).optional(),
-  securityCode: z.string().length(6).optional(),
+  ifscCode: z.string().optional().refine((val) => !val || val.length === 11, {
+    message: "IFSC code must be exactly 11 characters"
+  }),
+  securityCode: z.string().optional().refine((val) => !val || val.length === 6, {
+    message: "Security code must be exactly 6 digits"
+  }),
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
