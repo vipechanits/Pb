@@ -8,6 +8,20 @@ import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { Settings, Save, Loader2 } from 'lucide-react';
 
+type UpiMethod = {
+  upiId: string;
+  mobile: string;
+  name: string;
+};
+
+type BankMethod = {
+  accountHolder: string;
+  accountNumber: string;
+  ifscCode: string;
+  mobile: string;
+  bankName: string;
+};
+
 type SystemConfig = {
   id: string;
   sponsorPaymentAmount: string;
@@ -22,8 +36,8 @@ type SystemConfig = {
   binaryRightQualification: number;
   binaryMatchingRatioLeft: number;
   binaryMatchingRatioRight: number;
-  adminUpiId: string | null;
-  adminUpiName: string | null;
+  adminUpiMethods: string | null;
+  adminBankMethods: string | null;
   updatedAt: string;
 };
 
@@ -237,42 +251,166 @@ export default function AdminConfig() {
           </CardContent>
         </Card>
 
-        {/* Admin UPI Configuration */}
-        <Card>
+        {/* Admin UPI Methods */}
+        <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle>Admin UPI Details</CardTitle>
+            <CardTitle>Admin UPI Payment Methods (Up to 3)</CardTitle>
             <CardDescription>
-              Configure admin UPI for QR code generation
+              Configure UPI IDs for receiving admin payments (Creator Fee, Binary Match)
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="adminUpiId">Admin UPI ID</Label>
-              <Input
-                id="adminUpiId"
-                type="text"
-                placeholder="admin@upi"
-                value={getValue('adminUpiId') || ''}
-                onChange={(e) => handleChange('adminUpiId', e.target.value)}
-                data-testid="input-admin-upi-id"
-              />
-            </div>
+            {[0, 1, 2].map((index) => {
+              const upiMethods = config?.adminUpiMethods ? JSON.parse(config.adminUpiMethods) : [];
+              const method = upiMethods[index] || { upiId: '', mobile: '', name: '' };
+              return (
+                <div key={index} className="grid gap-4 md:grid-cols-3 p-4 border rounded-md">
+                  <div className="space-y-2">
+                    <Label htmlFor={`upi-id-${index}`}>UPI ID {index + 1}</Label>
+                    <Input
+                      id={`upi-id-${index}`}
+                      type="text"
+                      placeholder="user@upi"
+                      value={method.upiId}
+                      onChange={(e) => {
+                        const updated = [...upiMethods];
+                        updated[index] = { ...method, upiId: e.target.value };
+                        handleChange('adminUpiMethods', JSON.stringify(updated.filter(m => m.upiId)));
+                      }}
+                      data-testid={`input-upi-id-${index}`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`upi-mobile-${index}`}>Mobile Number</Label>
+                    <Input
+                      id={`upi-mobile-${index}`}
+                      type="text"
+                      placeholder="9876543210"
+                      maxLength={10}
+                      value={method.mobile}
+                      onChange={(e) => {
+                        const updated = [...upiMethods];
+                        updated[index] = { ...method, mobile: e.target.value };
+                        handleChange('adminUpiMethods', JSON.stringify(updated.filter(m => m.upiId)));
+                      }}
+                      data-testid={`input-upi-mobile-${index}`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`upi-name-${index}`}>Account Name</Label>
+                    <Input
+                      id={`upi-name-${index}`}
+                      type="text"
+                      placeholder="PAYBACK247"
+                      value={method.name}
+                      onChange={(e) => {
+                        const updated = [...upiMethods];
+                        updated[index] = { ...method, name: e.target.value };
+                        handleChange('adminUpiMethods', JSON.stringify(updated.filter(m => m.upiId)));
+                      }}
+                      data-testid={`input-upi-name-${index}`}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
 
-            <div className="space-y-2">
-              <Label htmlFor="adminUpiName">Admin UPI Name</Label>
-              <Input
-                id="adminUpiName"
-                type="text"
-                placeholder="PAYBACK247"
-                value={getValue('adminUpiName') || ''}
-                onChange={(e) => handleChange('adminUpiName', e.target.value)}
-                data-testid="input-admin-upi-name"
-              />
-            </div>
-
-            <p className="text-xs text-muted-foreground">
-              These details will be used to generate QR codes for payments going to admin
-            </p>
+        {/* Admin Bank Methods */}
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle>Admin Bank Account Methods (Up to 3)</CardTitle>
+            <CardDescription>
+              Configure bank accounts for receiving admin payments (Creator Fee, Binary Match)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {[0, 1, 2].map((index) => {
+              const bankMethods = config?.adminBankMethods ? JSON.parse(config.adminBankMethods) : [];
+              const method = bankMethods[index] || { accountHolder: '', accountNumber: '', ifscCode: '', mobile: '', bankName: '' };
+              return (
+                <div key={index} className="grid gap-4 md:grid-cols-5 p-4 border rounded-md">
+                  <div className="space-y-2">
+                    <Label htmlFor={`bank-holder-${index}`}>Account Holder</Label>
+                    <Input
+                      id={`bank-holder-${index}`}
+                      type="text"
+                      placeholder="PAYBACK247"
+                      value={method.accountHolder}
+                      onChange={(e) => {
+                        const updated = [...bankMethods];
+                        updated[index] = { ...method, accountHolder: e.target.value };
+                        handleChange('adminBankMethods', JSON.stringify(updated.filter(m => m.accountNumber)));
+                      }}
+                      data-testid={`input-bank-holder-${index}`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`bank-number-${index}`}>Account Number</Label>
+                    <Input
+                      id={`bank-number-${index}`}
+                      type="text"
+                      placeholder="1234567890"
+                      value={method.accountNumber}
+                      onChange={(e) => {
+                        const updated = [...bankMethods];
+                        updated[index] = { ...method, accountNumber: e.target.value };
+                        handleChange('adminBankMethods', JSON.stringify(updated.filter(m => m.accountNumber)));
+                      }}
+                      data-testid={`input-bank-number-${index}`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`bank-ifsc-${index}`}>IFSC Code</Label>
+                    <Input
+                      id={`bank-ifsc-${index}`}
+                      type="text"
+                      placeholder="SBIN0001234"
+                      maxLength={11}
+                      value={method.ifscCode}
+                      onChange={(e) => {
+                        const updated = [...bankMethods];
+                        updated[index] = { ...method, ifscCode: e.target.value.toUpperCase() };
+                        handleChange('adminBankMethods', JSON.stringify(updated.filter(m => m.accountNumber)));
+                      }}
+                      data-testid={`input-bank-ifsc-${index}`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`bank-mobile-${index}`}>Mobile Number</Label>
+                    <Input
+                      id={`bank-mobile-${index}`}
+                      type="text"
+                      placeholder="9876543210"
+                      maxLength={10}
+                      value={method.mobile}
+                      onChange={(e) => {
+                        const updated = [...bankMethods];
+                        updated[index] = { ...method, mobile: e.target.value };
+                        handleChange('adminBankMethods', JSON.stringify(updated.filter(m => m.accountNumber)));
+                      }}
+                      data-testid={`input-bank-mobile-${index}`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`bank-name-${index}`}>Bank Name</Label>
+                    <Input
+                      id={`bank-name-${index}`}
+                      type="text"
+                      placeholder="State Bank of India"
+                      value={method.bankName}
+                      onChange={(e) => {
+                        const updated = [...bankMethods];
+                        updated[index] = { ...method, bankName: e.target.value };
+                        handleChange('adminBankMethods', JSON.stringify(updated.filter(m => m.accountNumber)));
+                      }}
+                      data-testid={`input-bank-name-${index}`}
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       </div>
