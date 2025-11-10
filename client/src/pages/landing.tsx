@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Shield, Globe, TrendingUp, Wallet, Users, GitBranch, Grid3x3 } from 'lucide-react';
-import logoUrl from '@assets/Generated Image October 16, 2025 - 6_58AM (1)_1762653844897.png';
+import logoUrl from '@assets/generated_images/PAYBACK247_transparent_platform_logo_fa9e977f.png';
 
 export default function Landing() {
   const [, setLocation] = useLocation();
@@ -78,7 +78,7 @@ export default function Landing() {
       <header className="border-b border-border sticky top-0 bg-background/95 backdrop-blur z-50">
         <div className="container mx-auto px-4 py-3 md:py-4 flex items-center justify-between">
           <div className="flex items-center gap-2 md:gap-3">
-            <img src={logoUrl} alt="PAYBACK247" className="w-12 h-12 md:w-20 md:h-20" />
+            <img src={logoUrl} alt="PAYBACK247" className="w-16 h-16 md:w-24 md:h-24" />
             <span className="font-bold text-lg md:text-2xl">PAYBACK247</span>
           </div>
           <Button onClick={() => setLocation('/auth/signup')} data-testid="button-get-started" size="sm" className="md:h-10">

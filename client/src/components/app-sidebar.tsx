@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth-context';
-import logoUrl from '@assets/Generated Image October 16, 2025 - 6_58AM (1)_1762653844897.png';
+import logoUrl from '@assets/generated_images/PAYBACK247_transparent_platform_logo_fa9e977f.png';
 
 interface AppSidebarProps {
   isAdmin?: boolean;
@@ -130,7 +130,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="space-y-2">
           <div className="flex items-center justify-center">
-            <img src={logoUrl} alt="PAYBACK247" className="w-40 h-40" />
+            <img src={logoUrl} alt="PAYBACK247" className="w-32 h-32" />
           </div>
           {user && (
             <div className="pt-2 border-t border-sidebar-border">

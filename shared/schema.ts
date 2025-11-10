@@ -204,59 +204,20 @@ export const systemConfig = pgTable("system_config", {
   binaryMatchingRatioLeft: integer("binary_matching_ratio_left").notNull().default(3),
   binaryMatchingRatioRight: integer("binary_matching_ratio_right").notNull().default(3),
   
-  // Admin payment methods (stored as JSON arrays)
-  // Format: [{ upiId: string, mobile: string, name: string }, ...]
-  adminUpiMethods: text("admin_upi_methods"),
-  // Format: [{ accountHolder: string, accountNumber: string, ifscCode: string, mobile: string, bankName: string }, ...]
-  adminBankMethods: text("admin_bank_methods"),
+  // Admin payment methods (single values)
+  adminUpiId: text("admin_upi_id"),
+  adminBankAccount: text("admin_bank_account"),
+  adminIfscCode: text("admin_ifsc_code"),
+  adminMobile: text("admin_mobile"),
+  adminQrCodeUrl: text("admin_qr_code_url"),
   
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
-
-// Validation schemas for admin payment methods
-export const upiMethodSchema = z.object({
-  upiId: z.string().min(1, "UPI ID is required"),
-  mobile: z.string().length(10, "Mobile number must be 10 digits"),
-  name: z.string().min(1, "Account name is required"),
-});
-
-export const bankMethodSchema = z.object({
-  accountHolder: z.string().min(1, "Account holder is required"),
-  accountNumber: z.string().min(1, "Account number is required"),
-  ifscCode: z.string().length(11, "IFSC code must be 11 characters"),
-  mobile: z.string().length(10, "Mobile number must be 10 digits"),
-  bankName: z.string().min(1, "Bank name is required"),
 });
 
 export const updateSystemConfigSchema = createInsertSchema(systemConfig).omit({
   id: true,
   updatedAt: true,
-}).extend({
-  adminUpiMethods: z.string().optional().refine((val) => {
-    if (!val) return true;
-    try {
-      const parsed = JSON.parse(val);
-      if (!Array.isArray(parsed)) return false;
-      if (parsed.length > 3) return false;
-      return parsed.every((method) => upiMethodSchema.safeParse(method).success);
-    } catch {
-      return false;
-    }
-  }, { message: "Invalid UPI methods format or too many entries (max 3)" }),
-  adminBankMethods: z.string().optional().refine((val) => {
-    if (!val) return true;
-    try {
-      const parsed = JSON.parse(val);
-      if (!Array.isArray(parsed)) return false;
-      if (parsed.length > 3) return false;
-      return parsed.every((method) => bankMethodSchema.safeParse(method).success);
-    } catch {
-      return false;
-    }
-  }, { message: "Invalid bank methods format or too many entries (max 3)" }),
 });
 
-export type UpiMethod = z.infer<typeof upiMethodSchema>;
-export type BankMethod = z.infer<typeof bankMethodSchema>;
 export type SystemConfig = typeof systemConfig.$inferSelect;
 export type UpdateSystemConfig = z.infer<typeof updateSystemConfigSchema>;

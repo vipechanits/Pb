@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,21 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { Settings, Save, Loader2 } from 'lucide-react';
-
-type UpiMethod = {
-  upiId: string;
-  mobile: string;
-  name: string;
-};
-
-type BankMethod = {
-  accountHolder: string;
-  accountNumber: string;
-  ifscCode: string;
-  mobile: string;
-  bankName: string;
-};
+import { Settings, Save, Loader2, Upload, X } from 'lucide-react';
 
 type SystemConfig = {
   id: string;
@@ -36,13 +22,18 @@ type SystemConfig = {
   binaryRightQualification: number;
   binaryMatchingRatioLeft: number;
   binaryMatchingRatioRight: number;
-  adminUpiMethods: string | null;
-  adminBankMethods: string | null;
+  adminUpiId: string | null;
+  adminBankAccount: string | null;
+  adminIfscCode: string | null;
+  adminMobile: string | null;
+  adminQrCodeUrl: string | null;
   updatedAt: string;
 };
 
 export default function AdminConfig() {
   const { toast } = useToast();
+  const [qrFile, setQrFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   // Fetch system configuration
   const { data: config, isLoading } = useQuery<SystemConfig>({
@@ -51,52 +42,6 @@ export default function AdminConfig() {
 
   // Local state for form
   const [formData, setFormData] = useState<Partial<SystemConfig>>({});
-  
-  // Local state for payment methods
-  const [upiMethods, setUpiMethods] = useState<UpiMethod[]>([
-    { upiId: '', mobile: '', name: '' },
-    { upiId: '', mobile: '', name: '' },
-    { upiId: '', mobile: '', name: '' },
-  ]);
-  
-  const [bankMethods, setBankMethods] = useState<BankMethod[]>([
-    { accountHolder: '', accountNumber: '', ifscCode: '', mobile: '', bankName: '' },
-    { accountHolder: '', accountNumber: '', ifscCode: '', mobile: '', bankName: '' },
-    { accountHolder: '', accountNumber: '', ifscCode: '', mobile: '', bankName: '' },
-  ]);
-  
-  // Initialize payment methods from config
-  useEffect(() => {
-    if (config?.adminUpiMethods) {
-      try {
-        const parsed = JSON.parse(config.adminUpiMethods);
-        if (Array.isArray(parsed)) {
-          setUpiMethods([
-            parsed[0] || { upiId: '', mobile: '', name: '' },
-            parsed[1] || { upiId: '', mobile: '', name: '' },
-            parsed[2] || { upiId: '', mobile: '', name: '' },
-          ]);
-        }
-      } catch (e) {
-        console.error('Failed to parse UPI methods:', e);
-      }
-    }
-    
-    if (config?.adminBankMethods) {
-      try {
-        const parsed = JSON.parse(config.adminBankMethods);
-        if (Array.isArray(parsed)) {
-          setBankMethods([
-            parsed[0] || { accountHolder: '', accountNumber: '', ifscCode: '', mobile: '', bankName: '' },
-            parsed[1] || { accountHolder: '', accountNumber: '', ifscCode: '', mobile: '', bankName: '' },
-            parsed[2] || { accountHolder: '', accountNumber: '', ifscCode: '', mobile: '', bankName: '' },
-          ]);
-        }
-      } catch (e) {
-        console.error('Failed to parse bank methods:', e);
-      }
-    }
-  }, [config]);
 
   // Update mutation
   const updateMutation = useMutation({
@@ -110,6 +55,7 @@ export default function AdminConfig() {
         description: 'System configuration has been saved successfully',
       });
       setFormData({});
+      setQrFile(null);
     },
     onError: () => {
       toast({
@@ -129,23 +75,63 @@ export default function AdminConfig() {
     setFormData(prev => ({ ...prev, [key]: value }));
   };
 
-  const handleSave = () => {
-    // Filter out empty payment methods - require ALL fields for each method
-    const validUpiMethods = upiMethods.filter(m => 
-      m.upiId && m.mobile && m.name
-    );
-    const validBankMethods = bankMethods.filter(m => 
-      m.accountNumber && m.ifscCode && m.accountHolder && m.mobile && m.bankName
-    );
+  const handleSave = async () => {
+    setUploading(true);
     
-    const dataToSave = {
-      ...formData,
-      adminUpiMethods: JSON.stringify(validUpiMethods),
-      adminBankMethods: JSON.stringify(validBankMethods),
-    };
-    
-    updateMutation.mutate(dataToSave);
+    try {
+      let qrCodeUrl = getValue('adminQrCodeUrl') as string;
+      
+      // Upload QR code if a new file is selected
+      if (qrFile) {
+        const response = await apiRequest('POST', '/api/objects/upload', {
+          filename: qrFile.name,
+          contentType: qrFile.type,
+        });
+        const uploadResponse = await response.json() as { uploadUrl: string; publicUrl: string };
+
+        // Upload file to presigned URL
+        await fetch(uploadResponse.uploadUrl, {
+          method: 'PUT',
+          body: qrFile,
+          headers: {
+            'Content-Type': qrFile.type,
+          },
+        });
+
+        qrCodeUrl = uploadResponse.publicUrl;
+      }
+
+      const dataToSave = {
+        ...formData,
+        ...(qrCodeUrl && { adminQrCodeUrl: qrCodeUrl }),
+      };
+      
+      updateMutation.mutate(dataToSave);
+    } catch (error) {
+      console.error('Error uploading QR code:', error);
+      toast({
+        title: 'Upload Failed',
+        description: 'Failed to upload QR code. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setUploading(false);
+    }
   };
+
+  const totalActivationFee: number = [
+    getValue('sponsorPaymentAmount'),
+    getValue('binaryMatchPaymentAmount'),
+    getValue('creatorFeeAmount'),
+    getValue('matrixLevel1Amount'),
+    getValue('matrixLevel2Amount'),
+    getValue('matrixLevel3Amount'),
+    getValue('matrixLevel4Amount'),
+    getValue('matrixLevel5Amount'),
+  ].reduce((sum: number, amount: string | number) => {
+    const numValue = typeof amount === 'string' ? parseFloat(amount) : Number(amount);
+    return sum + (numValue || 0);
+  }, 0 as number);
 
   if (isLoading) {
     return (
@@ -163,7 +149,7 @@ export default function AdminConfig() {
           System Configuration
         </h1>
         <p className="text-muted-foreground">
-          Configure payment amounts, binary matching rules, and admin UPI details
+          Configure payment amounts, binary matching rules, and admin payment details
         </p>
       </div>
 
@@ -226,28 +212,26 @@ export default function AdminConfig() {
           <CardContent className="space-y-4">
             {[1, 2, 3, 4, 5].map((level) => (
               <div key={level} className="space-y-2">
-                <Label htmlFor={`matrixLevel${level}Amount`}>
-                  Matrix Level {level} (Slot {level + 2})
-                </Label>
+                <Label htmlFor={`matrixLevel${level}Amount`}>Matrix Level {level} (Slot {level + 2})</Label>
                 <Input
                   id={`matrixLevel${level}Amount`}
                   type="number"
                   step="0.01"
                   value={getValue(`matrixLevel${level}Amount` as keyof SystemConfig)}
                   onChange={(e) => handleChange(`matrixLevel${level}Amount` as keyof SystemConfig, e.target.value)}
-                  data-testid={`input-matrix-level-${level}`}
+                  data-testid={`input-matrix-${level}`}
                 />
               </div>
             ))}
           </CardContent>
         </Card>
 
-        {/* Binary Matching Configuration */}
+        {/* Binary Matching Rules */}
         <Card>
           <CardHeader>
             <CardTitle>Binary Matching Rules</CardTitle>
             <CardDescription>
-              Configure qualification and matching ratio
+              Configure binary tree matching requirements
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -257,9 +241,8 @@ export default function AdminConfig() {
                 <Input
                   id="binaryLeftQualification"
                   type="number"
-                  min="1"
                   value={getValue('binaryLeftQualification')}
-                  onChange={(e) => handleChange('binaryLeftQualification', parseInt(e.target.value))}
+                  onChange={(e) => handleChange('binaryLeftQualification', parseInt(e.target.value) || 0)}
                   data-testid="input-left-qualification"
                 />
               </div>
@@ -269,9 +252,8 @@ export default function AdminConfig() {
                 <Input
                   id="binaryRightQualification"
                   type="number"
-                  min="1"
                   value={getValue('binaryRightQualification')}
-                  onChange={(e) => handleChange('binaryRightQualification', parseInt(e.target.value))}
+                  onChange={(e) => handleChange('binaryRightQualification', parseInt(e.target.value) || 0)}
                   data-testid="input-right-qualification"
                 />
               </div>
@@ -279,239 +261,165 @@ export default function AdminConfig() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="binaryMatchingRatioLeft">Matching Ratio Left</Label>
+                <Label htmlFor="binaryMatchingRatioLeft">Matching Ratio (Left)</Label>
                 <Input
                   id="binaryMatchingRatioLeft"
                   type="number"
-                  min="1"
                   value={getValue('binaryMatchingRatioLeft')}
-                  onChange={(e) => handleChange('binaryMatchingRatioLeft', parseInt(e.target.value))}
+                  onChange={(e) => handleChange('binaryMatchingRatioLeft', parseInt(e.target.value) || 0)}
                   data-testid="input-ratio-left"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="binaryMatchingRatioRight">Matching Ratio Right</Label>
+                <Label htmlFor="binaryMatchingRatioRight">Matching Ratio (Right)</Label>
                 <Input
                   id="binaryMatchingRatioRight"
                   type="number"
-                  min="1"
                   value={getValue('binaryMatchingRatioRight')}
-                  onChange={(e) => handleChange('binaryMatchingRatioRight', parseInt(e.target.value))}
+                  onChange={(e) => handleChange('binaryMatchingRatioRight', parseInt(e.target.value) || 0)}
                   data-testid="input-ratio-right"
                 />
               </div>
             </div>
-
-            <p className="text-xs text-muted-foreground">
-              Qualification: minimum members required on each leg. 
-              Matching Ratio: {getValue('binaryMatchingRatioLeft')}:{getValue('binaryMatchingRatioRight')} 
-              determines how binary matches are calculated.
-            </p>
           </CardContent>
         </Card>
 
-        {/* Admin UPI Methods */}
+        {/* Admin Payment Details */}
         <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle>Admin UPI Payment Methods (Up to 3)</CardTitle>
+            <CardTitle>Admin Payment Details</CardTitle>
             <CardDescription>
-              Configure UPI IDs for receiving admin payments (Creator Fee, Binary Match)
+              Configure admin UPI and bank account for receiving payments
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {[0, 1, 2].map((index) => (
-              <div key={index} className="grid gap-4 md:grid-cols-3 p-4 border rounded-md">
-                <div className="space-y-2">
-                  <Label htmlFor={`upi-id-${index}`}>UPI ID {index + 1}</Label>
-                  <Input
-                    id={`upi-id-${index}`}
-                    type="text"
-                    placeholder="user@upi"
-                    value={upiMethods[index]?.upiId || ''}
-                    onChange={(e) => {
-                      const updated = [...upiMethods];
-                      updated[index] = { ...updated[index], upiId: e.target.value };
-                      setUpiMethods(updated);
-                    }}
-                    data-testid={`input-upi-id-${index}`}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor={`upi-mobile-${index}`}>Mobile Number</Label>
-                  <Input
-                    id={`upi-mobile-${index}`}
-                    type="text"
-                    placeholder="9876543210"
-                    maxLength={10}
-                    value={upiMethods[index]?.mobile || ''}
-                    onChange={(e) => {
-                      const updated = [...upiMethods];
-                      updated[index] = { ...updated[index], mobile: e.target.value };
-                      setUpiMethods(updated);
-                    }}
-                    data-testid={`input-upi-mobile-${index}`}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor={`upi-name-${index}`}>Account Name</Label>
-                  <Input
-                    id={`upi-name-${index}`}
-                    type="text"
-                    placeholder="PAYBACK247"
-                    value={upiMethods[index]?.name || ''}
-                    onChange={(e) => {
-                      const updated = [...upiMethods];
-                      updated[index] = { ...updated[index], name: e.target.value };
-                      setUpiMethods(updated);
-                    }}
-                    data-testid={`input-upi-name-${index}`}
-                  />
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="adminUpiId">UPI ID</Label>
+                <Input
+                  id="adminUpiId"
+                  type="text"
+                  placeholder="example@upi"
+                  value={getValue('adminUpiId')}
+                  onChange={(e) => handleChange('adminUpiId', e.target.value)}
+                  data-testid="input-admin-upi"
+                />
               </div>
-            ))}
-          </CardContent>
-        </Card>
 
-        {/* Admin Bank Methods */}
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle>Admin Bank Account Methods (Up to 3)</CardTitle>
-            <CardDescription>
-              Configure bank accounts for receiving admin payments (Creator Fee, Binary Match)
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {[0, 1, 2].map((index) => (
-              <div key={index} className="grid gap-4 md:grid-cols-5 p-4 border rounded-md">
-                <div className="space-y-2">
-                  <Label htmlFor={`bank-holder-${index}`}>Account Holder</Label>
-                  <Input
-                    id={`bank-holder-${index}`}
-                    type="text"
-                    placeholder="PAYBACK247"
-                    value={bankMethods[index]?.accountHolder || ''}
-                    onChange={(e) => {
-                      const updated = [...bankMethods];
-                      updated[index] = { ...updated[index], accountHolder: e.target.value };
-                      setBankMethods(updated);
-                    }}
-                    data-testid={`input-bank-holder-${index}`}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor={`bank-number-${index}`}>Account Number</Label>
-                  <Input
-                    id={`bank-number-${index}`}
-                    type="text"
-                    placeholder="1234567890"
-                    value={bankMethods[index]?.accountNumber || ''}
-                    onChange={(e) => {
-                      const updated = [...bankMethods];
-                      updated[index] = { ...updated[index], accountNumber: e.target.value };
-                      setBankMethods(updated);
-                    }}
-                    data-testid={`input-bank-number-${index}`}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor={`bank-ifsc-${index}`}>IFSC Code</Label>
-                  <Input
-                    id={`bank-ifsc-${index}`}
-                    type="text"
-                    placeholder="SBIN0001234"
-                    maxLength={11}
-                    value={bankMethods[index]?.ifscCode || ''}
-                    onChange={(e) => {
-                      const updated = [...bankMethods];
-                      updated[index] = { ...updated[index], ifscCode: e.target.value.toUpperCase() };
-                      setBankMethods(updated);
-                    }}
-                    data-testid={`input-bank-ifsc-${index}`}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor={`bank-mobile-${index}`}>Mobile Number</Label>
-                  <Input
-                    id={`bank-mobile-${index}`}
-                    type="text"
-                    placeholder="9876543210"
-                    maxLength={10}
-                    value={bankMethods[index]?.mobile || ''}
-                    onChange={(e) => {
-                      const updated = [...bankMethods];
-                      updated[index] = { ...updated[index], mobile: e.target.value };
-                      setBankMethods(updated);
-                    }}
-                    data-testid={`input-bank-mobile-${index}`}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor={`bank-name-${index}`}>Bank Name</Label>
-                  <Input
-                    id={`bank-name-${index}`}
-                    type="text"
-                    placeholder="State Bank of India"
-                    value={bankMethods[index]?.bankName || ''}
-                    onChange={(e) => {
-                      const updated = [...bankMethods];
-                      updated[index] = { ...updated[index], bankName: e.target.value };
-                      setBankMethods(updated);
-                    }}
-                    data-testid={`input-bank-name-${index}`}
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="adminMobile">Mobile Number</Label>
+                <Input
+                  id="adminMobile"
+                  type="text"
+                  placeholder="10-digit mobile"
+                  maxLength={10}
+                  value={getValue('adminMobile')}
+                  onChange={(e) => handleChange('adminMobile', e.target.value)}
+                  data-testid="input-admin-mobile"
+                />
               </div>
-            ))}
+
+              <div className="space-y-2">
+                <Label htmlFor="adminBankAccount">Bank Account Number</Label>
+                <Input
+                  id="adminBankAccount"
+                  type="text"
+                  placeholder="Account number"
+                  value={getValue('adminBankAccount')}
+                  onChange={(e) => handleChange('adminBankAccount', e.target.value)}
+                  data-testid="input-admin-bank"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="adminIfscCode">IFSC Code</Label>
+                <Input
+                  id="adminIfscCode"
+                  type="text"
+                  placeholder="11-character IFSC"
+                  maxLength={11}
+                  value={getValue('adminIfscCode')}
+                  onChange={(e) => handleChange('adminIfscCode', e.target.value.toUpperCase())}
+                  data-testid="input-admin-ifsc"
+                />
+              </div>
+            </div>
+
+            {/* QR Code Upload */}
+            <div className="space-y-2">
+              <Label htmlFor="adminQrCode">UPI QR Code</Label>
+              <div className="flex gap-4 items-start">
+                <div className="flex-1">
+                  <Input
+                    id="adminQrCode"
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setQrFile(e.target.files?.[0] || null)}
+                    data-testid="input-admin-qr"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Upload UPI QR code image (PNG, JPG)
+                  </p>
+                </div>
+                {qrFile && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setQrFile(null)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              
+              {/* Show current or new QR code */}
+              {(qrFile || getValue('adminQrCodeUrl')) && (
+                <div className="mt-2">
+                  <Label className="text-xs text-muted-foreground">Preview:</Label>
+                  <div className="border rounded-lg p-2 bg-white inline-block mt-1">
+                    <img 
+                      src={qrFile ? URL.createObjectURL(qrFile) : (getValue('adminQrCodeUrl') as string)}
+                      alt="QR Code Preview" 
+                      className="w-32 h-32"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="flex justify-end">
-        <Button 
-          onClick={handleSave} 
-          disabled={updateMutation.isPending || Object.keys(formData).length === 0}
-          data-testid="button-save-config"
-        >
-          {updateMutation.isPending ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Save className="mr-2 h-4 w-4" />
-              Save Configuration
-            </>
-          )}
-        </Button>
-      </div>
-
-      {config && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Current Total Activation Fee</CardTitle>
-            <CardDescription>Sum of all 8 payment slots</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">
-              ₹{(
-                parseFloat(config.sponsorPaymentAmount) +
-                parseFloat(config.binaryMatchPaymentAmount) +
-                parseFloat(config.creatorFeeAmount) +
-                parseFloat(config.matrixLevel1Amount) +
-                parseFloat(config.matrixLevel2Amount) +
-                parseFloat(config.matrixLevel3Amount) +
-                parseFloat(config.matrixLevel4Amount) +
-                parseFloat(config.matrixLevel5Amount)
-              ).toFixed(2)}
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Last updated: {new Date(config.updatedAt).toLocaleString()}
-            </p>
-          </CardContent>
-        </Card>
-      )}
+      {/* Summary and Save Button */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Total Activation Fee</p>
+              <p className="text-2xl font-bold">₹{totalActivationFee.toFixed(2)}</p>
+            </div>
+            <Button 
+              onClick={handleSave} 
+              disabled={updateMutation.isPending || uploading}
+              size="lg"
+              data-testid="button-save-config"
+            >
+              {updateMutation.isPending || uploading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  Save Configuration
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
