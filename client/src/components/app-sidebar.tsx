@@ -129,11 +129,8 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     <Sidebar>
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="space-y-2">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center">
             <img src={logoUrl} alt="PAYBACK247" className="w-20 h-20" />
-            <div>
-              <div className="font-semibold text-lg">PAYBACK247</div>
-            </div>
           </div>
           {user && (
             <div className="pt-2 border-t border-sidebar-border">
