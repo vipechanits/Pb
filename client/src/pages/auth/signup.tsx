@@ -49,7 +49,7 @@ export default function SignupPage() {
 
     setLoading(true);
     try {
-      const user = await signup(email, password, sponsorId || undefined);
+      const user = await signup(email, password, sponsorId || undefined, binaryLeg);
       // Redirect based on role (though new signups are always users, not admins)
       if (user.role === 'admin') {
         setLocation('/admin/dashboard');

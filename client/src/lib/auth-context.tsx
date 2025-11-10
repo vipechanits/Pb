@@ -8,7 +8,7 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<Omit<User, 'password'>>;
   logout: () => Promise<void>;
-  signup: (email: string, password: string, sponsorId?: string) => Promise<Omit<User, 'password'>>;
+  signup: (email: string, password: string, sponsorId?: string, binaryLeg?: string) => Promise<Omit<User, 'password'>>;
   refreshUser: () => Promise<void>;
 }
 
@@ -51,8 +51,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return data.user;
   };
 
-  const signup = async (email: string, password: string, sponsorId?: string) => {
-    const response = await apiRequest('POST', '/api/auth/signup', { email, password, sponsorId });
+  const signup = async (email: string, password: string, sponsorId?: string, binaryLeg?: string) => {
+    const response = await apiRequest('POST', '/api/auth/signup', { email, password, sponsorId, binaryLeg });
     const data = await response.json();
     setUser(data.user);
     toast({
