@@ -24,10 +24,15 @@ Preferred communication style: Simple, everyday language.
 ### Data Storage
 - **Database**: PostgreSQL (Neon serverless).
 - **ORM**: Drizzle ORM for type-safe operations.
-- **Schema**: `users` table for authentication (auto-generated IDs starting from PB10000, admin is PB0), `activations` table for activation lifecycle (UUID-based IDs `ACT-{userId}-{uuid}`, unique `payer_wallet`), and `activation_payments` table for tracking 8 payment slots per activation (status: pending, submitted, confirmed, rejected).
+- **Schema**: 
+  - `users` table: Authentication (auto-generated IDs starting from PB10000, admin is PB0), profile data, personal binary counts (`personalLeftCount`, `personalRightCount`), profile completion flag
+  - `activations` table: Activation lifecycle (UUID-based IDs `ACT-{userId}-{uuid}`, unique `payer_wallet`)
+  - `activation_payments` table: Tracking 8 payment slots per activation (status: pending, submitted, confirmed, rejected)
+  - `system_config` table: Dynamic system configuration (singleton pattern with id='default-config-singleton') for payment amounts, binary matching rules, admin UPI details
 - **Migrations**: Drizzle Kit.
 - **Validation**: Zod schemas for all payment operations.
 - **Transaction Guarantees**: Atomic creation of activations and payments.
+- **Server Initialization**: Auto-creates system configuration singleton on startup if missing.
 
 ### Object Storage
 - **Provider**: Replit Object Storage (Google Cloud Storage-backed).
@@ -46,16 +51,35 @@ Preferred communication style: Simple, everyday language.
 
 ### Payment Processing
 - **8-Payment Activation System**: Each user activation requires 8 payments: Direct Sponsor (Slot 0), Binary Match (Slot 1), Creator Fee (Slot 2), Matrix Levels 1-5 (Slots 3-7).
+- **Dynamic Configuration**: Payment amounts, binary matching qualification (left/right counts), and matching ratio are admin-configurable via system_config table (default: ₹1000 sponsor, ₹1000 binary match, ₹625 per matrix level, 1:1 qualification, 3:3 ratio).
 - **Admin Fallback**: Payments automatically route to admin if eligible receiver is unavailable.
 - **Payment Mode**: Manual INR payments via UPI (Google Pay, Paytm, PhonePe) with UTR/Transaction ID and optional proof upload.
 - **Payment Flow**: User submits UTR/proof, receiver confirms/rejects (with reason), user can resubmit indefinitely if rejected.
 - **Payment Status Tracking**: Pending, Submitted, Confirmed, Rejected.
 - **Security**: Strict authorization for submitting, confirming, and viewing payments.
+- **Profile Completion Enforcement**: Users must complete name, mobile, payment details (UPI or bank), and security code before requesting activation.
 
 ### Key Application Pages
+
+#### User Pages
 - **Activation Page (`/user/activation`)**: Guides users through the 8-payment process with a summary dashboard, checklist, and submission dialog, including QR code generation for UPI payments.
 - **Confirmation Page (`/user/confirmation`)**: Displays payments pending user confirmation.
-- **Admin Payments Page (`/admin/payments`)**: Provides an admin approval queue for offline payment proofs.
+- **Profile Page (`/user/profile`)**: User profile management with completion enforcement before activation.
+
+#### Admin Pages
+- **Admin Dashboard (`/admin`)**: Overview of system metrics and quick access to admin functions.
+- **Payment Confirmations (`/admin/payments`)**: Admin approval queue for offline payment proofs with confirm/reject actions.
+- **Payments Report (`/admin/payments-report`)**: Comprehensive confirmed payments report with:
+  - Summary cards: Total payments count, total amount (INR), unique payers count
+  - Detailed table: Date, payer (ID + name), receiver (ID + name), slot type, amount, UTR/Transaction ID, submission count, proof link, notes
+  - Slot type labels: Direct Sponsor, Binary Match, Creator Fee, Matrix Levels 1-5
+  - Export CSV placeholder for future implementation
+- **System Configuration (`/admin/config`)**: Dynamic configuration page for:
+  - Payment amounts (all 8 slots individually configurable)
+  - Binary matching rules (left/right qualification counts, matching ratio)
+  - Admin UPI details (for QR code generation)
+  - Real-time total activation fee calculation
+- **User Management (`/admin/users`)**: User administration and management.
 
 ## External Dependencies
 
