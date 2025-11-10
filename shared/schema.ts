@@ -204,9 +204,11 @@ export const systemConfig = pgTable("system_config", {
   binaryMatchingRatioLeft: integer("binary_matching_ratio_left").notNull().default(3),
   binaryMatchingRatioRight: integer("binary_matching_ratio_right").notNull().default(3),
   
-  // Admin UPI for QR code generation
-  adminUpiId: text("admin_upi_id"),
-  adminUpiName: text("admin_upi_name"),
+  // Admin payment methods (stored as JSON arrays)
+  // Format: [{ upiId: string, mobile: string, name: string }, ...]
+  adminUpiMethods: text("admin_upi_methods"),
+  // Format: [{ accountHolder: string, accountNumber: string, ifscCode: string, mobile: string, bankName: string }, ...]
+  adminBankMethods: text("admin_bank_methods"),
   
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
