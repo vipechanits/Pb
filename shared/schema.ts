@@ -52,8 +52,14 @@ export const users = pgTable("users", {
   sponsorId: varchar("sponsor_id", { length: 20 }), // PB ID of sponsor
   binaryLeg: binaryLegEnum("binary_leg"), // Which leg (left/right) user was placed on
   
+  // Network statistics (updated when downline members activate)
+  leftLegCount: integer("left_leg_count").notNull().default(0),
+  rightLegCount: integer("right_leg_count").notNull().default(0),
+  totalReferrals: integer("total_referrals").notNull().default(0),
+  
   // Account status
   isActivated: boolean("is_activated").notNull().default(false),
+  activatedAt: timestamp("activated_at"),
   
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

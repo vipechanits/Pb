@@ -266,12 +266,44 @@ export class DbStorage implements IStorage {
             .where(eq(activations.id, activationId));
           
           // Activate user - this makes their referral links visible
+          const now = new Date();
           await tx.update(users)
             .set({ 
               isActivated: true,
-              updatedAt: new Date()
+              activatedAt: now,
+              updatedAt: now
             })
             .where(eq(users.userId, payerUserId));
+          
+          // Update sponsor's network statistics
+          const activatedUser = await tx.select()
+            .from(users)
+            .where(eq(users.userId, payerUserId))
+            .limit(1);
+          
+          if (activatedUser.length > 0 && activatedUser[0].sponsorId) {
+            const sponsor = activatedUser[0];
+            const sponsorId = sponsor.sponsorId;
+            const binaryLeg = sponsor.binaryLeg;
+            
+            // Increment sponsor's referral count and leg count
+            const updateData: any = {
+              totalReferrals: sql`${users.totalReferrals} + 1`,
+              updatedAt: now
+            };
+            
+            if (binaryLeg === 'left') {
+              updateData.leftLegCount = sql`${users.leftLegCount} + 1`;
+            } else if (binaryLeg === 'right') {
+              updateData.rightLegCount = sql`${users.rightLegCount} + 1`;
+            }
+            
+            await tx.update(users)
+              .set(updateData)
+              .where(eq(users.userId, sponsorId));
+            
+            console.log(`[ACTIVATION] Updated sponsor ${sponsorId} stats: +1 to ${binaryLeg} leg`);
+          }
           
           console.log(`[ACTIVATION] User ${payerUserId} successfully activated!`);
         }
