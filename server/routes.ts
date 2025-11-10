@@ -34,10 +34,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Signup
   app.post("/api/auth/signup", async (req, res) => {
     try {
-      const { email, password, sponsorId } = req.body;
+      const { email, password, sponsorId, binaryLeg } = req.body;
       
       if (!email || !password) {
         return res.status(400).json({ error: "Email and password are required" });
+      }
+      
+      // Validate binaryLeg if provided
+      if (binaryLeg && binaryLeg !== 'left' && binaryLeg !== 'right') {
+        return res.status(400).json({ error: "Binary leg must be 'left' or 'right'" });
       }
       
       // Check if user already exists
@@ -70,6 +75,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: 'user',
         userId,
         sponsorId: sponsorId || null,
+        binaryLeg: binaryLeg || null,
         isActivated: false,
       });
       

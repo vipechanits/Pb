@@ -11,7 +11,7 @@ import {
   activationPayments
 } from "@shared/schema";
 import { SLOT_TO_PAYMENT_TYPE, PAYMENT_TYPE_AMOUNTS } from "@shared/constants";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { db } from "./db";
 
 export interface IStorage {
@@ -246,27 +246,50 @@ export class DbStorage implements IStorage {
     try {
       // Use a transaction to ensure atomicity
       await db.transaction(async (tx) => {
-        // Get all 8 payments for this activation with FOR UPDATE lock
+        // Get all 8 payments for this activation with FOR UPDATE lock to prevent concurrent runs
         const payments = await tx.select()
           .from(activationPayments)
-          .where(eq(activationPayments.activationId, activationId));
+          .where(eq(activationPayments.activationId, activationId))
+          .for('update');
         
-        // Check if all 8 payments are confirmed
+        // Verify exactly 8 payments exist and all are confirmed
         const allConfirmed = payments.length === 8 && payments.every(p => p.status === 'confirmed');
         
         if (allConfirmed) {
           console.log(`[ACTIVATION] All 8 payments confirmed for ${payerUserId}. Activating user...`);
           
-          // Update activation status to completed
-          await tx.update(activations)
+          // Load the activated user to get their sponsor relationship and binary leg
+          const activatedUserRows = await tx.select()
+            .from(users)
+            .where(eq(users.userId, payerUserId))
+            .limit(1);
+          
+          if (activatedUserRows.length === 0) {
+            throw new Error(`User ${payerUserId} not found`);
+          }
+          
+          const activatedUser = activatedUserRows[0];
+          const now = new Date();
+          
+          // Update activation status to completed (with guard to prevent double-activation)
+          const activationUpdateResult = await tx.update(activations)
             .set({ 
               status: 'completed',
-              completedAt: new Date()
+              completedAt: now
             })
-            .where(eq(activations.id, activationId));
+            .where(and(
+              eq(activations.id, activationId),
+              eq(activations.status, 'pending') // Only activate if still pending
+            ))
+            .returning();
+          
+          // If no rows updated, activation already completed - exit without error
+          if (activationUpdateResult.length === 0) {
+            console.log(`[ACTIVATION] Activation ${activationId} already completed, skipping duplicate run`);
+            return;
+          }
           
           // Activate user - this makes their referral links visible
-          const now = new Date();
           await tx.update(users)
             .set({ 
               isActivated: true,
@@ -275,16 +298,10 @@ export class DbStorage implements IStorage {
             })
             .where(eq(users.userId, payerUserId));
           
-          // Update sponsor's network statistics
-          const activatedUser = await tx.select()
-            .from(users)
-            .where(eq(users.userId, payerUserId))
-            .limit(1);
-          
-          if (activatedUser.length > 0 && activatedUser[0].sponsorId) {
-            const sponsor = activatedUser[0];
-            const sponsorId = sponsor.sponsorId;
-            const binaryLeg = sponsor.binaryLeg;
+          // Update sponsor's network statistics if user has a sponsor
+          if (activatedUser.sponsorId && activatedUser.binaryLeg) {
+            const sponsorId = activatedUser.sponsorId;
+            const binaryLeg = activatedUser.binaryLeg;
             
             // Increment sponsor's referral count and leg count
             const updateData: any = {
@@ -302,7 +319,7 @@ export class DbStorage implements IStorage {
               .set(updateData)
               .where(eq(users.userId, sponsorId));
             
-            console.log(`[ACTIVATION] Updated sponsor ${sponsorId} stats: +1 to ${binaryLeg} leg`);
+            console.log(`[ACTIVATION] Updated sponsor ${sponsorId} stats: +1 total, +1 to ${binaryLeg} leg`);
           }
           
           console.log(`[ACTIVATION] User ${payerUserId} successfully activated!`);
