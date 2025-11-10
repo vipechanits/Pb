@@ -31,7 +31,6 @@ export default function Profile() {
       bankAccountHolder: user?.bankAccountHolder || '',
       bankAccountNumber: user?.bankAccountNumber || '',
       ifscCode: user?.ifscCode || '',
-      securityCode: user?.securityCode || '',
     },
   });
 
@@ -45,7 +44,6 @@ export default function Profile() {
         bankAccountHolder: user.bankAccountHolder || '',
         bankAccountNumber: user.bankAccountNumber || '',
         ifscCode: user.ifscCode || '',
-        securityCode: user.securityCode || '',
       });
     }
   }, [user, form]);
@@ -90,15 +88,6 @@ export default function Profile() {
         <h1 className="text-3xl font-bold" data-testid="text-profile-title">Profile Settings</h1>
         <p className="text-muted-foreground">Manage your payment details, account information, and referral links</p>
       </div>
-
-      {user?.requiresPostActivationProfileUpdate && (
-        <Alert className="bg-destructive/10 border-destructive/20">
-          <CheckCircle className="h-4 w-4 text-destructive" />
-          <AlertDescription>
-            <span className="font-semibold">Action Required:</span> Your account has been activated! Please review and update your payment details below to continue accessing all platform features.
-          </AlertDescription>
-        </Alert>
-      )}
 
       {user?.userId && (
         <Alert className="bg-primary/10 border-primary/20">
@@ -247,35 +236,6 @@ export default function Profile() {
                       <Input placeholder="SBIN0001234" maxLength={11} {...field} data-testid="input-ifsc" />
                     </FormControl>
                     <FormDescription>11-character bank IFSC code</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Security</CardTitle>
-              <CardDescription>Set a 6-digit security code for transactions</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <FormField
-                control={form.control}
-                name="securityCode"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>6-Digit Security Code</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="password"
-                        placeholder="******"
-                        maxLength={6}
-                        {...field}
-                        data-testid="input-security-code"
-                      />
-                    </FormControl>
-                    <FormDescription>Used to verify important transactions</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

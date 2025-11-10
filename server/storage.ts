@@ -141,8 +141,7 @@ export class DbStorage implements IStorage {
         updatedUser.upiId || 
         (updatedUser.bankAccountNumber && updatedUser.ifscCode && updatedUser.bankAccountHolder)
       );
-      const hasSecurityCode = !!updatedUser.securityCode;
-      const isComplete = hasBasicInfo && hasPaymentInfo && hasSecurityCode;
+      const isComplete = hasBasicInfo && hasPaymentInfo;
       
       // If profile is complete and flag is set, clear it
       if (isComplete && updatedUser.requiresPostActivationProfileUpdate) {
@@ -198,9 +197,8 @@ export class DbStorage implements IStorage {
     // Check required profile fields: name, mobile, upiId or bank details
     const hasBasicInfo = !!(user.name && user.mobile);
     const hasPaymentInfo = !!(user.upiId || (user.bankAccountNumber && user.ifscCode && user.bankAccountHolder));
-    const hasSecurityCode = !!user.securityCode;
     
-    return hasBasicInfo && hasPaymentInfo && hasSecurityCode;
+    return hasBasicInfo && hasPaymentInfo;
   }
 
   // System configuration methods
