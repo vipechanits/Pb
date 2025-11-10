@@ -35,7 +35,7 @@ export default function UserConfirmationPage() {
 
     setProcessing(true);
     try {
-      await apiRequest(`/api/activation-payments/${selectedPayment.id}/confirm`, 'PATCH', {
+      await apiRequest('PATCH', `/api/activation-payments/${selectedPayment.id}/confirm`, {
         notes: confirmNotes || undefined,
       });
 
@@ -72,7 +72,7 @@ export default function UserConfirmationPage() {
 
     setProcessing(true);
     try {
-      await apiRequest(`/api/activation-payments/${selectedPayment.id}/reject`, 'PATCH', {
+      await apiRequest('PATCH', `/api/activation-payments/${selectedPayment.id}/reject`, {
         rejectionReason,
       });
 
