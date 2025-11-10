@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -51,6 +51,52 @@ export default function AdminConfig() {
 
   // Local state for form
   const [formData, setFormData] = useState<Partial<SystemConfig>>({});
+  
+  // Local state for payment methods
+  const [upiMethods, setUpiMethods] = useState<UpiMethod[]>([
+    { upiId: '', mobile: '', name: '' },
+    { upiId: '', mobile: '', name: '' },
+    { upiId: '', mobile: '', name: '' },
+  ]);
+  
+  const [bankMethods, setBankMethods] = useState<BankMethod[]>([
+    { accountHolder: '', accountNumber: '', ifscCode: '', mobile: '', bankName: '' },
+    { accountHolder: '', accountNumber: '', ifscCode: '', mobile: '', bankName: '' },
+    { accountHolder: '', accountNumber: '', ifscCode: '', mobile: '', bankName: '' },
+  ]);
+  
+  // Initialize payment methods from config
+  useEffect(() => {
+    if (config?.adminUpiMethods) {
+      try {
+        const parsed = JSON.parse(config.adminUpiMethods);
+        if (Array.isArray(parsed)) {
+          setUpiMethods([
+            parsed[0] || { upiId: '', mobile: '', name: '' },
+            parsed[1] || { upiId: '', mobile: '', name: '' },
+            parsed[2] || { upiId: '', mobile: '', name: '' },
+          ]);
+        }
+      } catch (e) {
+        console.error('Failed to parse UPI methods:', e);
+      }
+    }
+    
+    if (config?.adminBankMethods) {
+      try {
+        const parsed = JSON.parse(config.adminBankMethods);
+        if (Array.isArray(parsed)) {
+          setBankMethods([
+            parsed[0] || { accountHolder: '', accountNumber: '', ifscCode: '', mobile: '', bankName: '' },
+            parsed[1] || { accountHolder: '', accountNumber: '', ifscCode: '', mobile: '', bankName: '' },
+            parsed[2] || { accountHolder: '', accountNumber: '', ifscCode: '', mobile: '', bankName: '' },
+          ]);
+        }
+      } catch (e) {
+        console.error('Failed to parse bank methods:', e);
+      }
+    }
+  }, [config]);
 
   // Update mutation
   const updateMutation = useMutation({
@@ -84,7 +130,17 @@ export default function AdminConfig() {
   };
 
   const handleSave = () => {
-    updateMutation.mutate(formData);
+    // Filter out empty payment methods and serialize to JSON
+    const validUpiMethods = upiMethods.filter(m => m.upiId && m.mobile && m.name);
+    const validBankMethods = bankMethods.filter(m => m.accountNumber && m.ifscCode && m.accountHolder);
+    
+    const dataToSave = {
+      ...formData,
+      adminUpiMethods: JSON.stringify(validUpiMethods),
+      adminBankMethods: JSON.stringify(validBankMethods),
+    };
+    
+    updateMutation.mutate(dataToSave);
   };
 
   if (isLoading) {
@@ -260,60 +316,56 @@ export default function AdminConfig() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {[0, 1, 2].map((index) => {
-              const upiMethods = config?.adminUpiMethods ? JSON.parse(config.adminUpiMethods) : [];
-              const method = upiMethods[index] || { upiId: '', mobile: '', name: '' };
-              return (
-                <div key={index} className="grid gap-4 md:grid-cols-3 p-4 border rounded-md">
-                  <div className="space-y-2">
-                    <Label htmlFor={`upi-id-${index}`}>UPI ID {index + 1}</Label>
-                    <Input
-                      id={`upi-id-${index}`}
-                      type="text"
-                      placeholder="user@upi"
-                      value={method.upiId}
-                      onChange={(e) => {
-                        const updated = [...upiMethods];
-                        updated[index] = { ...method, upiId: e.target.value };
-                        handleChange('adminUpiMethods', JSON.stringify(updated.filter(m => m.upiId)));
-                      }}
-                      data-testid={`input-upi-id-${index}`}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor={`upi-mobile-${index}`}>Mobile Number</Label>
-                    <Input
-                      id={`upi-mobile-${index}`}
-                      type="text"
-                      placeholder="9876543210"
-                      maxLength={10}
-                      value={method.mobile}
-                      onChange={(e) => {
-                        const updated = [...upiMethods];
-                        updated[index] = { ...method, mobile: e.target.value };
-                        handleChange('adminUpiMethods', JSON.stringify(updated.filter(m => m.upiId)));
-                      }}
-                      data-testid={`input-upi-mobile-${index}`}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor={`upi-name-${index}`}>Account Name</Label>
-                    <Input
-                      id={`upi-name-${index}`}
-                      type="text"
-                      placeholder="PAYBACK247"
-                      value={method.name}
-                      onChange={(e) => {
-                        const updated = [...upiMethods];
-                        updated[index] = { ...method, name: e.target.value };
-                        handleChange('adminUpiMethods', JSON.stringify(updated.filter(m => m.upiId)));
-                      }}
-                      data-testid={`input-upi-name-${index}`}
-                    />
-                  </div>
+            {[0, 1, 2].map((index) => (
+              <div key={index} className="grid gap-4 md:grid-cols-3 p-4 border rounded-md">
+                <div className="space-y-2">
+                  <Label htmlFor={`upi-id-${index}`}>UPI ID {index + 1}</Label>
+                  <Input
+                    id={`upi-id-${index}`}
+                    type="text"
+                    placeholder="user@upi"
+                    value={upiMethods[index]?.upiId || ''}
+                    onChange={(e) => {
+                      const updated = [...upiMethods];
+                      updated[index] = { ...updated[index], upiId: e.target.value };
+                      setUpiMethods(updated);
+                    }}
+                    data-testid={`input-upi-id-${index}`}
+                  />
                 </div>
-              );
-            })}
+                <div className="space-y-2">
+                  <Label htmlFor={`upi-mobile-${index}`}>Mobile Number</Label>
+                  <Input
+                    id={`upi-mobile-${index}`}
+                    type="text"
+                    placeholder="9876543210"
+                    maxLength={10}
+                    value={upiMethods[index]?.mobile || ''}
+                    onChange={(e) => {
+                      const updated = [...upiMethods];
+                      updated[index] = { ...updated[index], mobile: e.target.value };
+                      setUpiMethods(updated);
+                    }}
+                    data-testid={`input-upi-mobile-${index}`}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`upi-name-${index}`}>Account Name</Label>
+                  <Input
+                    id={`upi-name-${index}`}
+                    type="text"
+                    placeholder="PAYBACK247"
+                    value={upiMethods[index]?.name || ''}
+                    onChange={(e) => {
+                      const updated = [...upiMethods];
+                      updated[index] = { ...updated[index], name: e.target.value };
+                      setUpiMethods(updated);
+                    }}
+                    data-testid={`input-upi-name-${index}`}
+                  />
+                </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
 
@@ -326,91 +378,87 @@ export default function AdminConfig() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {[0, 1, 2].map((index) => {
-              const bankMethods = config?.adminBankMethods ? JSON.parse(config.adminBankMethods) : [];
-              const method = bankMethods[index] || { accountHolder: '', accountNumber: '', ifscCode: '', mobile: '', bankName: '' };
-              return (
-                <div key={index} className="grid gap-4 md:grid-cols-5 p-4 border rounded-md">
-                  <div className="space-y-2">
-                    <Label htmlFor={`bank-holder-${index}`}>Account Holder</Label>
-                    <Input
-                      id={`bank-holder-${index}`}
-                      type="text"
-                      placeholder="PAYBACK247"
-                      value={method.accountHolder}
-                      onChange={(e) => {
-                        const updated = [...bankMethods];
-                        updated[index] = { ...method, accountHolder: e.target.value };
-                        handleChange('adminBankMethods', JSON.stringify(updated.filter(m => m.accountNumber)));
-                      }}
-                      data-testid={`input-bank-holder-${index}`}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor={`bank-number-${index}`}>Account Number</Label>
-                    <Input
-                      id={`bank-number-${index}`}
-                      type="text"
-                      placeholder="1234567890"
-                      value={method.accountNumber}
-                      onChange={(e) => {
-                        const updated = [...bankMethods];
-                        updated[index] = { ...method, accountNumber: e.target.value };
-                        handleChange('adminBankMethods', JSON.stringify(updated.filter(m => m.accountNumber)));
-                      }}
-                      data-testid={`input-bank-number-${index}`}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor={`bank-ifsc-${index}`}>IFSC Code</Label>
-                    <Input
-                      id={`bank-ifsc-${index}`}
-                      type="text"
-                      placeholder="SBIN0001234"
-                      maxLength={11}
-                      value={method.ifscCode}
-                      onChange={(e) => {
-                        const updated = [...bankMethods];
-                        updated[index] = { ...method, ifscCode: e.target.value.toUpperCase() };
-                        handleChange('adminBankMethods', JSON.stringify(updated.filter(m => m.accountNumber)));
-                      }}
-                      data-testid={`input-bank-ifsc-${index}`}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor={`bank-mobile-${index}`}>Mobile Number</Label>
-                    <Input
-                      id={`bank-mobile-${index}`}
-                      type="text"
-                      placeholder="9876543210"
-                      maxLength={10}
-                      value={method.mobile}
-                      onChange={(e) => {
-                        const updated = [...bankMethods];
-                        updated[index] = { ...method, mobile: e.target.value };
-                        handleChange('adminBankMethods', JSON.stringify(updated.filter(m => m.accountNumber)));
-                      }}
-                      data-testid={`input-bank-mobile-${index}`}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor={`bank-name-${index}`}>Bank Name</Label>
-                    <Input
-                      id={`bank-name-${index}`}
-                      type="text"
-                      placeholder="State Bank of India"
-                      value={method.bankName}
-                      onChange={(e) => {
-                        const updated = [...bankMethods];
-                        updated[index] = { ...method, bankName: e.target.value };
-                        handleChange('adminBankMethods', JSON.stringify(updated.filter(m => m.accountNumber)));
-                      }}
-                      data-testid={`input-bank-name-${index}`}
-                    />
-                  </div>
+            {[0, 1, 2].map((index) => (
+              <div key={index} className="grid gap-4 md:grid-cols-5 p-4 border rounded-md">
+                <div className="space-y-2">
+                  <Label htmlFor={`bank-holder-${index}`}>Account Holder</Label>
+                  <Input
+                    id={`bank-holder-${index}`}
+                    type="text"
+                    placeholder="PAYBACK247"
+                    value={bankMethods[index]?.accountHolder || ''}
+                    onChange={(e) => {
+                      const updated = [...bankMethods];
+                      updated[index] = { ...updated[index], accountHolder: e.target.value };
+                      setBankMethods(updated);
+                    }}
+                    data-testid={`input-bank-holder-${index}`}
+                  />
                 </div>
-              );
-            })}
+                <div className="space-y-2">
+                  <Label htmlFor={`bank-number-${index}`}>Account Number</Label>
+                  <Input
+                    id={`bank-number-${index}`}
+                    type="text"
+                    placeholder="1234567890"
+                    value={bankMethods[index]?.accountNumber || ''}
+                    onChange={(e) => {
+                      const updated = [...bankMethods];
+                      updated[index] = { ...updated[index], accountNumber: e.target.value };
+                      setBankMethods(updated);
+                    }}
+                    data-testid={`input-bank-number-${index}`}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`bank-ifsc-${index}`}>IFSC Code</Label>
+                  <Input
+                    id={`bank-ifsc-${index}`}
+                    type="text"
+                    placeholder="SBIN0001234"
+                    maxLength={11}
+                    value={bankMethods[index]?.ifscCode || ''}
+                    onChange={(e) => {
+                      const updated = [...bankMethods];
+                      updated[index] = { ...updated[index], ifscCode: e.target.value.toUpperCase() };
+                      setBankMethods(updated);
+                    }}
+                    data-testid={`input-bank-ifsc-${index}`}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`bank-mobile-${index}`}>Mobile Number</Label>
+                  <Input
+                    id={`bank-mobile-${index}`}
+                    type="text"
+                    placeholder="9876543210"
+                    maxLength={10}
+                    value={bankMethods[index]?.mobile || ''}
+                    onChange={(e) => {
+                      const updated = [...bankMethods];
+                      updated[index] = { ...updated[index], mobile: e.target.value };
+                      setBankMethods(updated);
+                    }}
+                    data-testid={`input-bank-mobile-${index}`}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`bank-name-${index}`}>Bank Name</Label>
+                  <Input
+                    id={`bank-name-${index}`}
+                    type="text"
+                    placeholder="State Bank of India"
+                    value={bankMethods[index]?.bankName || ''}
+                    onChange={(e) => {
+                      const updated = [...bankMethods];
+                      updated[index] = { ...updated[index], bankName: e.target.value };
+                      setBankMethods(updated);
+                    }}
+                    data-testid={`input-bank-name-${index}`}
+                  />
+                </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>
