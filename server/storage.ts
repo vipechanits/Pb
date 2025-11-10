@@ -30,6 +30,9 @@ export interface IStorage {
   checkProfileComplete(userId: string): Promise<boolean>;
   getUsersBySponsorAndLeg(sponsorUserId: string, leg: 'left' | 'right'): Promise<User[]>;
   
+  // Global matrix methods
+  findAndAssignMatrixSlot(userId: string): Promise<User | undefined>;
+  
   // System configuration methods
   getSystemConfig(): Promise<SystemConfig>;
   updateSystemConfig(config: Partial<UpdateSystemConfig>): Promise<SystemConfig>;
@@ -215,6 +218,103 @@ export class DbStorage implements IStorage {
       ))
       .orderBy(users.createdAt);
     return result;
+  }
+
+  async getMatrixAncestors(userId: string, depth: number, tx?: any): Promise<string[]> {
+    const executeInTx = async (txn: any) => {
+      const ancestors: string[] = [];
+      let currentUserId = userId;
+      
+      for (let i = 0; i < depth; i++) {
+        const userRows = await txn.select()
+          .from(users)
+          .where(eq(users.userId, currentUserId))
+          .for('update')
+          .limit(1);
+        
+        if (userRows.length === 0 || !userRows[0].matrixParentId) {
+          break;
+        }
+        
+        const parentId = userRows[0].matrixParentId;
+        ancestors.push(parentId);
+        currentUserId = parentId;
+      }
+      
+      return ancestors;
+    };
+    
+    if (tx) {
+      return await executeInTx(tx);
+    } else {
+      return await db.transaction(executeInTx);
+    }
+  }
+
+  async findAndAssignMatrixSlot(userId: string, tx?: any): Promise<User | undefined> {
+    const executeInTx = async (txn: any) => {
+      const targetUser = await txn.select()
+        .from(users)
+        .where(eq(users.userId, userId))
+        .for('update')
+        .limit(1);
+      
+      if (targetUser.length === 0) {
+        throw new Error(`User ${userId} not found`);
+      }
+
+      if (targetUser[0].matrixParentId) {
+        console.log(`[MATRIX] User ${userId} already placed in matrix at ${targetUser[0].matrixPath}`);
+        return targetUser[0];
+      }
+
+      const frontier = await txn.select()
+        .from(users)
+        .where(and(
+          sql`matrix_level IS NOT NULL`,
+          sql`matrix_level < 5`,
+          eq(users.isActivated, true)
+        ))
+        .orderBy(sql`matrix_level ASC, matrix_path ASC`)
+        .for('update', { skipLocked: true });
+      
+      for (const parentCandidate of frontier) {
+        const children = await txn.select()
+          .from(users)
+          .where(eq(users.matrixParentId, parentCandidate.userId!))
+          .for('update', { skipLocked: true });
+        
+        if (children.length < 2) {
+          const position = children.length === 0 ? 0 : 1;
+          const positionChar = position === 0 ? 'L' : 'R';
+          const newPath = `${parentCandidate.matrixPath}.${positionChar}`;
+          const newLevel = (parentCandidate.matrixLevel || 0) + 1;
+          
+          console.log(`[MATRIX] Assigning ${userId} to parent ${parentCandidate.userId} at position ${position}, level ${newLevel}, path ${newPath}`);
+          
+          const result = await txn.update(users)
+            .set({
+              matrixParentId: parentCandidate.userId!,
+              matrixPosition: position,
+              matrixLevel: newLevel,
+              matrixPath: newPath,
+              updatedAt: new Date()
+            })
+            .where(eq(users.userId, userId))
+            .returning();
+          
+          return result[0];
+        }
+      }
+      
+      throw new Error('Global matrix is full - no available slots');
+    };
+    
+    if (tx) {
+      return await executeInTx(tx);
+    } else {
+      return await db.transaction(executeInTx);
+    }
   }
 
   // System configuration methods
@@ -545,6 +645,46 @@ export class DbStorage implements IStorage {
               updatedAt: now
             })
             .where(eq(users.userId, payerUserId));
+          
+          // Assign user to next available global matrix slot
+          // This happens atomically within the activation transaction
+          // If matrix is full or placement fails, entire activation rolls back
+          console.log(`[MATRIX] Placing ${payerUserId} in global matrix...`);
+          await this.findAndAssignMatrixSlot(payerUserId, tx);
+          
+          // Get matrix ancestors (up to 5 levels) for payment routing
+          const matrixAncestors = await this.getMatrixAncestors(payerUserId, 5, tx);
+          console.log(`[MATRIX] Found ${matrixAncestors.length} matrix ancestors for ${payerUserId}:`, matrixAncestors);
+          
+          // Update matrix payment receivers (slots 3-7) with ancestors or admin fallback
+          const matrixUplines: Record<string, string> = {};
+          for (let level = 1; level <= 5; level++) {
+            const ancestorIndex = level - 1;
+            const receiverUserId = ancestorIndex < matrixAncestors.length ? matrixAncestors[ancestorIndex] : 'PB0';
+            const slotIndex = level + 2; // Slot 3 = level 1, Slot 4 = level 2, etc.
+            
+            // Update payment receiver for this matrix level
+            await tx.update(activationPayments)
+              .set({
+                receiverUserId,
+                receiverType: 'user',
+                updatedAt: now
+              })
+              .where(and(
+                eq(activationPayments.activationId, activationId),
+                eq(activationPayments.slotIndex, slotIndex)
+              ));
+            
+            // Track for activation record update
+            matrixUplines[`matrixUpline${level}`] = receiverUserId;
+            
+            console.log(`[MATRIX] Slot ${slotIndex} (Level ${level}) receiver: ${receiverUserId}`);
+          }
+          
+          // Update activation record with matrix uplines
+          await tx.update(activations)
+            .set(matrixUplines)
+            .where(eq(activations.id, activationId));
           
           // Update sponsor's network statistics if user has a sponsor
           if (activatedUser.sponsorId && activatedUser.binaryLeg) {
