@@ -6,6 +6,7 @@ PAYBACK247 is a peer-to-peer income platform that has been converted from a bloc
 **Custom Domain:** https://payback247.com (configured for all referral links and permanent affiliate links)
 
 ## Recent Changes
+- **November 10, 2025**: Added global matrix visualization page (`/user/global-matrix`) with efficient recursive CTE query - fetches entire matrix subtree in single database query (vs. O(2^depth) queries). Returns typed MatrixNode tree structure or null if user not placed. Shows matrix level, path, and team count with interactive tree visualization up to 5 levels deep.
 - **November 10, 2025**: Implemented global 2x5 matrix system with BFS placement - users are automatically assigned to next available matrix slot (breadth-first) upon activation, independent of binary sponsorship tree. Matrix payments (slots 3-7) now route to global matrix parents (up to 5 levels) with admin fallback. Added database fields: matrixParentId, matrixPosition (0/1), matrixLevel (0-5), matrixPath. Matrix placement uses FOR UPDATE SKIP LOCKED for concurrency safety. All operations (activation, matrix placement, payment routing) are atomic within a single transaction.
 - **November 10, 2025**: Enhanced sponsor information display - users can now see their sponsor's name, user ID, and binary leg placement on both dashboard and activation pages. Added GET /api/users/:userId/public endpoint to fetch sponsor details. Activation completion logic verified to correctly update sponsor's binary tree counts (leftLegCount, personalLeftCount, totalReferrals) when all 8 payments are confirmed
 - **November 10, 2025**: Implemented sponsor-based Direct Sponsor payment confirmations - Direct Sponsor payments (slot 0) are now confirmed by actual sponsors, not admin. Admin queue only shows Direct Sponsor payments when receiver is NULL (no sponsor) or PB0 (explicit fallback)
@@ -88,6 +89,12 @@ Preferred communication style: Simple, everyday language.
   - All admin payments labeled as "Admin Account (PB0)"
 - **Confirmation Page (`/user/confirmation`)**: Displays payments pending user confirmation.
 - **Profile Page (`/user/profile`)**: User profile management with completion enforcement before activation.
+- **Global Matrix Page (`/user/global-matrix`)**: Visualizes user's position in the global 2x5 matrix system with:
+  - **Matrix Stats**: Displays current matrix level (0-5), matrix path (e.g., "PB0.L.R"), and team member count
+  - **Tree Visualization**: Interactive 5-level deep tree showing user's downline in the global matrix
+  - **Not Placed State**: Shows clear message if user hasn't activated yet (no matrix placement)
+  - **Performance**: Uses single recursive CTE query to fetch entire subtree (efficient bulk fetch)
+  - **Styling**: Purple theme to distinguish from binary tree (green theme)
 
 #### Admin Pages
 - **Admin Dashboard (`/admin`)**: Overview of system metrics and quick access to admin functions.
