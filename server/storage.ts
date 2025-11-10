@@ -107,8 +107,10 @@ export class DbStorage implements IStorage {
   }
 
   async getLastUser(): Promise<User | undefined> {
+    // Get user with highest userId number (PBxxxxxx) to ensure no duplicates
     const result = await db.select().from(users)
-      .orderBy(desc(users.createdAt))
+      .where(sql`${users.userId} IS NOT NULL AND ${users.userId} LIKE 'PB%'`)
+      .orderBy(sql`CAST(SUBSTRING(${users.userId}, 3) AS INTEGER) DESC`)
       .limit(1);
     return result[0];
   }
