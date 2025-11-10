@@ -6,6 +6,10 @@ PAYBACK247 is a peer-to-peer income platform that has been converted from a bloc
 **Custom Domain:** https://payback247.com (configured for all referral links and permanent affiliate links)
 
 ## Recent Changes
+- **November 10, 2025**: Fixed QR upload visibility bug - added paymentQrUrl field normalization in storage layer
+- **November 10, 2025**: Added user QR code upload feature (paymentQrUrl field) for peer-to-peer payments
+- **November 10, 2025**: Simplified admin payment methods from JSON arrays to single values (1 UPI, 1 bank, 1 mobile, 1 QR upload)
+- **November 10, 2025**: Created professional index.html landing page for GitHub Pages deployment
 - **November 10, 2025**: Database reset (kept PB0 only), added permanent affiliate links to admin dashboard, configured custom domain https://payback247.com
 - **November 10, 2025**: Fully responsive landing page optimized for mobile, tablet, and desktop
 - **November 10, 2025**: Updated all payment amounts to ₹500 per slot (Creator Fee + Matrix Levels 1-5)
