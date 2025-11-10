@@ -272,6 +272,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Get admin payment details (public endpoint for users to see where to pay)
+  app.get("/api/admin/payment-details", requireAuth, async (req, res) => {
+    try {
+      const config = await storage.getSystemConfig();
+      
+      // Return only payment-related information
+      const adminPaymentInfo = {
+        userId: 'PB0',
+        name: 'Admin',
+        mobile: config.adminMobile,
+        upiId: config.adminUpiId,
+        bankAccountHolder: 'Admin',
+        bankAccount: config.adminBankAccount,
+        ifscCode: config.adminIfscCode,
+        paymentQrUrl: config.adminQrCodeUrl,
+      };
+      
+      res.json(adminPaymentInfo);
+    } catch (error) {
+      console.error("Error fetching admin payment details:", error);
+      res.status(500).json({ error: "Failed to fetch admin payment details" });
+    }
+  });
+  
   // Get user by ID (for general user info)
   app.get("/api/users/:userId", async (req, res) => {
     try {

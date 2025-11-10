@@ -9,11 +9,12 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, QrCode } from 'lucide-react';
+import { CheckCircle, QrCode, X, Upload } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ReferralLinks } from '@/components/referral-links';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { apiRequest } from '@/lib/queryClient';
+import { Label } from '@/components/ui/label';
 
 export default function Profile() {
   const { user, refreshUser } = useAuth();
@@ -21,6 +22,8 @@ export default function Profile() {
   const [loading, setLoading] = useState(false);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [showQR, setShowQR] = useState(false);
+  const [qrFile, setQrFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const form = useForm<UpdateProfile>({
     resolver: zodResolver(updateProfileSchema),
@@ -49,9 +52,34 @@ export default function Profile() {
   }, [user, form]);
   const onSubmit = async (data: UpdateProfile) => {
     setLoading(true);
+    setUploading(true);
+    
     try {
-      await apiRequest('PATCH', '/api/profile', data);
+      let paymentQrUrl = data.paymentQrUrl;
+      
+      // Upload QR file if selected
+      if (qrFile) {
+        const response = await apiRequest('POST', '/api/objects/upload', {
+          filename: qrFile.name,
+          contentType: qrFile.type,
+        });
+        const uploadResponse = await response.json() as { uploadUrl: string; publicUrl: string };
+
+        // Upload file to presigned URL
+        await fetch(uploadResponse.uploadUrl, {
+          method: 'PUT',
+          body: qrFile,
+          headers: {
+            'Content-Type': qrFile.type,
+          },
+        });
+
+        paymentQrUrl = uploadResponse.publicUrl;
+      }
+      
+      await apiRequest('PATCH', '/api/profile', { ...data, paymentQrUrl });
       await refreshUser();
+      setQrFile(null);
       toast({
         title: 'Profile updated',
         description: 'Your profile has been successfully updated.',
@@ -64,6 +92,7 @@ export default function Profile() {
       });
     } finally {
       setLoading(false);
+      setUploading(false);
     }
   };
 
@@ -165,6 +194,49 @@ export default function Profile() {
                   </FormItem>
                 )}
               />
+
+              {/* QR Code Upload */}
+              <div className="space-y-2">
+                <Label htmlFor="paymentQrCode">Upload UPI QR Code (Optional)</Label>
+                <div className="flex gap-4 items-start">
+                  <div className="flex-1">
+                    <Input
+                      id="paymentQrCode"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setQrFile(e.target.files?.[0] || null)}
+                      data-testid="input-user-qr"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Upload your UPI QR code image (PNG, JPG)
+                    </p>
+                  </div>
+                  {qrFile && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setQrFile(null)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                
+                {/* Show current or new QR code */}
+                {(qrFile || user?.paymentQrUrl) && (
+                  <div className="mt-2">
+                    <Label className="text-xs text-muted-foreground">Preview:</Label>
+                    <div className="border rounded-lg p-2 bg-white inline-block mt-1">
+                      <img 
+                        src={qrFile ? URL.createObjectURL(qrFile) : (user?.paymentQrUrl || '')}
+                        alt="QR Code Preview" 
+                        className="w-32 h-32"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {user?.upiId && user?.name && user?.mobile && (
                 <div className="pt-4">

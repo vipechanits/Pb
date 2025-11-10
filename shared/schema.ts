@@ -44,6 +44,7 @@ export const users = pgTable("users", {
   bankAccountHolder: text("bank_account_holder"),
   bankAccountNumber: varchar("bank_account_number", { length: 20 }),
   ifscCode: varchar("ifsc_code", { length: 11 }),
+  paymentQrUrl: text("payment_qr_url"), // User's uploaded UPI QR code
   
   // Security
   securityCode: varchar("security_code", { length: 6 }),
@@ -93,6 +94,7 @@ export const updateProfileSchema = z.object({
   ifscCode: z.string().optional().refine((val) => !val || val.length === 11, {
     message: "IFSC code must be exactly 11 characters"
   }),
+  paymentQrUrl: z.string().optional(),
   securityCode: z.string().optional().refine((val) => !val || val.length === 6, {
     message: "Security code must be exactly 6 digits"
   }),

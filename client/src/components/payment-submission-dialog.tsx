@@ -33,6 +33,7 @@ interface ReceiverDetails {
   mobile: string | null;
   upiId: string | null;
   bankAccountHolder: string | null;
+  bankAccount?: string | null;
   ifscCode: string | null;
   paymentQrUrl: string | null;
 }
@@ -49,10 +50,12 @@ export function PaymentSubmissionDialog({
   const [uploading, setUploading] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  // Fetch receiver details
+  // Fetch receiver details (user or admin)
   const { data: receiverDetails } = useQuery<ReceiverDetails>({
-    queryKey: ['/api/users/payment-details', payment.receiverUserId],
-    enabled: open && payment.receiverType === 'user' && !!payment.receiverUserId,
+    queryKey: payment.receiverType === 'admin' 
+      ? ['/api/admin/payment-details']
+      : ['/api/users/payment-details', payment.receiverUserId],
+    enabled: open && (payment.receiverType === 'admin' || !!payment.receiverUserId),
   });
 
   const copyToClipboard = (text: string, fieldName: string) => {
@@ -163,12 +166,12 @@ export function PaymentSubmissionDialog({
               <strong>Amount:</strong> ₹{payment.amountInr}
             </p>
             <p className="text-sm">
-              <strong>Receiver:</strong> {payment.receiverType === 'admin' ? 'Admin Wallet' : payment.receiverUserId}
+              <strong>Receiver:</strong> {receiverDetails?.userId || (payment.receiverType === 'admin' ? 'Admin (PB0)' : payment.receiverUserId)}
             </p>
           </div>
 
           {/* Receiver Payment Details */}
-          {payment.receiverType === 'user' && receiverDetails && (
+          {receiverDetails && (
             <Card>
               <CardContent className="pt-6 space-y-4">
                 <h3 className="font-semibold text-sm">Receiver Payment Details</h3>
