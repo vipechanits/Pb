@@ -709,7 +709,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Forbidden - Admin access required" });
       }
 
-      const payments = await storage.getAllConfirmedPayments();
+      const payments = await storage.getConfirmedPaymentsWithDetails();
       res.json(payments);
     } catch (error) {
       console.error("Error fetching confirmed payments:", error);

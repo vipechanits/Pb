@@ -15,6 +15,7 @@ import {
 } from "@shared/schema";
 import { SLOT_TO_PAYMENT_TYPE, PAYMENT_TYPE_AMOUNTS } from "@shared/constants";
 import { eq, and, desc, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "./db";
 
 export interface IStorage {
@@ -49,6 +50,7 @@ export interface IStorage {
   getActivationPaymentsPendingConfirmation(receiverUserId: string): Promise<ActivationPayment[]>;
   getAdminPendingConfirmations(): Promise<ActivationPayment[]>;
   getAllConfirmedPayments(): Promise<ActivationPayment[]>;
+  getConfirmedPaymentsWithDetails(): Promise<Array<ActivationPayment & { payerName: string | null, receiverName: string | null }>>;
   submitPaymentProof(id: string, utrId: string, proofUrl?: string): Promise<ActivationPayment | undefined>;
   confirmActivationPayment(id: string, notes?: string): Promise<ActivationPayment | undefined>;
   rejectActivationPayment(id: string, rejectionReason: string): Promise<ActivationPayment | undefined>;
@@ -325,6 +327,33 @@ export class DbStorage implements IStorage {
     return db.select().from(activationPayments).where(
       eq(activationPayments.status, 'confirmed')
     ).orderBy(desc(activationPayments.confirmedAt));
+  }
+
+  async getConfirmedPaymentsWithDetails(): Promise<Array<ActivationPayment & { 
+    payerName: string | null, 
+    receiverName: string | null 
+  }>> {
+    // Get all confirmed payments with payer and receiver details for admin report
+    const payer = alias(users, 'payer');
+    const receiver = alias(users, 'receiver');
+    
+    const results = await db.select({
+      payment: activationPayments,
+      payerName: payer.name,
+      receiverName: receiver.name,
+    })
+    .from(activationPayments)
+    .leftJoin(payer, eq(activationPayments.payerUserId, payer.userId))
+    .leftJoin(receiver, eq(activationPayments.receiverUserId, receiver.userId))
+    .where(eq(activationPayments.status, 'confirmed'))
+    .orderBy(desc(activationPayments.confirmedAt));
+
+    // Flatten the results
+    return results.map(r => ({
+      ...r.payment,
+      payerName: r.payerName,
+      receiverName: r.receiverName,
+    }));
   }
 
   async submitPaymentProof(id: string, utrId: string, proofUrl?: string): Promise<ActivationPayment | undefined> {

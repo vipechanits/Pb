@@ -21,6 +21,7 @@ import {
   Settings,
   Shield,
   FileCheck,
+  FileText,
   UserCog,
   LogOut,
   Wallet,
@@ -106,14 +107,19 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       icon: FileCheck,
     },
     {
+      title: 'Payments Report',
+      url: '/admin/payments-report',
+      icon: FileText,
+    },
+    {
+      title: 'System Configuration',
+      url: '/admin/config',
+      icon: Settings,
+    },
+    {
       title: 'User Management',
       url: '/admin/users',
       icon: UserCog,
-    },
-    {
-      title: 'Settings',
-      url: '/admin/settings',
-      icon: Settings,
     },
   ];
 

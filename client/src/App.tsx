@@ -24,6 +24,7 @@ import ReentryPage from '@/pages/reentry';
 import AdditionalReentryPage from '@/pages/additional-reentry';
 import AdminDashboard from '@/pages/admin-dashboard';
 import AdminPayments from '@/pages/admin-payments';
+import AdminPaymentsReport from '@/pages/admin-payments-report';
 import AdminSettings from '@/pages/admin-settings';
 import AdminUsers from '@/pages/admin-users';
 import AdminConfig from '@/pages/admin-config';
@@ -185,6 +186,16 @@ function Router() {
           <ProtectedRoute requireAdmin={true}>
             <DashboardLayout isAdmin={true}>
               <AdminPayments />
+            </DashboardLayout>
+          </ProtectedRoute>
+        )}
+      </Route>
+      
+      <Route path="/admin/payments-report">
+        {() => (
+          <ProtectedRoute requireAdmin={true}>
+            <DashboardLayout isAdmin={true}>
+              <AdminPaymentsReport />
             </DashboardLayout>
           </ProtectedRoute>
         )}
