@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, XCircle, Clock, ExternalLink } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, ExternalLink, RefreshCw } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -103,11 +103,23 @@ export default function AdminPayments() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold">Payment Approval Queue</h1>
-        <p className="text-muted-foreground">
-          Review and approve user payment submissions
-        </p>
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold">Payment Approval Queue</h1>
+          <p className="text-muted-foreground">
+            Review and approve user payment submissions
+          </p>
+        </div>
+        <Button 
+          onClick={() => refetch()} 
+          variant="outline" 
+          size="default"
+          data-testid="button-refresh"
+          disabled={isLoading}
+        >
+          <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
