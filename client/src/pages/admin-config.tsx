@@ -130,9 +130,13 @@ export default function AdminConfig() {
   };
 
   const handleSave = () => {
-    // Filter out empty payment methods and serialize to JSON
-    const validUpiMethods = upiMethods.filter(m => m.upiId && m.mobile && m.name);
-    const validBankMethods = bankMethods.filter(m => m.accountNumber && m.ifscCode && m.accountHolder);
+    // Filter out empty payment methods - require ALL fields for each method
+    const validUpiMethods = upiMethods.filter(m => 
+      m.upiId && m.mobile && m.name
+    );
+    const validBankMethods = bankMethods.filter(m => 
+      m.accountNumber && m.ifscCode && m.accountHolder && m.mobile && m.bankName
+    );
     
     const dataToSave = {
       ...formData,
