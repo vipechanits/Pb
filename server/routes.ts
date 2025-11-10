@@ -183,6 +183,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Get public user info (for sponsor details, etc.)
+  app.get("/api/users/:userId/public", requireAuth, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const user = await storage.getUserByUserId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      // Return only public information
+      res.json({ 
+        userId: user.userId,
+        name: user.name || null,
+        isActivated: user.isActivated
+      });
+    } catch (error) {
+      console.error("Error fetching user info:", error);
+      res.status(500).json({ error: "Failed to fetch user info" });
+    }
+  });
+
   // Update user profile
   app.patch("/api/profile", requireAuth, async (req, res) => {
     try {

@@ -6,8 +6,9 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/hooks/use-toast';
-import { Users, GitBranch, Grid3x3, TrendingUp, Copy, Check, ArrowLeft, ArrowRight, CheckCircle, AlertTriangle, Rocket, UserCheck } from 'lucide-react';
+import { Users, GitBranch, Grid3x3, TrendingUp, Copy, Check, ArrowLeft, ArrowRight, CheckCircle, AlertTriangle, Rocket, UserCheck, Loader2 } from 'lucide-react';
 import { Link } from 'wouter';
+import { useQuery } from '@tanstack/react-query';
 
 export default function UserDashboard() {
   const { user } = useAuth();
@@ -16,6 +17,12 @@ export default function UserDashboard() {
   const [copiedRight, setCopiedRight] = useState(false);
 
   const isActivated = user?.isActivated || false;
+
+  // Fetch sponsor details if user has a sponsor
+  const { data: sponsorData, isLoading: sponsorLoading } = useQuery<{ userId: string; name: string | null }>({
+    queryKey: ['/api/users', user?.sponsorId, 'public'],
+    enabled: !!user?.sponsorId,
+  });
   const baseUrl = window.location.origin;
   const leftLegLink = `${baseUrl}/auth/signup?ref=${user?.userId}&leg=left`;
   const rightLegLink = `${baseUrl}/auth/signup?ref=${user?.userId}&leg=right`;
@@ -109,10 +116,22 @@ export default function UserDashboard() {
           <CardContent>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Sponsor ID</p>
-                <p className="text-lg font-mono font-semibold" data-testid="text-sponsor-id">
-                  {user.sponsorId}
-                </p>
+                <p className="text-sm text-muted-foreground">Sponsor</p>
+                {sponsorLoading ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-sm text-muted-foreground">Loading...</span>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <p className="text-lg font-semibold" data-testid="text-sponsor-name">
+                      {sponsorData?.name || 'Name not set'}
+                    </p>
+                    <p className="text-sm font-mono text-muted-foreground" data-testid="text-sponsor-id">
+                      {user.sponsorId}
+                    </p>
+                  </div>
+                )}
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Binary Leg</p>

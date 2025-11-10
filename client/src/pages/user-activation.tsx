@@ -41,6 +41,12 @@ export default function UserActivationPage() {
     enabled: !!user,
   });
 
+  // Fetch sponsor details if user has a sponsor
+  const { data: sponsorData } = useQuery<{ userId: string; name: string | null }>({
+    queryKey: ['/api/users', user?.sponsorId, 'public'],
+    enabled: !!user?.sponsorId,
+  });
+
   const copyToClipboard = (text: string, fieldName: string) => {
     navigator.clipboard.writeText(text);
     setCopiedField(fieldName);
@@ -211,8 +217,11 @@ export default function UserActivationPage() {
           <AlertDescription>
             <div className="flex flex-col sm:flex-row sm:items-center gap-2">
               <span className="font-medium">Your Sponsor:</span>
-              <code className="font-mono font-semibold text-accent" data-testid="text-sponsor-id-activation">
-                {user.sponsorId}
+              <span className="font-semibold text-accent" data-testid="text-sponsor-name-activation">
+                {sponsorData?.name || 'Name not set'}
+              </span>
+              <code className="font-mono text-sm text-muted-foreground" data-testid="text-sponsor-id-activation">
+                ({user.sponsorId})
               </code>
               {user.binaryLeg && (
                 <>
