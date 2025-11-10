@@ -14,7 +14,7 @@ import {
   systemConfig
 } from "@shared/schema";
 import { SLOT_TO_PAYMENT_TYPE, PAYMENT_TYPE_AMOUNTS } from "@shared/constants";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, or, ne, isNull, desc, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "./db";
 
@@ -386,9 +386,20 @@ export class DbStorage implements IStorage {
   }
   
   async getAdminPendingConfirmations(): Promise<ActivationPayment[]> {
-    // Admin sees ALL submitted payments regardless of receiver
+    // Admin sees submitted payments EXCEPT Direct Sponsor payments (slot 0) to non-admin receivers
+    // Direct Sponsor payments should only be confirmed by the actual sponsor
+    // Admin DOES see slot 0 payments when:
+    // - receiver is PB0 (explicitly set to admin)
+    // - receiverUserId is NULL (no sponsor exists, falls back to admin)
     return db.select().from(activationPayments).where(
-      eq(activationPayments.status, 'submitted')
+      and(
+        eq(activationPayments.status, 'submitted'),
+        or(
+          ne(activationPayments.slotIndex, 0),                 // Show all non-slot-0 payments
+          eq(activationPayments.receiverUserId, 'PB0'),        // OR show slot-0 if receiver is PB0
+          isNull(activationPayments.receiverUserId)            // OR show slot-0 if receiver is NULL (fallback)
+        )
+      )
     ).orderBy(desc(activationPayments.updatedAt));
   }
 
