@@ -1,0 +1,186 @@
+2025-11-10 06:32:40.02
+f328d060
+User
+at Layer.handle [as handle_request] (/home/runner/workspace/node_modules/express/lib/router/layer.js:95:5)
+2025-11-10 06:32:40.02
+f328d060
+User
+at trim_prefix (/home/runner/workspace/node_modules/express/lib/router/index.js:328:13)
+2025-11-10 06:32:40.02
+f328d060
+User
+at /home/runner/workspace/node_modules/express/lib/router/index.js:286:9
+2025-11-10 06:32:41.12
+f328d060
+User
+ForbiddenError: invalid csrf token
+2025-11-10 06:32:41.12
+f328d060
+User
+at csrf (/home/runner/workspace/node_modules/csurf/index.js:112:19)
+2025-11-10 06:32:41.12
+f328d060
+User
+at Layer.handle [as handle_request] (/home/runner/workspace/node_modules/express/lib/router/layer.js:95:5)
+2025-11-10 06:32:41.12
+f328d060
+User
+at trim_prefix (/home/runner/workspace/node_modules/express/lib/router/index.js:328:13)
+2025-11-10 06:32:41.12
+f328d060
+User
+at /home/runner/workspace/node_modules/express/lib/router/index.js:286:9
+2025-11-10 06:32:41.12
+f328d060
+User
+at Function.process_params (/home/runner/workspace/node_modules/express/lib/router/index.js:346:12)
+2025-11-10 06:32:41.12
+f328d060
+User
+at next (/home/runner/workspace/node_modules/express/lib/router/index.js:280:10)
+2025-11-10 06:32:41.12
+f328d060
+User
+at session (/home/runner/workspace/node_modules/express-session/index.js:487:7)
+2025-11-10 06:32:41.12
+f328d060
+User
+at Layer.handle [as handle_request] (/home/runner/workspace/node_modules/express/lib/router/layer.js:95:5)
+2025-11-10 06:32:41.12
+f328d060
+User
+at trim_prefix (/home/runner/workspace/node_modules/express/lib/router/index.js:328:13)
+2025-11-10 06:32:41.12
+f328d060
+User
+at /home/runner/workspace/node_modules/express/lib/router/index.js:286:9
+2025-11-10 06:32:42.05
+f328d060
+User
+ForbiddenError: invalid csrf token
+2025-11-10 06:32:42.05
+f328d060
+User
+at csrf (/home/runner/workspace/node_modules/csurf/index.js:112:19)
+2025-11-10 06:32:42.05
+f328d060
+User
+at Layer.handle [as handle_request] (/home/runner/workspace/node_modules/express/lib/router/layer.js:95:5)
+2025-11-10 06:32:42.05
+f328d060
+User
+at trim_prefix (/home/runner/workspace/node_modules/express/lib/router/index.js:328:13)
+2025-11-10 06:32:42.05
+f328d060
+User
+at /home/runner/workspace/node_modules/express/lib/router/index.js:286:9
+2025-11-10 06:32:42.05
+f328d060
+User
+at Function.process_params (/home/runner/workspace/node_modules/express/lib/router/index.js:346:12)
+2025-11-10 06:32:42.05
+f328d060
+User
+at next (/home/runner/workspace/node_modules/express/lib/router/index.js:280:10)
+2025-11-10 06:32:42.05
+f328d060
+User
+at session (/home/runner/workspace/node_modules/express-session/index.js:487:7)
+2025-11-10 06:32:42.05
+f328d060
+User
+at Layer.handle [as handle_request] (/home/runner/workspace/node_modules/express/lib/router/layer.js:95:5)
+2025-11-10 06:32:42.05
+f328d060
+User
+at trim_prefix (/home/runner/workspace/node_modules/express/lib/router/index.js:328:13)
+2025-11-10 06:32:42.05
+f328d060
+User
+at /home/runner/workspace/node_modules/express/lib/router/index.js:286:9
+2025-11-10 06:32:43.01
+f328d060
+User
+ForbiddenError: invalid csrf token
+2025-11-10 06:32:43.01
+f328d060
+User
+at Layer.handle [as handle_request] (/home/runner/workspace/node_modules/express/lib/router/layer.js:95:5)
+2025-11-10 06:32:43.01
+f328d060
+User
+at Function.process_params (/home/runner/workspace/node_modules/express/lib/router/index.js:346:12)
+2025-11-10 06:32:43.93
+f328d060
+User
+ForbiddenError: invalid csrf token
+2025-11-10 06:32:43.93
+f328d060
+User
+at csrf (/home/runner/workspace/node_modules/csurf/index.js:112:19)
+2025-11-10 06:32:43.93
+f328d060
+User
+at Layer.handle [as handle_request] (/home/runner/workspace/node_modules/express/lib/router/layer.js:95:5)
+2025-11-10 06:32:43.93
+f328d060
+User
+at trim_prefix (/home/runner/workspace/node_modules/express/lib/router/index.js:328:13)
+2025-11-10 06:32:43.93
+f328d060
+User
+at /home/runner/workspace/node_modules/express/lib/router/index.js:286:9
+2025-11-10 06:32:43.93
+f328d060
+User
+at Function.process_params (/home/runner/workspace/node_modules/express/lib/router/index.js:346:12)
+2025-11-10 06:32:43.93
+f328d060
+User
+at next (/home/runner/workspace/node_modules/express/lib/router/index.js:280:10)
+2025-11-10 06:32:43.93
+f328d060
+User
+at session (/home/runner/workspace/node_modules/express-session/index.js:487:7)
+2025-11-10 06:32:43.93
+f328d060
+User
+at Layer.handle [as handle_request] (/home/runner/workspace/node_modules/express/lib/router/layer.js:95:5)
+2025-11-10 06:32:43.93
+f328d060
+User
+at trim_prefix (/home/runner/workspace/node_modules/express/lib/router/index.js:328:13)
+2025-11-10 06:32:43.93
+f328d060
+User
+at /home/runner/workspace/node_modules/express/lib/router/index.js:286:9
+2025-11-10 06:32:45.35
+f328d060
+User
+ForbiddenError: invalid csrf token
+2025-11-10 06:32:45.35
+f328d060
+User
+at csrf (/home/runner/workspace/node_modules/csurf/index.js:112:19)
+2025-11-10 06:32:45.35
+f328d060
+User
+at Layer.handle [as handle_request] (/home/runner/workspace/node_modules/express/lib/router/layer.js:95:5)
+2025-11-10 06:32:45.35
+f328d060
+User
+at trim_prefix (/home/runner/workspace/node_modules/express/lib/router/index.js:328:13)
+2025-11-10 06:32:45.35
+f328d060
+User
+at /home/runner/workspace/node_modules/express/lib/router/index.js:286:9
+2025-11-10 06:32:45.35
+f328d060
+User
+at Function.process_params (/home/runner/workspace/node_modules/express/lib/router/index.js:346:12)
+2025-11-10 06:32:45.35
+f328d060
+User
+at next (/home/runner/workspace/node_modules/express/lib/router/index.js:280:10)
+Wrap
+Colors

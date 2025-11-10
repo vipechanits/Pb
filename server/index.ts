@@ -19,6 +19,10 @@ if (!process.env.SESSION_SECRET) {
 
 const app = express();
 
+// Trust Replit's reverse proxy for production deployments
+// This is required for secure cookies and proper IP addresses
+app.set('trust proxy', 1);
+
 // Setup PostgreSQL session store
 const PgSession = connectPgSimple(session);
 const sessionPool = new Pool({ connectionString: process.env.DATABASE_URL });
