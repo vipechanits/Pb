@@ -8,8 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, QrCode, X, Upload } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { CheckCircle, QrCode, X, Upload, AlertTriangle } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { ReferralLinks } from '@/components/referral-links';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -24,6 +25,22 @@ export default function Profile() {
   const [showQR, setShowQR] = useState(false);
   const [qrFile, setQrFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [showProfileDialog, setShowProfileDialog] = useState(false);
+
+  // Show profile completion dialog on first visit
+  useEffect(() => {
+    if (user && !user.isProfileComplete) {
+      const hasSeenDialog = localStorage.getItem('profile-completion-dialog-seen');
+      const lastSeenTime = hasSeenDialog ? parseInt(hasSeenDialog) : 0;
+      const now = Date.now();
+      const hoursSinceLastSeen = (now - lastSeenTime) / (1000 * 60 * 60);
+      
+      // Show dialog if never seen or if more than 24 hours have passed
+      if (!hasSeenDialog || hoursSinceLastSeen > 24) {
+        setShowProfileDialog(true);
+      }
+    }
+  }, [user]);
 
   const form = useForm<UpdateProfile>({
     resolver: zodResolver(updateProfileSchema),
@@ -111,8 +128,57 @@ export default function Profile() {
     }
   };
 
+  const handleDialogClose = (open: boolean) => {
+    setShowProfileDialog(open);
+    // Save to localStorage whenever dialog closes (any method: button, overlay, escape)
+    if (!open) {
+      localStorage.setItem('profile-completion-dialog-seen', Date.now().toString());
+    }
+  };
+
   return (
     <div className="container max-w-4xl mx-auto p-6 space-y-6">
+      {/* Profile Completion Alert Dialog */}
+      <AlertDialog open={showProfileDialog} onOpenChange={handleDialogClose}>
+        <AlertDialogContent data-testid="dialog-profile-completion">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-2xl font-bold flex items-center gap-2">
+              <AlertTriangle className="h-6 w-6 text-destructive" />
+              Complete Your Profile to Unlock Activations
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-4 text-base">
+                <p className="font-semibold text-foreground">
+                  Your profile is incomplete. Complete it now to:
+                </p>
+                <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
+                  <li><strong className="text-foreground">Activate your PAYBACK247 account</strong> and start earning</li>
+                  <li><strong className="text-foreground">Receive payments</strong> from your network via UPI or bank transfer</li>
+                  <li><strong className="text-foreground">Process withdrawals</strong> without delays</li>
+                  <li><strong className="text-foreground">Build your referral network</strong> and maximize income</li>
+                </ul>
+                <p className="text-destructive font-semibold">
+                  ⚠️ Incomplete payment details will delay your withdrawals and prevent activation.
+                </p>
+                <div className="bg-muted p-3 rounded-md">
+                  <p className="font-semibold text-sm text-muted-foreground">Required Information:</p>
+                  <ul className="text-sm space-y-1 mt-2 text-muted-foreground">
+                    <li>✓ Full Name & Mobile Number</li>
+                    <li>✓ UPI ID or Bank Account Details</li>
+                    <li>✓ Payment QR Code (optional but recommended)</li>
+                  </ul>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => handleDialogClose(false)} data-testid="button-dialog-understand" className="w-full">
+              I Understand - Let Me Complete My Profile
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div>
         <h1 className="text-3xl font-bold" data-testid="text-profile-title">Profile Settings</h1>
         <p className="text-muted-foreground">Manage your payment details, account information, and referral links</p>
@@ -123,6 +189,34 @@ export default function Profile() {
           <CheckCircle className="h-4 w-4 text-primary" />
           <AlertDescription>
             <span className="font-semibold">User ID:</span> {user.userId}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Persistent Warning Banner for Incomplete Profile */}
+      {user && !user.isProfileComplete && (
+        <Alert variant="destructive" className="border-2 border-destructive" data-testid="alert-profile-incomplete">
+          <AlertTriangle className="h-5 w-5" />
+          <AlertTitle className="text-lg font-bold">⚠️ ACTION REQUIRED: Complete Your Profile</AlertTitle>
+          <AlertDescription className="space-y-2">
+            <p className="font-semibold">
+              Your profile is incomplete. Fill in all required payment details below to unlock account activation and receive payments.
+            </p>
+            <div className="flex flex-wrap gap-2 mt-3">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  const nameInput = document.querySelector('[data-testid="input-name"]') as HTMLInputElement;
+                  nameInput?.focus();
+                  nameInput?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }}
+                data-testid="button-scroll-to-profile"
+                className="bg-background hover:bg-background/90"
+              >
+                Complete Profile Now →
+              </Button>
+            </div>
           </AlertDescription>
         </Alert>
       )}
