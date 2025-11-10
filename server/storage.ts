@@ -117,6 +117,9 @@ export class DbStorage implements IStorage {
     if (profile.ifscCode !== undefined) {
       normalizedProfile.ifscCode = profile.ifscCode?.trim() || null;
     }
+    if (profile.paymentQrUrl !== undefined) {
+      normalizedProfile.paymentQrUrl = profile.paymentQrUrl?.trim() || null;
+    }
     if (profile.securityCode !== undefined) {
       normalizedProfile.securityCode = profile.securityCode?.trim() || null;
     }
