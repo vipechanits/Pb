@@ -4,24 +4,52 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, Circle, Clock, Info, AlertCircle, RefreshCw } from 'lucide-react';
+import { CheckCircle, Circle, Clock, Info, AlertCircle, RefreshCw, Copy, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { PaymentSubmissionDialog } from '@/components/payment-submission-dialog';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import type { ActivationPayment } from '@shared/schema';
 
+interface AdminPaymentDetails {
+  userId: string;
+  name: string | null;
+  mobile: string | null;
+  upiId: string | null;
+  bankAccountHolder: string | null;
+  bankAccount: string | null;
+  ifscCode: string | null;
+  paymentQrUrl: string | null;
+}
+
 export default function UserActivationPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [selectedPayment, setSelectedPayment] = useState<ActivationPayment | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // Fetch user's activation payments
   const { data: payments, isLoading, refetch } = useQuery<ActivationPayment[]>({
     queryKey: ['/api/activation-payments/payer', user?.userId],
     enabled: !!user?.userId,
   });
+
+  // Fetch admin payment details
+  const { data: adminPaymentDetails } = useQuery<AdminPaymentDetails>({
+    queryKey: ['/api/admin/payment-details'],
+    enabled: !!user,
+  });
+
+  const copyToClipboard = (text: string, fieldName: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldName);
+    setTimeout(() => setCopiedField(null), 2000);
+    toast({
+      title: 'Copied',
+      description: `${fieldName} copied to clipboard`,
+    });
+  };
 
   // Mutation to request activation
   const requestActivationMutation = useMutation({
@@ -176,6 +204,154 @@ export default function UserActivationPage() {
         </AlertDescription>
       </Alert>
 
+      {/* Admin Payment Details Card */}
+      {adminPaymentDetails && (
+        <Card className="border-2 border-primary/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Info className="h-5 w-5 text-primary" />
+              Admin Payment Details (PB0)
+            </CardTitle>
+            <CardDescription>
+              Use these details for all admin payments (Creator Fee & Matrix Levels)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-6 md:grid-cols-2">
+              {/* Payment Details */}
+              <div className="space-y-4">
+                {adminPaymentDetails.upiId && (
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">UPI ID</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-mono font-semibold" data-testid="text-admin-upi">{adminPaymentDetails.upiId}</p>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => copyToClipboard(adminPaymentDetails.upiId!, 'UPI ID')}
+                        data-testid="button-copy-admin-upi"
+                      >
+                        {copiedField === 'UPI ID' ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {adminPaymentDetails.bankAccount && (
+                  <>
+                    {adminPaymentDetails.bankAccountHolder && (
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-muted-foreground">Account Holder</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-mono font-semibold" data-testid="text-admin-account-holder">{adminPaymentDetails.bankAccountHolder}</p>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => copyToClipboard(adminPaymentDetails.bankAccountHolder!, 'Account Holder')}
+                            data-testid="button-copy-admin-account-holder"
+                          >
+                            {copiedField === 'Account Holder' ? (
+                              <CheckCircle2 className="h-4 w-4 text-green-600" />
+                            ) : (
+                              <Copy className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-muted-foreground">Bank Account</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-mono font-semibold" data-testid="text-admin-bank">{adminPaymentDetails.bankAccount}</p>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => copyToClipboard(adminPaymentDetails.bankAccount!, 'Bank Account')}
+                          data-testid="button-copy-admin-bank"
+                        >
+                          {copiedField === 'Bank Account' ? (
+                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {adminPaymentDetails.ifscCode && (
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-muted-foreground">IFSC Code</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-mono font-semibold" data-testid="text-admin-ifsc">{adminPaymentDetails.ifscCode}</p>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => copyToClipboard(adminPaymentDetails.ifscCode!, 'IFSC Code')}
+                            data-testid="button-copy-admin-ifsc"
+                          >
+                            {copiedField === 'IFSC Code' ? (
+                              <CheckCircle2 className="h-4 w-4 text-green-600" />
+                            ) : (
+                              <Copy className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {adminPaymentDetails.mobile && (
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Mobile</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-mono font-semibold" data-testid="text-admin-mobile">{adminPaymentDetails.mobile}</p>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => copyToClipboard(adminPaymentDetails.mobile!, 'Mobile')}
+                        data-testid="button-copy-admin-mobile"
+                      >
+                        {copiedField === 'Mobile' ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* QR Code */}
+              {adminPaymentDetails.paymentQrUrl && (
+                <div className="flex flex-col items-center justify-center">
+                  <p className="text-sm font-medium text-muted-foreground mb-2">Scan to Pay</p>
+                  <div className="border-2 rounded-lg p-3 bg-white">
+                    <img 
+                      src={adminPaymentDetails.paymentQrUrl} 
+                      alt="Admin UPI QR Code" 
+                      className="w-48 h-48 object-contain"
+                      data-testid="img-admin-qr"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
@@ -237,7 +413,7 @@ export default function UserActivationPage() {
                     <div>
                       <p className="font-medium">{getPaymentSlotLabel(payment.slotIndex)}</p>
                       <p className="text-xs text-muted-foreground">
-                        {payment.receiverType === 'admin' ? 'Admin Wallet' : payment.receiverUserId}
+                        {payment.receiverType === 'admin' ? 'Admin Account (PB0)' : payment.receiverUserId}
                       </p>
                       {payment.status === 'submitted' && payment.offlineUtrId && (
                         <p className="text-xs text-muted-foreground mt-1">
