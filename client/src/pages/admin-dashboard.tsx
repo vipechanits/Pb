@@ -1,6 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, DollarSign, GitBranch, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { ReferralLinks } from '@/components/referral-links';
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -117,6 +118,14 @@ export default function AdminDashboard() {
           </div>
         </CardContent>
       </Card>
+
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-2xl font-bold">Admin Referral Links</h2>
+          <p className="text-muted-foreground">Share these permanent links to grow your network</p>
+        </div>
+        <ReferralLinks />
+      </div>
     </div>
   );
 }
