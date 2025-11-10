@@ -198,12 +198,10 @@ export class DbStorage implements IStorage {
   }
   
   async getAdminPendingConfirmations(): Promise<ActivationPayment[]> {
+    // Admin sees ALL submitted payments regardless of receiver
     return db.select().from(activationPayments).where(
-      and(
-        eq(activationPayments.receiverType, 'admin'),
-        eq(activationPayments.status, 'submitted')
-      )
-    );
+      eq(activationPayments.status, 'submitted')
+    ).orderBy(desc(activationPayments.updatedAt));
   }
 
   async submitPaymentProof(id: string, utrId: string, proofUrl?: string): Promise<ActivationPayment | undefined> {

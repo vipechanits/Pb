@@ -518,12 +518,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "User ID not found" });
       }
       
-      // If admin, get both admin payments and user's own payments
+      // If admin, get ALL submitted payments; regular users get only their own
       let payments: any[] = [];
       if (user.role === 'admin') {
-        const adminPayments = await storage.getAdminPendingConfirmations();
-        const userPayments = await storage.getActivationPaymentsPendingConfirmation(user.userId);
-        payments = [...adminPayments, ...userPayments];
+        payments = await storage.getAdminPendingConfirmations();
       } else {
         payments = await storage.getActivationPaymentsPendingConfirmation(user.userId);
       }
