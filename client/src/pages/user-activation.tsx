@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, Circle, Clock, Info, AlertCircle, RefreshCw, Copy, CheckCircle2 } from 'lucide-react';
+import { CheckCircle, Circle, Clock, Info, AlertCircle, RefreshCw, Copy, CheckCircle2, UserCheck, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { PaymentSubmissionDialog } from '@/components/payment-submission-dialog';
@@ -203,6 +203,42 @@ export default function UserActivationPage() {
           Pay ₹625 to each of the 8 slots below. All payments are direct peer-to-peer transfers using Google Pay, Paytm, or PhonePe.
         </AlertDescription>
       </Alert>
+
+      {/* Sponsor Information */}
+      {user?.sponsorId && (
+        <Alert className="border-accent/20 bg-accent/5" data-testid="alert-sponsor-info">
+          <UserCheck className="h-4 w-4 text-accent" />
+          <AlertDescription>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <span className="font-medium">Your Sponsor:</span>
+              <code className="font-mono font-semibold text-accent" data-testid="text-sponsor-id-activation">
+                {user.sponsorId}
+              </code>
+              {user.binaryLeg && (
+                <>
+                  <span className="text-muted-foreground">•</span>
+                  <div className="flex items-center gap-1">
+                    {user.binaryLeg === 'left' ? (
+                      <>
+                        <ArrowLeft className="w-4 h-4 text-blue-500" />
+                        <span className="text-sm text-blue-500 font-medium">Left Leg</span>
+                      </>
+                    ) : (
+                      <>
+                        <ArrowRight className="w-4 h-4 text-green-500" />
+                        <span className="text-sm text-green-500 font-medium">Right Leg</span>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Your <strong>Direct Sponsor</strong> payment (Slot 0) will go to {user.sponsorId}
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Admin Payment Details Card */}
       {adminPaymentDetails && (

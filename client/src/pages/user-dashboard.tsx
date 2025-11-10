@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/hooks/use-toast';
-import { Users, GitBranch, Grid3x3, TrendingUp, Copy, Check, ArrowLeft, ArrowRight, CheckCircle, AlertTriangle, Rocket } from 'lucide-react';
+import { Users, GitBranch, Grid3x3, TrendingUp, Copy, Check, ArrowLeft, ArrowRight, CheckCircle, AlertTriangle, Rocket, UserCheck } from 'lucide-react';
 import { Link } from 'wouter';
 
 export default function UserDashboard() {
@@ -93,6 +93,53 @@ export default function UserDashboard() {
           )}
         </div>
       </div>
+
+      {/* Sponsorship & Placement Information */}
+      {user?.sponsorId && (
+        <Card className="border-accent/20 bg-accent/5" data-testid="card-sponsor-info">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <UserCheck className="w-5 h-5 text-accent" />
+              <div>
+                <CardTitle className="text-lg">Sponsorship & Placement</CardTitle>
+                <CardDescription>Your position in the binary tree</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Sponsor ID</p>
+                <p className="text-lg font-mono font-semibold" data-testid="text-sponsor-id">
+                  {user.sponsorId}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Binary Leg</p>
+                <div className="flex items-center gap-2">
+                  {user.binaryLeg === 'left' ? (
+                    <>
+                      <ArrowLeft className="w-5 h-5 text-blue-500" />
+                      <Badge variant="outline" className="border-blue-500 text-blue-500" data-testid="badge-binary-leg">
+                        Left Leg
+                      </Badge>
+                    </>
+                  ) : user.binaryLeg === 'right' ? (
+                    <>
+                      <ArrowRight className="w-5 h-5 text-green-500" />
+                      <Badge variant="outline" className="border-green-500 text-green-500" data-testid="badge-binary-leg">
+                        Right Leg
+                      </Badge>
+                    </>
+                  ) : (
+                    <Badge variant="secondary" data-testid="badge-binary-leg">Not Assigned</Badge>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Activation Status Alert */}
       {!isActivated && (
