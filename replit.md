@@ -6,6 +6,7 @@ PAYBACK247 is a peer-to-peer income platform that has been converted from a bloc
 **Custom Domain:** https://payback247.com (configured for all referral links and permanent affiliate links)
 
 ## Recent Changes
+- **November 10, 2025**: Added profile completion reminder system with AlertDialog pop-up and persistent warning banner to encourage users to complete payment details
 - **November 10, 2025**: Added prominent Admin Payment Details card to activation page displaying account holder, UPI ID, bank account, IFSC code, mobile number, and QR code with copy-to-clipboard functionality
 - **November 10, 2025**: Replaced "Admin Wallet" terminology with "Admin Account (PB0)" throughout activation flow
 - **November 10, 2025**: Fixed QR upload visibility bug - added paymentQrUrl field normalization in storage layer
