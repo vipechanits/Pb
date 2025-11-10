@@ -6,7 +6,7 @@ PAYBACK247 is a peer-to-peer income platform that has been converted from a bloc
 **Custom Domain:** https://payback247.com (configured for all referral links and permanent affiliate links)
 
 ## Recent Changes
-- **November 10, 2025**: Added sponsor information display - users can now see their sponsor ID and binary leg placement on both dashboard and activation pages. Activation completion logic verified to correctly update sponsor's binary tree counts (leftLegCount, personalLeftCount, totalReferrals) when all 8 payments are confirmed
+- **November 10, 2025**: Enhanced sponsor information display - users can now see their sponsor's name, user ID, and binary leg placement on both dashboard and activation pages. Added GET /api/users/:userId/public endpoint to fetch sponsor details. Activation completion logic verified to correctly update sponsor's binary tree counts (leftLegCount, personalLeftCount, totalReferrals) when all 8 payments are confirmed
 - **November 10, 2025**: Implemented sponsor-based Direct Sponsor payment confirmations - Direct Sponsor payments (slot 0) are now confirmed by actual sponsors, not admin. Admin queue only shows Direct Sponsor payments when receiver is NULL (no sponsor) or PB0 (explicit fallback)
 - **November 10, 2025**: Added profile completion reminder system with AlertDialog pop-up and persistent warning banner to encourage users to complete payment details
 - **November 10, 2025**: Added prominent Admin Payment Details card to activation page displaying account holder, UPI ID, bank account, IFSC code, mobile number, and QR code with copy-to-clipboard functionality
