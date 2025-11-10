@@ -91,6 +91,15 @@ export default function Profile() {
         <p className="text-muted-foreground">Manage your payment details, account information, and referral links</p>
       </div>
 
+      {user?.requiresPostActivationProfileUpdate && (
+        <Alert className="bg-destructive/10 border-destructive/20">
+          <CheckCircle className="h-4 w-4 text-destructive" />
+          <AlertDescription>
+            <span className="font-semibold">Action Required:</span> Your account has been activated! Please review and update your payment details below to continue accessing all platform features.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {user?.userId && (
         <Alert className="bg-primary/10 border-primary/20">
           <CheckCircle className="h-4 w-4 text-primary" />

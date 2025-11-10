@@ -61,6 +61,7 @@ export const users = pgTable("users", {
   
   // Profile completion status
   isProfileComplete: boolean("is_profile_complete").notNull().default(false),
+  requiresPostActivationProfileUpdate: boolean("requires_post_activation_profile_update").notNull().default(false),
   
   // Account status
   isActivated: boolean("is_activated").notNull().default(false),

@@ -96,14 +96,81 @@ export class DbStorage implements IStorage {
   }
 
   async updateUserProfile(id: string, profile: UpdateProfile): Promise<User | undefined> {
-    const result = await db.update(users)
-      .set({
-        ...profile,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, id))
-      .returning();
-    return result[0];
+    // Normalize profile data: trim strings and convert empty strings to null
+    const normalizedProfile: any = {};
+    
+    if (profile.name !== undefined) {
+      normalizedProfile.name = profile.name?.trim() || null;
+    }
+    if (profile.mobile !== undefined) {
+      normalizedProfile.mobile = profile.mobile?.trim() || null;
+    }
+    if (profile.upiId !== undefined) {
+      normalizedProfile.upiId = profile.upiId?.trim() || null;
+    }
+    if (profile.bankAccountHolder !== undefined) {
+      normalizedProfile.bankAccountHolder = profile.bankAccountHolder?.trim() || null;
+    }
+    if (profile.bankAccountNumber !== undefined) {
+      normalizedProfile.bankAccountNumber = profile.bankAccountNumber?.trim() || null;
+    }
+    if (profile.ifscCode !== undefined) {
+      normalizedProfile.ifscCode = profile.ifscCode?.trim() || null;
+    }
+    if (profile.securityCode !== undefined) {
+      normalizedProfile.securityCode = profile.securityCode?.trim() || null;
+    }
+    
+    // Use transaction to ensure atomic update and flag clearing
+    return await db.transaction(async (tx) => {
+      // Update profile with normalized data
+      const result = await tx.update(users)
+        .set({
+          ...normalizedProfile,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, id))
+        .returning();
+      
+      const updatedUser = result[0];
+      if (!updatedUser) return undefined;
+      
+      // Check if profile is now complete using same logic as checkProfileComplete
+      const hasBasicInfo = !!(updatedUser.name && updatedUser.mobile);
+      const hasPaymentInfo = !!(
+        updatedUser.upiId || 
+        (updatedUser.bankAccountNumber && updatedUser.ifscCode && updatedUser.bankAccountHolder)
+      );
+      const hasSecurityCode = !!updatedUser.securityCode;
+      const isComplete = hasBasicInfo && hasPaymentInfo && hasSecurityCode;
+      
+      // If profile is complete and flag is set, clear it
+      if (isComplete && updatedUser.requiresPostActivationProfileUpdate) {
+        const finalResult = await tx.update(users)
+          .set({
+            requiresPostActivationProfileUpdate: false,
+            isProfileComplete: true,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, id))
+          .returning();
+        return finalResult[0];
+      }
+      
+      // If profile is complete but flag not set, still update isProfileComplete
+      if (isComplete && !updatedUser.isProfileComplete) {
+        const finalResult = await tx.update(users)
+          .set({
+            isProfileComplete: true,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, id))
+          .returning();
+        return finalResult[0];
+      }
+      
+      return updatedUser;
+    });
   }
 
   async getLastUser(): Promise<User | undefined> {
@@ -444,10 +511,12 @@ export class DbStorage implements IStorage {
           }
           
           // Activate user - this makes their referral links visible
+          // Also require post-activation profile update
           await tx.update(users)
             .set({ 
               isActivated: true,
               activatedAt: now,
+              requiresPostActivationProfileUpdate: true,
               updatedAt: now
             })
             .where(eq(users.userId, payerUserId));
