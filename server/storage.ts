@@ -243,30 +243,42 @@ export class DbStorage implements IStorage {
   }
 
   async checkAndCompleteActivation(activationId: string, payerUserId: string): Promise<void> {
-    // Get all 8 payments for this activation
-    const payments = await db.select()
-      .from(activationPayments)
-      .where(eq(activationPayments.activationId, activationId));
-    
-    // Check if all 8 payments are confirmed
-    const allConfirmed = payments.length === 8 && payments.every(p => p.status === 'confirmed');
-    
-    if (allConfirmed) {
-      // Update activation status to completed
-      await db.update(activations)
-        .set({ 
-          status: 'completed',
-          completedAt: new Date()
-        })
-        .where(eq(activations.id, activationId));
-      
-      // Activate user
-      await db.update(users)
-        .set({ 
-          isActivated: true,
-          updatedAt: new Date()
-        })
-        .where(eq(users.userId, payerUserId));
+    try {
+      // Use a transaction to ensure atomicity
+      await db.transaction(async (tx) => {
+        // Get all 8 payments for this activation with FOR UPDATE lock
+        const payments = await tx.select()
+          .from(activationPayments)
+          .where(eq(activationPayments.activationId, activationId));
+        
+        // Check if all 8 payments are confirmed
+        const allConfirmed = payments.length === 8 && payments.every(p => p.status === 'confirmed');
+        
+        if (allConfirmed) {
+          console.log(`[ACTIVATION] All 8 payments confirmed for ${payerUserId}. Activating user...`);
+          
+          // Update activation status to completed
+          await tx.update(activations)
+            .set({ 
+              status: 'completed',
+              completedAt: new Date()
+            })
+            .where(eq(activations.id, activationId));
+          
+          // Activate user - this makes their referral links visible
+          await tx.update(users)
+            .set({ 
+              isActivated: true,
+              updatedAt: new Date()
+            })
+            .where(eq(users.userId, payerUserId));
+          
+          console.log(`[ACTIVATION] User ${payerUserId} successfully activated!`);
+        }
+      });
+    } catch (error) {
+      console.error(`[ACTIVATION ERROR] Failed to complete activation for ${payerUserId}:`, error);
+      throw error;
     }
   }
 
