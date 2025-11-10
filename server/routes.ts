@@ -384,7 +384,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isProfileComplete = await storage.checkProfileComplete(user.userId);
       if (!isProfileComplete) {
         return res.status(400).json({ 
-          error: "Profile incomplete. Please update your profile with name, mobile, UPI/bank details, and security code before requesting activation." 
+          error: "Profile incomplete. Please update your profile with name, mobile, and UPI/bank details before requesting activation." 
         });
       }
       
