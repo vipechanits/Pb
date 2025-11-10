@@ -6,6 +6,8 @@ PAYBACK247 is a peer-to-peer income platform that has been converted from a bloc
 **Custom Domain:** https://payback247.com (configured for all referral links and permanent affiliate links)
 
 ## Recent Changes
+- **November 10, 2025**: Added prominent Admin Payment Details card to activation page displaying account holder, UPI ID, bank account, IFSC code, mobile number, and QR code with copy-to-clipboard functionality
+- **November 10, 2025**: Replaced "Admin Wallet" terminology with "Admin Account (PB0)" throughout activation flow
 - **November 10, 2025**: Fixed QR upload visibility bug - added paymentQrUrl field normalization in storage layer
 - **November 10, 2025**: Added user QR code upload feature (paymentQrUrl field) for peer-to-peer payments
 - **November 10, 2025**: Simplified admin payment methods from JSON arrays to single values (1 UPI, 1 bank, 1 mobile, 1 QR upload)
@@ -74,7 +76,12 @@ Preferred communication style: Simple, everyday language.
 ### Key Application Pages
 
 #### User Pages
-- **Activation Page (`/user/activation`)**: Guides users through the 8-payment process with a summary dashboard, checklist, and submission dialog, including QR code generation for UPI payments.
+- **Activation Page (`/user/activation`)**: Guides users through the 8-payment process with:
+  - **Admin Payment Details Card**: Prominently displays admin's account holder name, UPI ID, bank account, IFSC code, mobile number, and QR code at the top with copy-to-clipboard buttons for easy payment
+  - Summary dashboard showing total fee and payment status
+  - 8-payment slots checklist (Direct Sponsor, Binary Match, Creator Fee, Matrix 1-5)
+  - Payment submission dialog with QR code generation for UPI payments
+  - All admin payments labeled as "Admin Account (PB0)"
 - **Confirmation Page (`/user/confirmation`)**: Displays payments pending user confirmation.
 - **Profile Page (`/user/profile`)**: User profile management with completion enforcement before activation.
 
