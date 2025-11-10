@@ -203,6 +203,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get binary tree structure for a user
+  app.get("/api/users/:userId/binary-tree", requireAuth, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const requestingUser = await storage.getUserById(req.session.userId!);
+      
+      // Users can only view their own tree, admins can view any
+      if (requestingUser?.userId !== userId && requestingUser?.role !== 'admin') {
+        return res.status(403).json({ error: "Forbidden - You can only view your own binary tree" });
+      }
+      
+      const rootUser = await storage.getUserByUserId(userId);
+      if (!rootUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Recursively fetch binary tree (limit to 5 levels deep)
+      const fetchTreeNode = async (user: any, depth: number = 0): Promise<any> => {
+        if (depth > 5) return null; // Limit recursion depth
+        
+        const node = {
+          userId: user.userId,
+          name: user.name,
+          email: user.email,
+          isActivated: user.isActivated,
+          leftLegCount: user.leftLegCount,
+          rightLegCount: user.rightLegCount,
+          personalLeftCount: user.personalLeftCount,
+          personalRightCount: user.personalRightCount,
+          totalReferrals: user.totalReferrals,
+          leftChild: null as any,
+          rightChild: null as any,
+        };
+        
+        // Find users under this user's left and right legs
+        const [leftUsers, rightUsers] = await Promise.all([
+          storage.getUsersBySponsorAndLeg(user.userId, 'left'),
+          storage.getUsersBySponsorAndLeg(user.userId, 'right'),
+        ]);
+        
+        // Recursively fetch children
+        if (leftUsers && leftUsers.length > 0) {
+          node.leftChild = await fetchTreeNode(leftUsers[0], depth + 1);
+        }
+        if (rightUsers && rightUsers.length > 0) {
+          node.rightChild = await fetchTreeNode(rightUsers[0], depth + 1);
+        }
+        
+        return node;
+      };
+      
+      const tree = await fetchTreeNode(rootUser);
+      res.json(tree);
+    } catch (error) {
+      console.error("Error fetching binary tree:", error);
+      res.status(500).json({ error: "Failed to fetch binary tree" });
+    }
+  });
+
   // Update user profile
   app.patch("/api/profile", requireAuth, async (req, res) => {
     try {

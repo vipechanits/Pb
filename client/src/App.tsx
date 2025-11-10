@@ -20,6 +20,7 @@ import MatrixIncome from '@/pages/matrix-income';
 import Profile from '@/pages/profile';
 import UserActivationPage from '@/pages/user-activation';
 import UserConfirmationPage from '@/pages/user-confirmation';
+import UserBinaryTreePage from '@/pages/user-binary-tree';
 import ReentryPage from '@/pages/reentry';
 import AdditionalReentryPage from '@/pages/additional-reentry';
 import AdminDashboard from '@/pages/admin-dashboard';
@@ -136,6 +137,16 @@ function Router() {
           <ProtectedRoute>
             <DashboardLayout>
               <UserConfirmationPage />
+            </DashboardLayout>
+          </ProtectedRoute>
+        )}
+      </Route>
+      
+      <Route path="/user/binary-tree">
+        {() => (
+          <ProtectedRoute>
+            <DashboardLayout>
+              <UserBinaryTreePage />
             </DashboardLayout>
           </ProtectedRoute>
         )}

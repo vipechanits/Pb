@@ -28,6 +28,7 @@ export interface IStorage {
   getLastUser(): Promise<User | undefined>;
   determineBestLeg(sponsorUserId: string): Promise<'left' | 'right'>;
   checkProfileComplete(userId: string): Promise<boolean>;
+  getUsersBySponsorAndLeg(sponsorUserId: string, leg: 'left' | 'right'): Promise<User[]>;
   
   // System configuration methods
   getSystemConfig(): Promise<SystemConfig>;
@@ -202,6 +203,18 @@ export class DbStorage implements IStorage {
     const hasPaymentInfo = !!(user.upiId || (user.bankAccountNumber && user.ifscCode && user.bankAccountHolder));
     
     return hasBasicInfo && hasPaymentInfo;
+  }
+
+  async getUsersBySponsorAndLeg(sponsorUserId: string, leg: 'left' | 'right'): Promise<User[]> {
+    const result = await db
+      .select()
+      .from(users)
+      .where(and(
+        eq(users.sponsorId, sponsorUserId),
+        eq(users.binaryLeg, leg)
+      ))
+      .orderBy(users.createdAt);
+    return result;
   }
 
   // System configuration methods

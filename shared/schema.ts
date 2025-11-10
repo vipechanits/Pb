@@ -60,6 +60,12 @@ export const users = pgTable("users", {
   personalRightCount: integer("personal_right_count").notNull().default(0), // Personal right leg count (directly sponsored)
   totalReferrals: integer("total_referrals").notNull().default(0),
   
+  // Global matrix position (separate from binary sponsorship tree)
+  matrixParentId: varchar("matrix_parent_id", { length: 20 }), // Parent in global matrix (nullable - root has none)
+  matrixPosition: integer("matrix_position"), // 0 = left, 1 = right (nullable until placed)
+  matrixLevel: integer("matrix_level"), // Level in global matrix: 1-5 (nullable until placed)
+  matrixPath: text("matrix_path").unique(), // Materialized path (e.g., "PB10001.L.R") for efficient querying
+  
   // Profile completion status
   isProfileComplete: boolean("is_profile_complete").notNull().default(false),
   requiresPostActivationProfileUpdate: boolean("requires_post_activation_profile_update").notNull().default(false),
