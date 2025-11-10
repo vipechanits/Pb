@@ -3,6 +3,14 @@
 ## Overview
 PAYBACK247 is a peer-to-peer income platform that has been converted from a blockchain-based system to a traditional full-stack web application. Its core purpose is to facilitate network marketing operations, including binary pairing income, multi-level matrix rewards, and a robust manual payment tracking system with administrator approval. The platform enables users to activate accounts, build referral networks, monitor earnings, and manage profiles. Administrators have comprehensive control over system configuration, payment approvals, and access to analytics, ensuring efficient operation and financial transparency.
 
+**Custom Domain:** https://payback247.com (configured for all referral links and permanent affiliate links)
+
+## Recent Changes
+- **November 10, 2025**: Database reset (kept PB0 only), added permanent affiliate links to admin dashboard, configured custom domain https://payback247.com
+- **November 10, 2025**: Fully responsive landing page optimized for mobile, tablet, and desktop
+- **November 10, 2025**: Updated all payment amounts to ₹500 per slot (Creator Fee + Matrix Levels 1-5)
+- **November 10, 2025**: Removed all "MLM" references, increased logo size to 80px, removed slogan
+
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
