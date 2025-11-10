@@ -1,7 +1,7 @@
-# PAYBACK247 - P2P MLM Platform
+# PAYBACK247 - P2P Income Platform
 
 ## Overview
-PAYBACK247 is a peer-to-peer MLM platform that has been converted from a blockchain-based system to a traditional full-stack web application. Its core purpose is to facilitate multi-level marketing operations, including binary pairing income, multi-level matrix rewards, and a robust manual payment tracking system with administrator approval. The platform enables users to activate accounts, build referral networks, monitor earnings, and manage profiles. Administrators have comprehensive control over system configuration, payment approvals, and access to analytics, ensuring efficient operation and financial transparency.
+PAYBACK247 is a peer-to-peer income platform that has been converted from a blockchain-based system to a traditional full-stack web application. Its core purpose is to facilitate network marketing operations, including binary pairing income, multi-level matrix rewards, and a robust manual payment tracking system with administrator approval. The platform enables users to activate accounts, build referral networks, monitor earnings, and manage profiles. Administrators have comprehensive control over system configuration, payment approvals, and access to analytics, ensuring efficient operation and financial transparency.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.

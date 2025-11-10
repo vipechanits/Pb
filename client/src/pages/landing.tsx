@@ -55,7 +55,7 @@ export default function Landing() {
       answer: 'Click "Get Started" to sign up with your email. Complete your profile and activate your account with ₹5,000 to start earning.'
     },
     {
-      question: 'What is MLM "Non-working" matrix?',
+      question: 'What is "Non-working" matrix?',
       answer: 'Our 2+5 non-working matrix means you only need 2 direct referrals. The system automatically places additional members in your 5-level matrix, creating passive income without constant recruiting.'
     },
     {
@@ -77,9 +77,9 @@ export default function Landing() {
       {/* Header */}
       <header className="border-b border-border sticky top-0 bg-background/95 backdrop-blur z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <img src={logoUrl} alt="PAYBACK247" className="w-10 h-10" />
-            <span className="font-bold text-xl">PAYBACK247</span>
+          <div className="flex items-center gap-3">
+            <img src={logoUrl} alt="PAYBACK247" className="w-20 h-20" />
+            <span className="font-bold text-2xl">PAYBACK247</span>
           </div>
           <Button onClick={() => setLocation('/auth/signup')} data-testid="button-get-started">
             Get Started
@@ -94,7 +94,7 @@ export default function Landing() {
             Empower Your Financial Future.
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Join PAYBACK247's non-working matrix system. Earn passive income through our proven 2+5 MLM structure with direct P2P payments.
+            Join PAYBACK247's non-working matrix system. Earn passive income through our proven 2+5 structure with direct P2P payments.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <Button size="lg" onClick={() => setLocation('/auth/signup')} data-testid="button-join">
