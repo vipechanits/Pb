@@ -53,9 +53,18 @@ app.use(
   })
 );
 
-// CSRF protection for state-changing routes
+// CSRF protection for state-changing routes only
 const csrfProtection = csrf({ cookie: false });
-app.use(csrfProtection);
+
+// Apply CSRF protection only to state-changing methods (POST, PUT, PATCH, DELETE)
+app.use((req, res, next) => {
+  const method = req.method.toUpperCase();
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    csrfProtection(req, res, next);
+  } else {
+    next();
+  }
+});
 
 app.use((req, res, next) => {
   const start = Date.now();

@@ -1,0 +1,140 @@
+2025-11-10 06:21:39.71
+e2939b87
+User
+at csrf (/home/runner/workspace/node_modules/csurf/index.js:112:19)
+2025-11-10 06:21:39.71
+e2939b87
+User
+at Layer.handle [as handle_request] (/home/runner/workspace/node_modules/express/lib/router/layer.js:95:5)
+2025-11-10 06:21:39.71
+e2939b87
+User
+at trim_prefix (/home/runner/workspace/node_modules/express/lib/router/index.js:328:13)
+2025-11-10 06:21:39.71
+e2939b87
+User
+at /home/runner/workspace/node_modules/express/lib/router/index.js:286:9
+2025-11-10 06:21:39.71
+e2939b87
+User
+at Function.process_params (/home/runner/workspace/node_modules/express/lib/router/index.js:346:12)
+2025-11-10 06:21:39.71
+e2939b87
+User
+at next (/home/runner/workspace/node_modules/express/lib/router/index.js:280:10)
+2025-11-10 06:21:39.71
+e2939b87
+User
+at session (/home/runner/workspace/node_modules/express-session/index.js:487:7)
+2025-11-10 06:21:39.71
+e2939b87
+User
+at Layer.handle [as handle_request] (/home/runner/workspace/node_modules/express/lib/router/layer.js:95:5)
+2025-11-10 06:21:39.71
+e2939b87
+User
+at trim_prefix (/home/runner/workspace/node_modules/express/lib/router/index.js:328:13)
+2025-11-10 06:21:39.71
+e2939b87
+User
+at /home/runner/workspace/node_modules/express/lib/router/index.js:286:9
+2025-11-10 06:22:16.98
+e2939b87
+User
+12:52:16 AM [express] GET /api/auth/me 401 in 27ms :: {"error":"Unauthorized"}
+2025-11-10 06:22:17.08
+e2939b87
+User
+12:52:17 AM [express] GET /api/csrf-token 200 in 104ms :: {"csrfToken":"mu1XcGtQ-h_5xV40V42ZZFWGiHA7w…
+2025-11-10 06:22:28.65
+e2939b87
+User
+ForbiddenError: invalid csrf token
+2025-11-10 06:22:28.65
+e2939b87
+User
+at csrf (/home/runner/workspace/node_modules/csurf/index.js:112:19)
+2025-11-10 06:22:28.65
+e2939b87
+User
+at Layer.handle [as handle_request] (/home/runner/workspace/node_modules/express/lib/router/layer.js:95:5)
+2025-11-10 06:22:28.65
+e2939b87
+User
+at trim_prefix (/home/runner/workspace/node_modules/express/lib/router/index.js:328:13)
+2025-11-10 06:22:28.65
+e2939b87
+User
+at /home/runner/workspace/node_modules/express/lib/router/index.js:286:9
+2025-11-10 06:22:28.65
+e2939b87
+User
+at Function.process_params (/home/runner/workspace/node_modules/express/lib/router/index.js:346:12)
+2025-11-10 06:22:28.65
+e2939b87
+User
+at next (/home/runner/workspace/node_modules/express/lib/router/index.js:280:10)
+2025-11-10 06:22:28.65
+e2939b87
+User
+at session (/home/runner/workspace/node_modules/express-session/index.js:487:7)
+2025-11-10 06:22:28.65
+e2939b87
+User
+at Layer.handle [as handle_request] (/home/runner/workspace/node_modules/express/lib/router/layer.js:95:5)
+2025-11-10 06:22:28.65
+e2939b87
+User
+at trim_prefix (/home/runner/workspace/node_modules/express/lib/router/index.js:328:13)
+2025-11-10 06:22:28.65
+e2939b87
+User
+at /home/runner/workspace/node_modules/express/lib/router/index.js:286:9
+2025-11-10 06:25:45.40
+01de5e5c
+System
+starting up user application
+2025-11-10 06:25:45.40
+01de5e5c
+System
+metasidecar: loaded enterprise status from environment is_enterprise=false
+2025-11-10 06:25:45.40
+01de5e5c
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2025-11-10 06:25:52.10
+01de5e5c
+User
+> rest-express@1.0.0 start
+2025-11-10 06:25:52.10
+01de5e5c
+User
+> NODE_ENV=production node dist/index.js
+2025-11-10 06:25:58.88
+01de5e5c
+User
+12:55:58 AM [express] serving on port 5000
+2025-11-10 06:31:48.07
+f328d060
+System
+starting up user application
+2025-11-10 06:31:48.07
+f328d060
+System
+metasidecar: loaded enterprise status from environment is_enterprise=false
+2025-11-10 06:31:48.07
+f328d060
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2025-11-10 06:31:55.54
+f328d060
+User
+> rest-express@1.0.0 start
+2025-11-10 06:31:55.54
+f328d060
+User
+> NODE_ENV=production node dist/index.js
+2025-11-10 06:32:02.83
+f328d060
+User
+1:02:02 AM [express] serving on port 5000
