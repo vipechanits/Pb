@@ -6,9 +6,12 @@ import {
   type InsertActivation,
   type ActivationPayment,
   type InsertActivationPayment,
+  type SystemConfig,
+  type UpdateSystemConfig,
   users,
   activations,
-  activationPayments
+  activationPayments,
+  systemConfig
 } from "@shared/schema";
 import { SLOT_TO_PAYMENT_TYPE, PAYMENT_TYPE_AMOUNTS } from "@shared/constants";
 import { eq, and, desc, sql } from "drizzle-orm";
@@ -23,6 +26,11 @@ export interface IStorage {
   updateUserProfile(id: string, profile: UpdateProfile): Promise<User | undefined>;
   getLastUser(): Promise<User | undefined>;
   determineBestLeg(sponsorUserId: string): Promise<'left' | 'right'>;
+  checkProfileComplete(userId: string): Promise<boolean>;
+  
+  // System configuration methods
+  getSystemConfig(): Promise<SystemConfig>;
+  updateSystemConfig(config: Partial<UpdateSystemConfig>): Promise<SystemConfig>;
   
   // Activation methods
   // REMOVED: createActivation() - use createActivationWithPayments() to ensure transactional safety
@@ -40,6 +48,7 @@ export interface IStorage {
   getActivationPaymentsByReceiverUserId(receiverUserId: string): Promise<ActivationPayment[]>;
   getActivationPaymentsPendingConfirmation(receiverUserId: string): Promise<ActivationPayment[]>;
   getAdminPendingConfirmations(): Promise<ActivationPayment[]>;
+  getAllConfirmedPayments(): Promise<ActivationPayment[]>;
   submitPaymentProof(id: string, utrId: string, proofUrl?: string): Promise<ActivationPayment | undefined>;
   confirmActivationPayment(id: string, notes?: string): Promise<ActivationPayment | undefined>;
   rejectActivationPayment(id: string, rejectionReason: string): Promise<ActivationPayment | undefined>;
@@ -94,6 +103,44 @@ export class DbStorage implements IStorage {
     return sponsor.leftLegCount <= sponsor.rightLegCount ? 'left' : 'right';
   }
 
+  async checkProfileComplete(userId: string): Promise<boolean> {
+    const user = await this.getUserByUserId(userId);
+    if (!user) return false;
+    
+    // Check required profile fields: name, mobile, upiId or bank details
+    const hasBasicInfo = !!(user.name && user.mobile);
+    const hasPaymentInfo = !!(user.upiId || (user.bankAccountNumber && user.ifscCode && user.bankAccountHolder));
+    const hasSecurityCode = !!user.securityCode;
+    
+    return hasBasicInfo && hasPaymentInfo && hasSecurityCode;
+  }
+
+  // System configuration methods
+  async getSystemConfig(): Promise<SystemConfig> {
+    const result = await db.select().from(systemConfig).limit(1);
+    if (!result[0]) {
+      throw new Error('System configuration not found. Database may need initialization.');
+    }
+    return result[0];
+  }
+
+  async updateSystemConfig(config: Partial<UpdateSystemConfig>): Promise<SystemConfig> {
+    // Always update the singleton row
+    const result = await db.update(systemConfig)
+      .set({
+        ...config,
+        updatedAt: new Date(),
+      })
+      .where(eq(systemConfig.id, 'default-config-singleton'))
+      .returning();
+    
+    if (!result[0]) {
+      throw new Error('Failed to update system configuration');
+    }
+    
+    return result[0];
+  }
+
   // REMOVED: createActivation() - use createActivationWithPayments() to ensure data consistency
   // If you need to create an activation, you MUST use the transactional method below
 
@@ -104,16 +151,58 @@ export class DbStorage implements IStorage {
     sponsorUserId: string | null
   ): Promise<{ activation: Activation; payments: ActivationPayment[] }> {
     return await db.transaction(async (tx) => {
+      // Fetch system config for payment amounts (with lock to prevent concurrent edits)
+      const configResult = await tx.select().from(systemConfig)
+        .where(eq(systemConfig.id, 'default-config-singleton'))
+        .for('update')
+        .limit(1);
+      
+      if (!configResult[0]) {
+        throw new Error('System configuration not found');
+      }
+      
+      const config = configResult[0];
+      
       // Insert activation first
       const activationResult = await tx.insert(activations).values(activation).returning();
       const createdActivation = activationResult[0];
       
-      // Generate all 8 payment slots
+      // Generate all 8 payment slots with config-driven amounts
       const paymentsToCreate: InsertActivationPayment[] = [];
       
       for (let slotIndex = 0; slotIndex < SLOT_TO_PAYMENT_TYPE.length; slotIndex++) {
         const paymentType = SLOT_TO_PAYMENT_TYPE[slotIndex];
-        const amount = PAYMENT_TYPE_AMOUNTS[paymentType];
+        
+        // Get amount from config instead of static constant
+        let amount: string;
+        switch (paymentType) {
+          case 'direct_sponsor':
+            amount = config.sponsorPaymentAmount;
+            break;
+          case 'binary_match':
+            amount = config.binaryMatchPaymentAmount;
+            break;
+          case 'creator_fee':
+            amount = config.creatorFeeAmount;
+            break;
+          case 'matrix_level_1':
+            amount = config.matrixLevel1Amount;
+            break;
+          case 'matrix_level_2':
+            amount = config.matrixLevel2Amount;
+            break;
+          case 'matrix_level_3':
+            amount = config.matrixLevel3Amount;
+            break;
+          case 'matrix_level_4':
+            amount = config.matrixLevel4Amount;
+            break;
+          case 'matrix_level_5':
+            amount = config.matrixLevel5Amount;
+            break;
+          default:
+            amount = '625'; // Fallback
+        }
         
         let receiverUserId: string | null = null;
         let receiverType: 'user' | 'admin' = 'admin';
@@ -138,7 +227,7 @@ export class DbStorage implements IStorage {
           receiverUserId,
           paymentType: paymentType as any,
           receiverType,
-          amountInr: amount.toString(),
+          amountInr: amount,
           paymentMode: 'offline',
           status: 'pending',
           submissionCount: 0,
@@ -212,6 +301,13 @@ export class DbStorage implements IStorage {
     return db.select().from(activationPayments).where(
       eq(activationPayments.status, 'submitted')
     ).orderBy(desc(activationPayments.updatedAt));
+  }
+
+  async getAllConfirmedPayments(): Promise<ActivationPayment[]> {
+    // Get all confirmed payments for admin report
+    return db.select().from(activationPayments).where(
+      eq(activationPayments.status, 'confirmed')
+    ).orderBy(desc(activationPayments.confirmedAt));
   }
 
   async submitPaymentProof(id: string, utrId: string, proofUrl?: string): Promise<ActivationPayment | undefined> {
@@ -313,23 +409,25 @@ export class DbStorage implements IStorage {
             const sponsorId = activatedUser.sponsorId;
             const binaryLeg = activatedUser.binaryLeg;
             
-            // Increment sponsor's referral count and leg count
+            // Increment sponsor's referral count, global leg count, AND personal leg count
             const updateData: any = {
               totalReferrals: sql`${users.totalReferrals} + 1`,
               updatedAt: now
             };
             
             if (binaryLeg === 'left') {
-              updateData.leftLegCount = sql`${users.leftLegCount} + 1`;
+              updateData.leftLegCount = sql`${users.leftLegCount} + 1`; // Global count
+              updateData.personalLeftCount = sql`${users.personalLeftCount} + 1`; // Personal count
             } else if (binaryLeg === 'right') {
-              updateData.rightLegCount = sql`${users.rightLegCount} + 1`;
+              updateData.rightLegCount = sql`${users.rightLegCount} + 1`; // Global count
+              updateData.personalRightCount = sql`${users.personalRightCount} + 1`; // Personal count
             }
             
             await tx.update(users)
               .set(updateData)
               .where(eq(users.userId, sponsorId));
             
-            console.log(`[ACTIVATION] Updated sponsor ${sponsorId} stats: +1 total, +1 to ${binaryLeg} leg`);
+            console.log(`[ACTIVATION] Updated sponsor ${sponsorId} stats: +1 total, +1 to ${binaryLeg} leg (global & personal)`);
           }
           
           console.log(`[ACTIVATION] User ${payerUserId} successfully activated!`);

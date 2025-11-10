@@ -53,9 +53,14 @@ export const users = pgTable("users", {
   binaryLeg: binaryLegEnum("binary_leg"), // Which leg (left/right) user was placed on
   
   // Network statistics (updated when downline members activate)
-  leftLegCount: integer("left_leg_count").notNull().default(0),
-  rightLegCount: integer("right_leg_count").notNull().default(0),
+  leftLegCount: integer("left_leg_count").notNull().default(0), // Global left leg count (all downline)
+  rightLegCount: integer("right_leg_count").notNull().default(0), // Global right leg count (all downline)
+  personalLeftCount: integer("personal_left_count").notNull().default(0), // Personal left leg count (directly sponsored)
+  personalRightCount: integer("personal_right_count").notNull().default(0), // Personal right leg count (directly sponsored)
   totalReferrals: integer("total_referrals").notNull().default(0),
+  
+  // Profile completion status
+  isProfileComplete: boolean("is_profile_complete").notNull().default(false),
   
   // Account status
   isActivated: boolean("is_activated").notNull().default(false),
@@ -171,3 +176,38 @@ export const rejectPaymentSchema = z.object({
 });
 
 export type RejectPayment = z.infer<typeof rejectPaymentSchema>;
+
+// System configuration table (singleton pattern)
+export const systemConfig = pgTable("system_config", {
+  id: varchar("id").primaryKey().default('default-config-singleton'),
+  
+  // Payment amounts (in INR)
+  sponsorPaymentAmount: decimal("sponsor_payment_amount", { precision: 10, scale: 2 }).notNull().default('1000'),
+  binaryMatchPaymentAmount: decimal("binary_match_payment_amount", { precision: 10, scale: 2 }).notNull().default('1000'),
+  creatorFeeAmount: decimal("creator_fee_amount", { precision: 10, scale: 2 }).notNull().default('625'),
+  matrixLevel1Amount: decimal("matrix_level_1_amount", { precision: 10, scale: 2 }).notNull().default('625'),
+  matrixLevel2Amount: decimal("matrix_level_2_amount", { precision: 10, scale: 2 }).notNull().default('625'),
+  matrixLevel3Amount: decimal("matrix_level_3_amount", { precision: 10, scale: 2 }).notNull().default('625'),
+  matrixLevel4Amount: decimal("matrix_level_4_amount", { precision: 10, scale: 2 }).notNull().default('625'),
+  matrixLevel5Amount: decimal("matrix_level_5_amount", { precision: 10, scale: 2 }).notNull().default('625'),
+  
+  // Binary matching configuration
+  binaryLeftQualification: integer("binary_left_qualification").notNull().default(1),
+  binaryRightQualification: integer("binary_right_qualification").notNull().default(1),
+  binaryMatchingRatioLeft: integer("binary_matching_ratio_left").notNull().default(3),
+  binaryMatchingRatioRight: integer("binary_matching_ratio_right").notNull().default(3),
+  
+  // Admin UPI for QR code generation
+  adminUpiId: text("admin_upi_id"),
+  adminUpiName: text("admin_upi_name"),
+  
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const updateSystemConfigSchema = createInsertSchema(systemConfig).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export type SystemConfig = typeof systemConfig.$inferSelect;
+export type UpdateSystemConfig = z.infer<typeof updateSystemConfigSchema>;
