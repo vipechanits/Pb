@@ -6,6 +6,7 @@ PAYBACK247 is a peer-to-peer income platform that has been converted from a bloc
 **Custom Domain:** https://payback247.com (configured for all referral links and permanent affiliate links)
 
 ## Recent Changes
+- **November 10, 2025**: Implemented global 2x5 matrix system with BFS placement - users are automatically assigned to next available matrix slot (breadth-first) upon activation, independent of binary sponsorship tree. Matrix payments (slots 3-7) now route to global matrix parents (up to 5 levels) with admin fallback. Added database fields: matrixParentId, matrixPosition (0/1), matrixLevel (0-5), matrixPath. Matrix placement uses FOR UPDATE SKIP LOCKED for concurrency safety. All operations (activation, matrix placement, payment routing) are atomic within a single transaction.
 - **November 10, 2025**: Enhanced sponsor information display - users can now see their sponsor's name, user ID, and binary leg placement on both dashboard and activation pages. Added GET /api/users/:userId/public endpoint to fetch sponsor details. Activation completion logic verified to correctly update sponsor's binary tree counts (leftLegCount, personalLeftCount, totalReferrals) when all 8 payments are confirmed
 - **November 10, 2025**: Implemented sponsor-based Direct Sponsor payment confirmations - Direct Sponsor payments (slot 0) are now confirmed by actual sponsors, not admin. Admin queue only shows Direct Sponsor payments when receiver is NULL (no sponsor) or PB0 (explicit fallback)
 - **November 10, 2025**: Added profile completion reminder system with AlertDialog pop-up and persistent warning banner to encourage users to complete payment details
@@ -42,8 +43,8 @@ Preferred communication style: Simple, everyday language.
 - **Database**: PostgreSQL (Neon serverless).
 - **ORM**: Drizzle ORM for type-safe operations.
 - **Schema**: 
-  - `users` table: Authentication (auto-generated IDs starting from PB10000, admin is PB0), profile data, personal binary counts (`personalLeftCount`, `personalRightCount`), profile completion flag
-  - `activations` table: Activation lifecycle (UUID-based IDs `ACT-{userId}-{uuid}`, unique `payer_wallet`)
+  - `users` table: Authentication (auto-generated IDs starting from PB10000, admin is PB0), profile data, personal binary counts (`personalLeftCount`, `personalRightCount`), global matrix position (`matrixParentId`, `matrixPosition`, `matrixLevel`, `matrixPath`), profile completion flag
+  - `activations` table: Activation lifecycle (UUID-based IDs `ACT-{userId}-{uuid}`, unique `payer_wallet`), matrix uplines tracking (`matrixUpline1-5`)
   - `activation_payments` table: Tracking 8 payment slots per activation (status: pending, submitted, confirmed, rejected)
   - `system_config` table: Dynamic system configuration (singleton pattern with id='default-config-singleton') for payment amounts, binary matching rules, admin UPI details
 - **Migrations**: Drizzle Kit.

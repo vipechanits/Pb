@@ -8,6 +8,7 @@ import {
   type InsertActivationPayment,
   type SystemConfig,
   type UpdateSystemConfig,
+  type MatrixNode,
   users,
   activations,
   activationPayments,
@@ -32,6 +33,7 @@ export interface IStorage {
   
   // Global matrix methods
   findAndAssignMatrixSlot(userId: string): Promise<User | undefined>;
+  getMatrixSubtree(userId: string, maxDepth: number): Promise<MatrixNode | null>;
   
   // System configuration methods
   getSystemConfig(): Promise<SystemConfig>;
@@ -315,6 +317,68 @@ export class DbStorage implements IStorage {
     } else {
       return await db.transaction(executeInTx);
     }
+  }
+
+  async getMatrixSubtree(userId: string, maxDepth: number): Promise<MatrixNode | null> {
+    const rootUser = await this.getUserByUserId(userId);
+    if (!rootUser || rootUser.matrixLevel === null || rootUser.matrixLevel === undefined || !rootUser.matrixPath) {
+      return null;
+    }
+
+    const maxLevel = rootUser.matrixLevel + maxDepth;
+    const rows = await db.execute(sql`
+      WITH RECURSIVE matrix_tree AS (
+        SELECT user_id, name, email, is_activated, matrix_level, matrix_position, matrix_path, matrix_parent_id, 0 as depth
+        FROM users
+        WHERE user_id = ${userId} AND matrix_level IS NOT NULL AND matrix_path IS NOT NULL
+        
+        UNION ALL
+        
+        SELECT u.user_id, u.name, u.email, u.is_activated, u.matrix_level, u.matrix_position, u.matrix_path, u.matrix_parent_id, mt.depth + 1
+        FROM users u
+        INNER JOIN matrix_tree mt ON u.matrix_parent_id = mt.user_id
+        WHERE u.matrix_level IS NOT NULL 
+          AND u.matrix_path IS NOT NULL 
+          AND u.matrix_level <= ${maxLevel}
+          AND mt.depth < ${maxDepth}
+      )
+      SELECT * FROM matrix_tree;
+    `);
+
+    if (rows.rows.length === 0) {
+      return null;
+    }
+
+    const nodeMap = new Map<string, any>();
+    rows.rows.forEach((row: any) => {
+      nodeMap.set(row.user_id, {
+        userId: row.user_id,
+        name: row.name,
+        email: row.email,
+        isActivated: row.is_activated,
+        matrixLevel: row.matrix_level,
+        matrixPosition: row.matrix_position,
+        matrixPath: row.matrix_path,
+        leftChild: null,
+        rightChild: null,
+      });
+    });
+
+    nodeMap.forEach((node, userId) => {
+      const row = rows.rows.find((r: any) => r.user_id === userId);
+      if (row && row.matrix_parent_id) {
+        const parent = nodeMap.get(row.matrix_parent_id);
+        if (parent) {
+          if (row.matrix_position === 0) {
+            parent.leftChild = node;
+          } else {
+            parent.rightChild = node;
+          }
+        }
+      }
+    });
+
+    return nodeMap.get(userId) || null;
   }
 
   // System configuration methods

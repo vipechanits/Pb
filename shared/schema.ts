@@ -229,3 +229,16 @@ export const updateSystemConfigSchema = createInsertSchema(systemConfig).omit({
 
 export type SystemConfig = typeof systemConfig.$inferSelect;
 export type UpdateSystemConfig = z.infer<typeof updateSystemConfigSchema>;
+
+// Matrix tree node for visualization
+export interface MatrixNode {
+  userId: string;
+  name: string | null;
+  email: string;
+  isActivated: boolean;
+  matrixLevel: number;
+  matrixPosition: number;
+  matrixPath: string;
+  leftChild: MatrixNode | null;
+  rightChild: MatrixNode | null;
+}

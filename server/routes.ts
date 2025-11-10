@@ -2,10 +2,12 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema } from "@shared/schema";
+import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema, users } from "@shared/schema";
 import { hashPassword, verifyPassword, serializeUser } from "./auth";
 import { generateUserPaymentQR } from "./qrcode-generator";
 import { z } from "zod";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
 // Middleware to check if user is authenticated
 function requireAuth(req: any, res: any, next: any) {
@@ -259,6 +261,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching binary tree:", error);
       res.status(500).json({ error: "Failed to fetch binary tree" });
+    }
+  });
+
+  app.get("/api/users/:userId/global-matrix", requireAuth, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const requestingUser = await storage.getUserById(req.session.userId!);
+      
+      if (requestingUser?.userId !== userId && requestingUser?.role !== 'admin') {
+        return res.status(403).json({ error: "Forbidden - You can only view your own global matrix" });
+      }
+      
+      const rootUser = await storage.getUserByUserId(userId);
+      if (!rootUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      const tree = await storage.getMatrixSubtree(userId, 5);
+      res.json(tree);
+    } catch (error) {
+      console.error("Error fetching global matrix:", error);
+      res.status(500).json({ error: "Failed to fetch global matrix" });
     }
   });
 
