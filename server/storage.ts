@@ -788,16 +788,16 @@ export class DbStorage implements IStorage {
         throw error;
       }
 
-      await this.checkAndCompleteActivation(payment.activationId, payment.payerUserId);
+      await this.checkAndCompleteActivation(payment.activationId, payment.payerUserId, tx);
       
       return payment;
     });
   }
 
-  async checkAndCompleteActivation(activationId: string, payerUserId: string): Promise<void> {
+  async checkAndCompleteActivation(activationId: string, payerUserId: string, existingTx?: any): Promise<void> {
     try {
-      // Use a transaction to ensure atomicity
-      await db.transaction(async (tx) => {
+      // Execute the logic within the provided transaction or create a new one
+      const executeLogic = async (tx: any) => {
         // Get all 8 payments for this activation with FOR UPDATE lock to prevent concurrent runs
         const payments = await tx.select()
           .from(activationPayments)
@@ -805,7 +805,7 @@ export class DbStorage implements IStorage {
           .for('update');
         
         // Verify exactly 8 payments exist and all are confirmed
-        const allConfirmed = payments.length === 8 && payments.every(p => p.status === 'confirmed');
+        const allConfirmed = payments.length === 8 && payments.every((p: any) => p.status === 'confirmed');
         
         if (allConfirmed) {
           console.log(`[ACTIVATION] All 8 payments confirmed for ${payerUserId}. Activating user...`);
@@ -920,7 +920,14 @@ export class DbStorage implements IStorage {
           
           console.log(`[ACTIVATION] User ${payerUserId} successfully activated!`);
         }
-      });
+      };
+
+      // Use existing transaction if provided, otherwise create a new one
+      if (existingTx) {
+        await executeLogic(existingTx);
+      } else {
+        await db.transaction(executeLogic);
+      }
     } catch (error) {
       console.error(`[ACTIVATION ERROR] Failed to complete activation for ${payerUserId}:`, error);
       throw error;
