@@ -12,17 +12,21 @@ import {
   type Reentry,
   type Notification,
   type InsertNotification,
+  type PasswordResetToken,
+  type InsertPasswordResetToken,
   users,
   activations,
   activationPayments,
   systemConfig,
   reentries,
-  notifications
+  notifications,
+  passwordResetTokens
 } from "@shared/schema";
 import { SLOT_TO_PAYMENT_TYPE, PAYMENT_TYPE_AMOUNTS } from "@shared/constants";
-import { eq, and, or, ne, isNull, desc, sql } from "drizzle-orm";
+import { eq, and, or, ne, isNull, desc, sql, lt } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "./db";
+import crypto from "crypto";
 
 export interface IStorage {
   // User methods
@@ -84,6 +88,13 @@ export interface IStorage {
   markNotificationAsRead(notificationId: string): Promise<Notification | undefined>;
   markAllNotificationsAsRead(userId: string): Promise<number>;
   deleteNotification(notificationId: string): Promise<void>;
+  
+  // Password reset token methods
+  createPasswordResetToken(userId: string, email: string, token: string, expiresAt: Date): Promise<PasswordResetToken>;
+  getPasswordResetToken(token: string): Promise<PasswordResetToken | undefined>;
+  markTokenAsUsed(tokenId: string): Promise<PasswordResetToken | undefined>;
+  deleteExpiredTokens(): Promise<void>;
+  updateUserPassword(userId: string, hashedPassword: string): Promise<User | undefined>;
 }
 
 export class DbStorage implements IStorage {
@@ -101,6 +112,52 @@ export class DbStorage implements IStorage {
     } catch (error) {
       console.error('[INIT] Error initializing system configuration:', error);
       // Don't throw - allow server to start even if config init fails
+    }
+  }
+  
+  // Initialize admin users (PB0 and root admin)
+  async initializeAdminUsers(hashPassword: (password: string) => Promise<string>): Promise<void> {
+    try {
+      // Check if PB0 admin exists
+      const pb0Exists = await this.getUserByUserId('PB0');
+      if (!pb0Exists) {
+        console.log('[INIT] Creating PB0 admin user...');
+        const hashedPassword = await hashPassword('Admin@1234'); // Default password
+        await db.insert(users).values({
+          email: 'admin@payback247.com',
+          password: hashedPassword,
+          role: 'admin',
+          userId: 'PB0',
+          name: 'System Admin',
+          mobile: '9999999999',
+          isActivated: true,
+          isProfileComplete: true,
+          matrixLevel: 0, // Root of global matrix
+          matrixPath: 'PB0', // Root path
+        });
+        console.log('[INIT] PB0 admin user created successfully');
+      }
+      
+      // Check if root admin exists
+      const rootAdminExists = await this.getUserByEmail('payback2472000@gmail.com');
+      if (!rootAdminExists) {
+        console.log('[INIT] Creating root admin user...');
+        const hashedPassword = await hashPassword('Admin@2000');
+        await db.insert(users).values({
+          email: 'payback2472000@gmail.com',
+          password: hashedPassword,
+          role: 'admin',
+          name: 'Root Administrator',
+          mobile: '9876543210',
+          isActivated: true,
+          isProfileComplete: true,
+        });
+        console.log('[INIT] Root admin user created successfully');
+        console.log('[INIT] IMPORTANT: Please change the root admin password immediately after first login!');
+      }
+    } catch (error) {
+      console.error('[INIT] Error initializing admin users:', error);
+      // Don't throw - allow server to start even if admin creation fails
     }
   }
 
@@ -951,6 +1008,143 @@ export class DbStorage implements IStorage {
   async deleteNotification(notificationId: string): Promise<void> {
     await db.delete(notifications)
       .where(eq(notifications.id, notificationId));
+  }
+  
+  // Password reset token methods
+  
+  /**
+   * Hash a token using SHA-256 for secure storage
+   */
+  private hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
+  }
+  
+  /**
+   * Timing-safe token comparison to prevent timing attacks
+   */
+  private compareTokens(a: string, b: string): boolean {
+    if (a.length !== b.length) return false;
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    return crypto.timingSafeEqual(bufA, bufB);
+  }
+  
+  /**
+   * Create password reset token with hashed storage and single-active token enforcement
+   */
+  async createPasswordResetToken(userId: string, email: string, token: string, expiresAt: Date): Promise<PasswordResetToken> {
+    return await db.transaction(async (tx) => {
+      // Invalidate all previous tokens for this user (single-active token policy)
+      await tx.update(passwordResetTokens)
+        .set({ usedAt: new Date() })
+        .where(
+          and(
+            eq(passwordResetTokens.userId, userId),
+            isNull(passwordResetTokens.usedAt)
+          )
+        );
+      
+      // Hash the token before storage (store SHA-256 hash, not plaintext)
+      const hashedToken = this.hashToken(token);
+      
+      // Create new reset token
+      const result = await tx.insert(passwordResetTokens).values({
+        token: hashedToken,
+        userId,
+        email,
+        expiresAt,
+      }).returning();
+      
+      return result[0];
+    });
+  }
+  
+  /**
+   * Get password reset token by plain token (hashes and compares securely)
+   */
+  async getPasswordResetToken(token: string): Promise<PasswordResetToken | undefined> {
+    // Hash the incoming token to compare with stored hash
+    const hashedToken = this.hashToken(token);
+    
+    // Fetch all non-used, non-expired tokens
+    const tokens = await db.select()
+      .from(passwordResetTokens)
+      .where(
+        and(
+          isNull(passwordResetTokens.usedAt),
+          sql`${passwordResetTokens.expiresAt} > NOW()`
+        )
+      );
+    
+    // Use timing-safe comparison to find matching token
+    for (const tokenRecord of tokens) {
+      if (this.compareTokens(tokenRecord.token, hashedToken)) {
+        return tokenRecord;
+      }
+    }
+    
+    return undefined;
+  }
+  
+  /**
+   * Mark password reset token as used (one-time use enforcement)
+   */
+  async markTokenAsUsed(tokenId: string): Promise<PasswordResetToken | undefined> {
+    const result = await db.update(passwordResetTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(passwordResetTokens.id, tokenId))
+      .returning();
+    
+    return result[0];
+  }
+  
+  /**
+   * Delete expired and used password reset tokens (periodic cleanup)
+   */
+  async deleteExpiredTokens(): Promise<void> {
+    await db.delete(passwordResetTokens)
+      .where(
+        or(
+          // Delete expired tokens
+          lt(passwordResetTokens.expiresAt, new Date()),
+          // Delete tokens that were used more than 24 hours ago
+          and(
+            sql`${passwordResetTokens.usedAt} IS NOT NULL`,
+            lt(passwordResetTokens.usedAt!, sql`NOW() - INTERVAL '24 hours'`)
+          )
+        )
+      );
+  }
+  
+  /**
+   * Update user password and invalidate all reset tokens for that user
+   * Note: Session invalidation should be handled by the auth route
+   */
+  async updateUserPassword(userId: string, hashedPassword: string): Promise<User | undefined> {
+    return await db.transaction(async (tx) => {
+      // Update password
+      const result = await tx.update(users)
+        .set({
+          password: hashedPassword,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.userId, userId))
+        .returning();
+      
+      if (result[0]) {
+        // Invalidate all reset tokens for this user (mark as used)
+        await tx.update(passwordResetTokens)
+          .set({ usedAt: new Date() })
+          .where(
+            and(
+              eq(passwordResetTokens.userId, userId),
+              isNull(passwordResetTokens.usedAt)
+            )
+          );
+      }
+      
+      return result[0];
+    });
   }
 }
 

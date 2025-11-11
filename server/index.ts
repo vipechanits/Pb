@@ -124,6 +124,10 @@ app.use((req, res, next) => {
     console.log('✓ Initializing database...');
     // Initialize system configuration (ensure singleton row exists)
     await storage.initializeSystemConfig();
+    
+    // Initialize admin users (PB0 and root admin)
+    const { hashPassword } = await import('./auth');
+    await storage.initializeAdminUsers(hashPassword);
     console.log('✓ Database initialized successfully');
 
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

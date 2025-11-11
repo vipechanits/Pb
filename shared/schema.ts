@@ -499,6 +499,25 @@ export const insertNotificationSchema = createInsertSchema(notifications)
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
 
+// Password reset tokens table
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  token: varchar("token", { length: 100 }).notNull().unique(), // Secure random token
+  userId: varchar("user_id", { length: 20 }).notNull(), // User requesting reset
+  email: text("email").notNull(), // Email associated with reset
+  expiresAt: timestamp("expires_at").notNull(), // Token expiry (typically 1 hour)
+  usedAt: timestamp("used_at"), // When token was used (null if not used yet)
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+
 // Matrix tree node for visualization
 export interface MatrixNode {
   userId: string;
