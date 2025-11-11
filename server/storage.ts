@@ -14,13 +14,16 @@ import {
   type InsertNotification,
   type PasswordResetToken,
   type InsertPasswordResetToken,
+  type DatabaseBackup,
+  type InsertDatabaseBackup,
   users,
   activations,
   activationPayments,
   systemConfig,
   reentries,
   notifications,
-  passwordResetTokens
+  passwordResetTokens,
+  databaseBackups
 } from "@shared/schema";
 import { SLOT_TO_PAYMENT_TYPE, PAYMENT_TYPE_AMOUNTS } from "@shared/constants";
 import { eq, and, or, ne, isNull, desc, sql, lt } from "drizzle-orm";
@@ -95,6 +98,13 @@ export interface IStorage {
   markTokenAsUsed(tokenId: string): Promise<PasswordResetToken | undefined>;
   deleteExpiredTokens(): Promise<void>;
   updateUserPassword(userId: string, hashedPassword: string): Promise<User | undefined>;
+  
+  // Database backup/restore methods
+  createDatabaseBackup(filename: string, fileSize: number, createdBy: string, notes?: string): Promise<any>;
+  getBackupHistory(limit?: number): Promise<any[]>;
+  deleteBackup(backupId: string): Promise<void>;
+  exportDatabaseToJSON(): Promise<string>; // Returns JSON string of entire database
+  importDatabaseFromJSON(backupData: any, performedBy: string): Promise<void>; // Restores database from JSON
 }
 
 export class DbStorage implements IStorage {
@@ -1145,6 +1155,131 @@ export class DbStorage implements IStorage {
       }
       
       return result[0];
+    });
+  }
+  
+  // Database backup/restore methods
+  
+  /**
+   * Create database backup metadata record
+   */
+  async createDatabaseBackup(filename: string, fileSize: number, createdBy: string, notes?: string): Promise<DatabaseBackup> {
+    const result = await db.insert(databaseBackups).values({
+      filename,
+      fileSize,
+      createdBy,
+      backupType: 'manual',
+      notes,
+    }).returning();
+    
+    return result[0];
+  }
+  
+  /**
+   * Get backup history (most recent first)
+   */
+  async getBackupHistory(limit: number = 50): Promise<DatabaseBackup[]> {
+    return await db.select()
+      .from(databaseBackups)
+      .orderBy(desc(databaseBackups.createdAt))
+      .limit(limit);
+  }
+  
+  /**
+   * Delete backup metadata record
+   */
+  async deleteBackup(backupId: string): Promise<void> {
+    await db.delete(databaseBackups)
+      .where(eq(databaseBackups.id, backupId));
+  }
+  
+  /**
+   * Export entire database to JSON format
+   * Returns JSON string with schema version and all table data
+   */
+  async exportDatabaseToJSON(): Promise<string> {
+    // Export all tables
+    const [
+      allUsers,
+      allActivations,
+      allActivationPayments,
+      allSystemConfig,
+      allReentries,
+      allNotifications,
+      allDatabaseBackups,
+    ] = await Promise.all([
+      db.select().from(users),
+      db.select().from(activations),
+      db.select().from(activationPayments),
+      db.select().from(systemConfig),
+      db.select().from(reentries),
+      db.select().from(notifications),
+      db.select().from(databaseBackups),
+    ]);
+    
+    // Build backup object with metadata
+    const backup = {
+      version: '1.0',
+      timestamp: new Date().toISOString(),
+      tables: {
+        users: allUsers,
+        activations: allActivations,
+        activation_payments: allActivationPayments,
+        system_config: allSystemConfig,
+        reentries: allReentries,
+        notifications: allNotifications,
+        database_backups: allDatabaseBackups,
+      },
+      metadata: {
+        userCount: allUsers.length,
+        activationCount: allActivations.length,
+        paymentCount: allActivationPayments.length,
+      }
+    };
+    
+    return JSON.stringify(backup, null, 2);
+  }
+  
+  /**
+   * Import database from JSON backup
+   * WARNING: This will clear all existing data and restore from backup
+   * Always create a pre-restore backup before calling this
+   * NOTE: system_config, database_backups, and password_reset_tokens are preserved
+   */
+  async importDatabaseFromJSON(backupData: any, performedBy: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Delete existing data (in reverse order of dependencies)
+      // PRESERVE: system_config, database_backups (backup history), password_reset_tokens (transient)
+      await tx.delete(notifications);
+      await tx.delete(activationPayments);
+      await tx.delete(activations);
+      await tx.delete(reentries);
+      await tx.delete(users);
+      
+      // Insert restored data
+      if (backupData.tables.users && backupData.tables.users.length > 0) {
+        await tx.insert(users).values(backupData.tables.users);
+      }
+      
+      if (backupData.tables.activations && backupData.tables.activations.length > 0) {
+        await tx.insert(activations).values(backupData.tables.activations);
+      }
+      
+      if (backupData.tables.activation_payments && backupData.tables.activation_payments.length > 0) {
+        await tx.insert(activationPayments).values(backupData.tables.activation_payments);
+      }
+      
+      if (backupData.tables.reentries && backupData.tables.reentries.length > 0) {
+        await tx.insert(reentries).values(backupData.tables.reentries);
+      }
+      
+      if (backupData.tables.notifications && backupData.tables.notifications.length > 0) {
+        await tx.insert(notifications).values(backupData.tables.notifications);
+      }
+      
+      // Log restore operation
+      console.log(`[DB_RESTORE] Database restored by ${performedBy} from backup dated ${backupData.timestamp}`);
+      console.log(`[DB_RESTORE] Preserved tables: system_config, database_backups, password_reset_tokens`);
     });
   }
 }

@@ -51,7 +51,7 @@ export default function ForgotPasswordPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <div className="flex items-center gap-2 mb-2">
-            <Link href="/auth/login">
+            <Link href="/auth/login" asChild>
               <Button variant="ghost" size="icon" data-testid="button-back-to-login">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
@@ -128,10 +128,8 @@ export default function ForgotPasswordPage() {
         <CardFooter className="flex flex-col gap-2 text-sm text-muted-foreground">
           <p>
             Remember your password?{" "}
-            <Link href="/auth/login">
-              <a className="text-primary hover:underline" data-testid="link-login">
-                Back to Login
-              </a>
+            <Link href="/auth/login" className="text-primary hover:underline" data-testid="link-login">
+              Back to Login
             </Link>
           </p>
         </CardFooter>

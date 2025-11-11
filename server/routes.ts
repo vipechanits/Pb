@@ -1535,6 +1535,142 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ========================================
+  // Database Backup/Restore Routes (Root Admin Only - PB1)
+  // ========================================
+
+  // GET /api/admin/database/backup - Create and download database backup
+  app.get("/api/admin/database/backup", requireAuth, async (req: any, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user || user.userId !== 'PB1') {
+        return res.status(403).json({ error: "Forbidden - Root admin access required (PB1 only)" });
+      }
+
+      // Export database to JSON
+      const backupJson = await storage.exportDatabaseToJSON();
+      const filename = `payback247_backup_${new Date().toISOString().replace(/:/g, '-')}.json`;
+      const fileSize = Buffer.byteLength(backupJson, 'utf8');
+
+      // Save backup metadata to database
+      await storage.createDatabaseBackup(filename, fileSize, user.userId!, req.body.notes);
+
+      // Send file as download
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(backupJson);
+
+      console.log(`[DB_BACKUP] Database backed up by ${user.userId} (${user.email})`);
+    } catch (error) {
+      console.error("Error creating database backup:", error);
+      res.status(500).json({ error: "Failed to create database backup" });
+    }
+  });
+
+  // POST /api/admin/database/restore - Restore database from uploaded backup
+  app.post("/api/admin/database/restore", requireAuth, async (req: any, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user || user.userId !== 'PB1') {
+        return res.status(403).json({ error: "Forbidden - Root admin access required (PB1 only)" });
+      }
+
+      const { backupData, createPreBackup } = req.body;
+
+      if (!backupData) {
+        return res.status(400).json({ error: "Backup data is required" });
+      }
+
+      // Validate backup format
+      if (!backupData.version || !backupData.timestamp || !backupData.tables) {
+        return res.status(400).json({ error: "Invalid backup format" });
+      }
+
+      let preRestoreBackupJson: string | null = null;
+      let preRestoreFilename: string | null = null;
+
+      // Create pre-restore backup if requested (recommended)
+      if (createPreBackup) {
+        preRestoreBackupJson = await storage.exportDatabaseToJSON();
+        preRestoreFilename = `pre_restore_backup_${new Date().toISOString().replace(/:/g, '-')}.json`;
+        const preRestoreSize = Buffer.byteLength(preRestoreBackupJson, 'utf8');
+        
+        // Save metadata (preserved during restore since we don't delete database_backups table)
+        await storage.createDatabaseBackup(
+          preRestoreFilename,
+          preRestoreSize,
+          user.userId!,
+          'Automatic pre-restore backup'
+        );
+        console.log(`[DB_RESTORE] Pre-restore backup created: ${preRestoreFilename}`);
+      }
+
+      // Perform restore
+      await storage.importDatabaseFromJSON(backupData, user.userId!);
+
+      // Return success response with pre-restore backup (client should save it)
+      const response: any = {
+        success: true,
+        message: "Database restored successfully",
+        restoredFrom: backupData.timestamp,
+        tablesRestored: Object.keys(backupData.tables).length
+      };
+
+      // Include pre-restore backup in response so client can save it
+      if (preRestoreBackupJson && preRestoreFilename) {
+        response.preRestoreBackup = {
+          filename: preRestoreFilename,
+          data: preRestoreBackupJson
+        };
+        response.message += " (Pre-restore backup included in response - save it immediately!)";
+      }
+
+      res.json(response);
+
+      console.log(`[DB_RESTORE] Database restored by ${user.userId} (${user.email}) from backup dated ${backupData.timestamp}`);
+    } catch (error) {
+      console.error("Error restoring database:", error);
+      res.status(500).json({ error: "Failed to restore database" });
+    }
+  });
+
+  // GET /api/admin/database/backups - Get backup history
+  app.get("/api/admin/database/backups", requireAuth, async (req: any, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user || user.userId !== 'PB1') {
+        return res.status(403).json({ error: "Forbidden - Root admin access required (PB1 only)" });
+      }
+
+      const limit = parseInt(req.query.limit as string) || 50;
+      const backups = await storage.getBackupHistory(limit);
+
+      res.json(backups);
+    } catch (error) {
+      console.error("Error fetching backup history:", error);
+      res.status(500).json({ error: "Failed to fetch backup history" });
+    }
+  });
+
+  // DELETE /api/admin/database/backups/:id - Delete backup metadata
+  app.delete("/api/admin/database/backups/:id", requireAuth, async (req: any, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user || user.userId !== 'PB1') {
+        return res.status(403).json({ error: "Forbidden - Root admin access required (PB1 only)" });
+      }
+
+      const backupId = req.params.id;
+      await storage.deleteBackup(backupId);
+
+      res.json({ success: true, message: "Backup deleted successfully" });
+      console.log(`[DB_BACKUP] Backup ${backupId} deleted by ${user.userId}`);
+    } catch (error) {
+      console.error("Error deleting backup:", error);
+      res.status(500).json({ error: "Failed to delete backup" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

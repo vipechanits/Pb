@@ -518,6 +518,27 @@ export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTo
 export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 
+// Database backups table for backup/restore functionality
+export const backupTypeEnum = pgEnum("backup_type", ["manual", "automatic"]);
+
+export const databaseBackups = pgTable("database_backups", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  filename: text("filename").notNull(), // Backup filename
+  fileSize: integer("file_size").notNull(), // Size in bytes
+  createdBy: varchar("created_by", { length: 20 }).notNull(), // Admin userId who created backup
+  backupType: backupTypeEnum("backup_type").notNull().default("manual"),
+  notes: text("notes"), // Optional notes about the backup
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertDatabaseBackupSchema = createInsertSchema(databaseBackups).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertDatabaseBackup = z.infer<typeof insertDatabaseBackupSchema>;
+export type DatabaseBackup = typeof databaseBackups.$inferSelect;
+
 // Matrix tree node for visualization
 export interface MatrixNode {
   userId: string;
