@@ -26,6 +26,7 @@ import {
   LogOut,
   Wallet,
   CheckSquare,
+  BarChart3,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth-context';
@@ -100,6 +101,11 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       title: 'Admin Dashboard',
       url: '/admin',
       icon: Shield,
+    },
+    {
+      title: 'Analytics',
+      url: '/admin/analytics',
+      icon: BarChart3,
     },
     {
       title: 'Payment Confirmations',

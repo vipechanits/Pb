@@ -1085,6 +1085,105 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: Get comprehensive analytics
+  app.get("/api/admin/analytics", requireAdmin, async (req, res) => {
+    try {
+      // User statistics
+      const totalUsers = await db.select({ count: count() }).from(users);
+      const activeUsers = await db
+        .select({ count: count() })
+        .from(users)
+        .where(eq(users.isActive, true));
+      const completedUsers = await db
+        .select({ count: count() })
+        .from(users)
+        .where(eq(users.hasCompletedActivation, true));
+
+      // Payment statistics
+      const confirmedPayments = await db
+        .select({ count: count() })
+        .from(activationPayments)
+        .where(eq(activationPayments.status, "confirmed"));
+      
+      const pendingPayments = await db
+        .select({ count: count() })
+        .from(activationPayments)
+        .where(eq(activationPayments.status, "pending"));
+
+      // Calculate total payment amount (₹500 per confirmed payment)
+      const totalAmount = (confirmedPayments[0]?.count || 0) * 500;
+
+      // Re-entry statistics
+      const totalReentries = await db.select({ count: count() }).from(reentries);
+      const completedReentries = await db
+        .select({ count: count() })
+        .from(reentries)
+        .where(eq(reentries.status, "completed"));
+      const inProgressReentries = await db
+        .select({ count: count() })
+        .from(reentries)
+        .where(eq(reentries.status, "in_progress"));
+      const eligibleUsers = await db
+        .select({ count: count() })
+        .from(users)
+        .where(eq(users.isEligibleForReentry, true));
+
+      // Binary tree statistics - calculate in SQL for efficiency
+      const binaryStats = await db
+        .select({
+          avgLeft: sql<number>`AVG(${users.personalLeftCount})`,
+          avgRight: sql<number>`AVG(${users.personalRightCount})`,
+          totalPairs: sql<number>`SUM(LEAST(${users.personalLeftCount}, ${users.personalRightCount}))`,
+        })
+        .from(users)
+        .where(eq(users.hasCompletedActivation, true));
+
+      // Matrix statistics
+      const matrixPlacements = await db
+        .select({ count: count() })
+        .from(users)
+        .where(sql`${users.matrixParentId} IS NOT NULL`);
+
+      const avgMatrixLevel = await db
+        .select({
+          avg: sql<number>`AVG(${users.matrixLevel})`,
+        })
+        .from(users)
+        .where(sql`${users.matrixParentId} IS NOT NULL`);
+
+      res.json({
+        users: {
+          total: totalUsers[0]?.count || 0,
+          active: activeUsers[0]?.count || 0,
+          completed: completedUsers[0]?.count || 0,
+        },
+        payments: {
+          totalConfirmed: confirmedPayments[0]?.count || 0,
+          totalAmount: totalAmount,
+          pendingCount: pendingPayments[0]?.count || 0,
+        },
+        reentry: {
+          totalCycles: totalReentries[0]?.count || 0,
+          completedCycles: completedReentries[0]?.count || 0,
+          inProgressCycles: inProgressReentries[0]?.count || 0,
+          eligibleUsers: eligibleUsers[0]?.count || 0,
+        },
+        binary: {
+          totalPairs: Number(binaryStats[0]?.totalPairs) || 0,
+          avgLeftLeg: Number(binaryStats[0]?.avgLeft) || 0,
+          avgRightLeg: Number(binaryStats[0]?.avgRight) || 0,
+        },
+        matrix: {
+          totalPlacements: matrixPlacements[0]?.count || 0,
+          avgLevel: Number(avgMatrixLevel[0]?.avg) || 0,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching analytics:", error);
+      res.status(500).json({ error: "Failed to fetch analytics data" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
