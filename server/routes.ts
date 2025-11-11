@@ -1184,6 +1184,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Notification routes
+  
+  // Zod schema for notification query params
+  const getNotificationsQuerySchema = z.object({
+    limit: z.coerce.number().min(1).max(20).default(10),
+    offset: z.coerce.number().min(0).default(0),
+    isRead: z.enum(['true', 'false']).optional().transform(val => val === 'true' ? true : val === 'false' ? false : undefined),
+  });
+
+  // GET /api/notifications - Get user's notifications with unread count
+  app.get("/api/notifications", requireAuth, async (req: any, res) => {
+    try {
+      const queryResult = getNotificationsQuerySchema.safeParse(req.query);
+      if (!queryResult.success) {
+        return res.status(400).json({ error: "Invalid query parameters", details: queryResult.error });
+      }
+
+      const { limit, offset, isRead } = queryResult.data;
+      const userId = req.session.userId;
+
+      const [notifications, unreadCount] = await Promise.all([
+        storage.getNotificationsByUserId(userId, limit, offset, isRead),
+        storage.getUnreadNotificationCount(userId),
+      ]);
+
+      res.json({ notifications, unreadCount });
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      res.status(500).json({ error: "Failed to fetch notifications" });
+    }
+  });
+
+  // POST /api/notifications/:id/read - Mark single notification as read
+  app.post("/api/notifications/:id/read", requireAuth, async (req: any, res) => {
+    try {
+      const notificationId = req.params.id;
+      const userId = req.session.userId;
+
+      // Fetch notification to verify ownership
+      const existingNotification = await storage.getNotificationsByUserId(userId, 1000, 0);
+      const notification = existingNotification.find(n => n.id === notificationId);
+
+      if (!notification) {
+        return res.status(404).json({ error: "Notification not found" });
+      }
+
+      if (notification.userId !== userId) {
+        return res.status(403).json({ error: "Forbidden - Cannot access another user's notification" });
+      }
+
+      const updatedNotification = await storage.markNotificationAsRead(notificationId);
+      if (!updatedNotification) {
+        return res.status(404).json({ error: "Notification not found" });
+      }
+
+      res.json({ notification: updatedNotification });
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      res.status(500).json({ error: "Failed to mark notification as read" });
+    }
+  });
+
+  // POST /api/notifications/mark-all-read - Mark all user's notifications as read
+  app.post("/api/notifications/mark-all-read", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const affectedCount = await storage.markAllNotificationsAsRead(userId);
+
+      res.json({ affectedCount });
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+      res.status(500).json({ error: "Failed to mark all notifications as read" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
