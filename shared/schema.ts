@@ -123,7 +123,10 @@ export const users = pgTable("users", {
   
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (users) => ({
+  // Ensure no two users can occupy the same binary position (sponsor + leg combination must be unique)
+  usersSponsorLegUnique: unique().on(users.sponsorId, users.binaryLeg),
+}));
 
 // Insert schema for signup
 export const insertUserSchema = createInsertSchema(users).omit({
