@@ -89,7 +89,7 @@ export function PaymentSubmissionDialog({
           filename: proofFile.name,
           contentType: proofFile.type,
         });
-        const uploadResponse = await response.json() as { uploadUrl: string; publicUrl: string };
+        const uploadResponse = (await response.json()) as { uploadUrl: string; publicUrl: string };
 
         // Upload file to presigned URL
         await fetch(uploadResponse.uploadUrl, {
