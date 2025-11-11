@@ -1,92 +1,139 @@
-import { useState } from 'react';
-import { useLocation } from 'wouter';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, CheckCircle } from 'lucide-react';
+import { useState } from "react";
+import { Link } from "wouter";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { apiRequest } from "@/lib/queryClient";
+import { Loader2, Mail, ArrowLeft } from "lucide-react";
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email("Invalid email address"),
+});
+
+type ForgotPasswordForm = z.infer<typeof forgotPasswordSchema>;
 
 export default function ForgotPasswordPage() {
-  const [, setLocation] = useLocation();
-  const [email, setEmail] = useState('');
-  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
+  const form = useForm<ForgotPasswordForm>({
+    resolver: zodResolver(forgotPasswordSchema),
+    defaultValues: {
+      email: "",
+    },
+  });
 
+  const onSubmit = async (data: ForgotPasswordForm) => {
     try {
-      // TODO: Implement password reset endpoint
-      // For now, show a placeholder message
+      setIsLoading(true);
+      setError(null);
+      setSuccess(false);
+
+      await apiRequest("POST", "/api/auth/forgot-password", data);
+
       setSuccess(true);
+      form.reset();
     } catch (err: any) {
-      setError(err.message || 'Failed to send reset email');
+      setError(err.message || "Failed to send password reset request");
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background to-muted/20">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center" data-testid="text-forgot-password-title">
-            Reset Password
-          </CardTitle>
-          <CardDescription className="text-center">
-            Enter your email to receive password reset instructions
+          <div className="flex items-center gap-2 mb-2">
+            <Link href="/auth/login">
+              <Button variant="ghost" size="icon" data-testid="button-back-to-login">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
+            <CardTitle className="text-2xl">Forgot Password</CardTitle>
+          </div>
+          <CardDescription>
+            Enter your email address and we'll help you reset your password
           </CardDescription>
         </CardHeader>
+
         <CardContent>
           {success ? (
-            <Alert className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800" data-testid="alert-success">
-              <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
-              <AlertDescription className="text-green-800 dark:text-green-200">
-                If an account exists with this email, you will receive password reset instructions shortly.
+            <Alert className="mb-4" data-testid="alert-success">
+              <Mail className="h-4 w-4" />
+              <AlertDescription>
+                If an account with that email exists, a password reset link has been sent.
+                Please check your email to continue.
               </AlertDescription>
             </Alert>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
-                <Alert variant="destructive" data-testid="alert-error">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                {error && (
+                  <Alert variant="destructive" data-testid="alert-error">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="your@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  data-testid="input-email"
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email Address</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="email"
+                          placeholder="your@email.com"
+                          autoComplete="email"
+                          disabled={isLoading}
+                          data-testid="input-email"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
 
-              <Button type="submit" className="w-full" disabled={loading} data-testid="button-reset">
-                {loading ? 'Sending...' : 'Send Reset Link'}
-              </Button>
-            </form>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isLoading}
+                  data-testid="button-submit"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="mr-2 h-4 w-4" />
+                      Send Reset Link
+                    </>
+                  )}
+                </Button>
+              </form>
+            </Form>
           )}
         </CardContent>
-        <CardFooter className="flex justify-center gap-2 text-sm text-muted-foreground">
-          Remember your password?
-          <Button
-            variant="link"
-            className="p-0 h-auto text-primary"
-            onClick={() => setLocation('/auth/login')}
-            data-testid="link-login"
-          >
-            Log in
-          </Button>
+
+        <CardFooter className="flex flex-col gap-2 text-sm text-muted-foreground">
+          <p>
+            Remember your password?{" "}
+            <Link href="/auth/login">
+              <a className="text-primary hover:underline" data-testid="link-login">
+                Back to Login
+              </a>
+            </Link>
+          </p>
         </CardFooter>
       </Card>
     </div>

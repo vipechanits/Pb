@@ -147,6 +147,7 @@ export class DbStorage implements IStorage {
           email: 'payback2472000@gmail.com',
           password: hashedPassword,
           role: 'admin',
+          userId: 'PB1', // Root admin userId
           name: 'Root Administrator',
           mobile: '9876543210',
           isActivated: true,

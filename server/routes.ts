@@ -2,12 +2,13 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema, users, reentries } from "@shared/schema";
+import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema, users, reentries, forgotPasswordSchema, resetPasswordSchema } from "@shared/schema";
 import { hashPassword, verifyPassword, serializeUser } from "./auth";
 import { generateUserPaymentQR } from "./qrcode-generator";
 import { z } from "zod";
 import { db } from "./db";
 import { eq, desc, sql, count } from "drizzle-orm";
+import crypto from "crypto";
 
 // Middleware to check if user is authenticated
 function requireAuth(req: any, res: any, next: any) {
@@ -23,6 +24,104 @@ function requireAdmin(req: any, res: any, next: any) {
     return res.status(403).json({ error: "Forbidden - Admin access required" });
   }
   next();
+}
+
+// Rate limiter utility using sliding window algorithm
+class RateLimiterStore {
+  private buckets = new Map<string, { count: number; firstHit: number; lastHit: number }>();
+  private readonly maxBuckets = 10000; // Prevent memory bloat
+  
+  constructor() {
+    // Cleanup expired entries every 10 minutes
+    setInterval(() => this.cleanup(), 10 * 60 * 1000);
+  }
+  
+  check(key: string, limit: number, windowMs: number): { allowed: boolean; retryAfter?: number } {
+    const now = Date.now();
+    const bucket = this.buckets.get(key);
+    
+    // No previous attempts or window expired - allow and reset
+    if (!bucket || (now - bucket.firstHit) >= windowMs) {
+      this.buckets.set(key, { count: 1, firstHit: now, lastHit: now });
+      return { allowed: true };
+    }
+    
+    // Within window - check if limit exceeded
+    if (bucket.count >= limit) {
+      const retryAfter = Math.ceil((bucket.firstHit + windowMs - now) / 1000);
+      return { allowed: false, retryAfter };
+    }
+    
+    // Increment count and update last hit
+    bucket.count++;
+    bucket.lastHit = now;
+    return { allowed: true };
+  }
+  
+  cleanup() {
+    const now = Date.now();
+    const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+    
+    // Remove buckets older than 24 hours
+    const entries = Array.from(this.buckets.entries());
+    for (const [key, bucket] of entries) {
+      if (now - bucket.lastHit > maxAge) {
+        this.buckets.delete(key);
+      }
+    }
+    
+    // If still over limit, remove oldest buckets
+    if (this.buckets.size > this.maxBuckets) {
+      const sortedBuckets = Array.from(this.buckets.entries())
+        .sort((a, b) => a[1].lastHit - b[1].lastHit);
+      
+      const toRemove = sortedBuckets.slice(0, sortedBuckets.length - this.maxBuckets);
+      toRemove.forEach(([key]) => this.buckets.delete(key));
+    }
+  }
+}
+
+// Shared rate limiter instance
+const rateLimiter = new RateLimiterStore();
+
+// Rate limit middleware factory
+function applyRateLimit(options: {
+  keyFn: (req: any) => string;
+  limit: number;
+  windowMs: number;
+  name?: string;
+}) {
+  return (req: any, res: any, next: any) => {
+    const key = options.keyFn(req);
+    const result = rateLimiter.check(key, options.limit, options.windowMs);
+    
+    if (!result.allowed) {
+      console.warn(`[RATE_LIMIT] ${options.name || 'Request'} blocked for key: ${key.substring(0, 20)}...`);
+      
+      if (result.retryAfter) {
+        res.set('Retry-After', String(result.retryAfter));
+      }
+      
+      return res.status(429).json({
+        error: "Too many requests. Please try again later."
+      });
+    }
+    
+    next();
+  };
+}
+
+// Helper to extract client IP (respecting proxy headers)
+function getClientIp(req: any): string {
+  // Try X-Forwarded-For first (Replit uses reverse proxy)
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    // Take first IP if multiple
+    const ips = forwarded.split(',');
+    return ips[0].trim();
+  }
+  // Fallback to req.ip
+  return req.ip || req.connection?.remoteAddress || 'unknown';
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -154,6 +253,183 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     });
   });
+  
+  // Password Reset Routes
+  
+  // Forgot password - Generate reset token
+  app.post("/api/auth/forgot-password", 
+    applyRateLimit({
+      keyFn: (req) => req.body.email?.toLowerCase().trim() || 'unknown',
+      limit: 3,
+      windowMs: 60 * 60 * 1000, // 3 requests per hour per email
+      name: 'Forgot Password'
+    }),
+    async (req, res) => {
+      try {
+        // Validate request body
+        const validation = forgotPasswordSchema.safeParse(req.body);
+        if (!validation.success) {
+          return res.status(400).json({ error: validation.error.errors[0].message });
+        }
+        
+        const { email } = validation.data;
+        const normalizedEmail = email.toLowerCase().trim();
+        
+        // Always return generic success message (prevent email enumeration)
+        const genericMessage = "If an account with that email exists, a password reset token has been generated.";
+        
+        // Check if user exists
+        const user = await storage.getUserByEmail(normalizedEmail);
+        if (!user) {
+          console.warn(`[FORGOT_PASSWORD] Attempt for non-existent email: ${normalizedEmail}`);
+          return res.json({ message: genericMessage });
+        }
+        
+        // Generate secure random token (32 bytes = 64 hex chars)
+        const rawToken = crypto.randomBytes(32).toString('hex');
+        
+        // Create password reset token (stores SHA-256 hash)
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+        await storage.createPasswordResetToken(
+          user.userId!, // userId
+          normalizedEmail, // email
+          rawToken, // token (will be hashed in storage layer)
+          expiresAt // expiresAt
+        );
+        
+        // TODO: Send email with reset link
+        // For development/testing ONLY: Log token to server console
+        // SECURITY: Never expose token in API response - this defeats the purpose of email-based recovery!
+        console.log(`[FORGOT_PASSWORD] ==========================================`);
+        console.log(`[FORGOT_PASSWORD] Password reset token for ${user.userId} (${normalizedEmail}):`);
+        console.log(`[FORGOT_PASSWORD] Token: ${rawToken}`);
+        console.log(`[FORGOT_PASSWORD] Reset URL: /reset-password/${rawToken}`);
+        console.log(`[FORGOT_PASSWORD] Expires: ${expiresAt.toISOString()}`);
+        console.log(`[FORGOT_PASSWORD] ==========================================`);
+        console.log(`[FORGOT_PASSWORD] IMPORTANT: In production, this token would be sent via email.`);
+        console.log(`[FORGOT_PASSWORD] NEVER expose tokens in API responses!`);
+        
+        // Return generic success message only (prevent email enumeration + token exposure)
+        res.json({ 
+          message: genericMessage
+        });
+      } catch (error) {
+        console.error("Error during forgot password:", error);
+        res.status(500).json({ error: "Failed to process password reset request" });
+      }
+    }
+  );
+  
+  // Verify reset token - Check if token is valid
+  app.get("/api/auth/verify-reset-token/:token",
+    applyRateLimit({
+      keyFn: (req) => getClientIp(req),
+      limit: 10,
+      windowMs: 60 * 1000, // 10 requests per minute per IP
+      name: 'Verify Reset Token'
+    }),
+    async (req, res) => {
+      try {
+        const { token } = req.params;
+        
+        if (!token) {
+          return res.status(400).json({ error: "Token is required" });
+        }
+        
+        // Verify token exists and is valid
+        const resetToken = await storage.getPasswordResetToken(token);
+        
+        if (!resetToken) {
+          console.warn(`[VERIFY_TOKEN] Invalid or expired token attempt from IP: ${getClientIp(req)}`);
+          return res.json({ valid: false });
+        }
+        
+        // Check if token already used
+        if (resetToken.usedAt) {
+          console.warn(`[VERIFY_TOKEN] Attempt to reuse token for user ${resetToken.userId}`);
+          return res.json({ valid: false });
+        }
+        
+        // Check if token expired
+        if (new Date() > new Date(resetToken.expiresAt)) {
+          console.warn(`[VERIFY_TOKEN] Expired token attempt for user ${resetToken.userId}`);
+          return res.json({ valid: false });
+        }
+        
+        // Token is valid
+        res.json({ 
+          valid: true,
+          email: resetToken.email
+        });
+      } catch (error) {
+        console.error("Error verifying reset token:", error);
+        res.status(500).json({ error: "Failed to verify token" });
+      }
+    }
+  );
+  
+  // Reset password - Update password with valid token
+  app.post("/api/auth/reset-password",
+    applyRateLimit({
+      keyFn: (req) => getClientIp(req),
+      limit: 5,
+      windowMs: 60 * 60 * 1000, // 5 requests per hour per IP
+      name: 'Reset Password'
+    }),
+    async (req, res) => {
+      try {
+        // Validate request body
+        const validation = resetPasswordSchema.safeParse(req.body);
+        if (!validation.success) {
+          return res.status(400).json({ error: validation.error.errors[0].message });
+        }
+        
+        const { token, newPassword } = validation.data;
+        
+        // Verify token exists and is valid
+        const resetToken = await storage.getPasswordResetToken(token);
+        
+        if (!resetToken) {
+          console.warn(`[RESET_PASSWORD] Invalid token attempt from IP: ${getClientIp(req)}`);
+          return res.status(400).json({ error: "Invalid or expired reset token" });
+        }
+        
+        // Check if token already used
+        if (resetToken.usedAt) {
+          console.warn(`[RESET_PASSWORD] Attempt to reuse token for user ${resetToken.userId}`);
+          return res.status(400).json({ error: "Reset token has already been used" });
+        }
+        
+        // Check if token expired
+        if (new Date() > new Date(resetToken.expiresAt)) {
+          console.warn(`[RESET_PASSWORD] Expired token attempt for user ${resetToken.userId}`);
+          return res.status(400).json({ error: "Reset token has expired" });
+        }
+        
+        // Hash new password
+        const hashedPassword = await hashPassword(newPassword);
+        
+        // Update user password and invalidate all reset tokens
+        await storage.updateUserPassword(resetToken.userId, hashedPassword);
+        
+        // Mark token as used
+        await storage.markTokenAsUsed(token);
+        
+        // Invalidate all sessions for this user (security measure)
+        // TODO: Implement session invalidation via session store
+        // For now, user will need to log in again with new password
+        
+        console.log(`[RESET_PASSWORD] Password successfully reset for user ${resetToken.userId}`);
+        
+        res.json({ 
+          message: "Password has been reset successfully. Please log in with your new password."
+        });
+      } catch (error) {
+        console.error("Error during password reset:", error);
+        res.status(500).json({ error: "Failed to reset password" });
+      }
+    }
+  );
   
   // Get current user
   app.get("/api/auth/me", requireAuth, async (req, res) => {
