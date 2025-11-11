@@ -177,12 +177,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`[SIGNUP] Auto-assigned ${userId} to ${assignedBinaryLeg} leg under sponsor ${sponsorId}`);
       }
       
-      // Generate email verification token (same pattern as password reset)
-      const rawToken = crypto.randomBytes(32).toString('hex');
-      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-      
-      // Create user with email verification token
+      // Create user with email auto-verified (verification disabled)
       const user = await storage.createUser({
         email,
         password: hashedPassword,
@@ -191,27 +186,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sponsorId: sponsorId || null,
         binaryLeg: assignedBinaryLeg || null,
         isActivated: false,
-        emailVerified: false,
-        emailVerificationToken: tokenHash,
-        emailVerificationExpiry: expiresAt,
+        emailVerified: true, // Auto-verify email (no verification required)
+        emailVerificationToken: null,
+        emailVerificationExpiry: null,
       });
       
-      // Send verification email (async, don't wait)
-      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
-        : `http://localhost:5000`;
+      console.log(`[SIGNUP] Created user ${userId} (${email}) - email verification disabled`);
       
-      sendVerificationEmail(email, rawToken, baseUrl).catch((err) => {
-        console.error('[SIGNUP] Failed to send verification email:', err);
-      });
+      // Auto-login after signup
+      req.session.userId = user.id;
+      req.session.isAdmin = user.role === 'admin';
       
-      console.log(`[SIGNUP] Created user ${userId} (${email}) - verification email sent`);
-      
-      // DO NOT auto-login - user must verify email first
-      res.status(201).json({ 
-        message: "Account created! Please check your email to verify your account.",
-        email: email,
-        requiresVerification: true
+      // Save session before responding
+      req.session.save((err) => {
+        if (err) {
+          console.error("Error saving session:", err);
+          return res.status(500).json({ error: "Failed to create session" });
+        }
+        res.status(201).json({ 
+          message: "Account created successfully! You are now logged in.",
+          user: serializeUser(user)
+        });
       });
     } catch (error) {
       console.error("Error during signup:", error);
@@ -240,14 +235,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Invalid email or password" });
       }
       
-      // Check if email is verified (skip for admins)
-      if (user.role !== 'admin' && !user.emailVerified) {
-        return res.status(403).json({ 
-          error: "Please verify your email before logging in. Check your inbox for the verification link.",
-          requiresVerification: true,
-          email: user.email
-        });
-      }
+      // Email verification disabled - users can login immediately
       
       // Set session and save it before responding
       req.session.userId = user.id;
