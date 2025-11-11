@@ -35,6 +35,8 @@ export interface IStorage {
   // User methods
   getUserById(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByVerificationToken(token: string): Promise<User | undefined>;
+  markEmailAsVerified(userId: string): Promise<void>;
   getUserByUserId(userId: string): Promise<User | undefined>;
   createUser(user: Partial<InsertUser>): Promise<User>;
   updateUserProfile(id: string, profile: UpdateProfile): Promise<User | undefined>;
@@ -207,6 +209,30 @@ export class DbStorage implements IStorage {
   async getUserByUserId(userId: string): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.userId, userId)).limit(1);
     return result[0];
+  }
+
+  async getUserByVerificationToken(token: string): Promise<User | undefined> {
+    // Only return user if token matches AND hasn't expired
+    const result = await db.select().from(users).where(
+      and(
+        eq(users.emailVerificationToken, token),
+        or(
+          isNull(users.emailVerificationExpiry),
+          sql`${users.emailVerificationExpiry} > NOW()`
+        )
+      )
+    ).limit(1);
+    return result[0];
+  }
+
+  async markEmailAsVerified(userId: string): Promise<void> {
+    await db.update(users)
+      .set({ 
+        emailVerified: true,
+        emailVerificationToken: null,
+        emailVerificationExpiry: null 
+      })
+      .where(eq(users.id, userId));
   }
 
   async createUser(insertUser: Partial<InsertUser>): Promise<User> {

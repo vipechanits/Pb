@@ -68,6 +68,11 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   role: userRoleEnum("role").notNull().default('user'),
   
+  // Email verification
+  emailVerified: boolean("email_verified").notNull().default(false),
+  emailVerificationToken: varchar("email_verification_token", { length: 255 }),
+  emailVerificationExpiry: timestamp("email_verification_expiry"),
+  
   // User ID (PB1, PB2, etc.) - generated after activation
   userId: varchar("user_id", { length: 20 }).unique(),
   

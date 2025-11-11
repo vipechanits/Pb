@@ -9,6 +9,7 @@ import { z } from "zod";
 import { db } from "./db";
 import { eq, desc, sql, count } from "drizzle-orm";
 import crypto from "crypto";
+import { sendVerificationEmail } from "./lib/email";
 
 // Middleware to check if user is authenticated
 function requireAuth(req: any, res: any, next: any) {
@@ -176,7 +177,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`[SIGNUP] Auto-assigned ${userId} to ${assignedBinaryLeg} leg under sponsor ${sponsorId}`);
       }
       
-      // Create user
+      // Generate email verification token (same pattern as password reset)
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      
+      // Create user with email verification token
       const user = await storage.createUser({
         email,
         password: hashedPassword,
@@ -185,19 +191,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sponsorId: sponsorId || null,
         binaryLeg: assignedBinaryLeg || null,
         isActivated: false,
+        emailVerified: false,
+        emailVerificationToken: tokenHash,
+        emailVerificationExpiry: expiresAt,
       });
       
-      // Set session and save it before responding
-      req.session.userId = user.id;
-      req.session.isAdmin = user.role === 'admin';
+      // Send verification email (async, don't wait)
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
+        : `http://localhost:5000`;
       
-      // Ensure session is saved before sending response
-      req.session.save((err) => {
-        if (err) {
-          console.error("Error saving session:", err);
-          return res.status(500).json({ error: "Failed to create session" });
-        }
-        res.status(201).json({ user: serializeUser(user) });
+      sendVerificationEmail(email, rawToken, baseUrl).catch((err) => {
+        console.error('[SIGNUP] Failed to send verification email:', err);
+      });
+      
+      console.log(`[SIGNUP] Created user ${userId} (${email}) - verification email sent`);
+      
+      // DO NOT auto-login - user must verify email first
+      res.status(201).json({ 
+        message: "Account created! Please check your email to verify your account.",
+        email: email,
+        requiresVerification: true
       });
     } catch (error) {
       console.error("Error during signup:", error);
@@ -226,6 +240,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Invalid email or password" });
       }
       
+      // Check if email is verified (skip for admins)
+      if (user.role !== 'admin' && !user.emailVerified) {
+        return res.status(403).json({ 
+          error: "Please verify your email before logging in. Check your inbox for the verification link.",
+          requiresVerification: true,
+          email: user.email
+        });
+      }
+      
       // Set session and save it before responding
       req.session.userId = user.id;
       req.session.isAdmin = user.role === 'admin';
@@ -252,6 +275,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json({ success: true });
     });
+  });
+  
+  // Email Verification
+  app.get("/api/auth/verify-email/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      
+      if (!token) {
+        return res.status(400).json({ error: "Verification token is required" });
+      }
+      
+      // Hash the token to compare with stored hash
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      
+      // Find user with this token
+      const user = await storage.getUserByVerificationToken(tokenHash);
+      
+      if (!user) {
+        return res.status(400).json({ 
+          error: "Invalid or expired verification link. Please request a new one.",
+          expired: true
+        });
+      }
+      
+      // Check if token is expired
+      if (user.emailVerificationExpiry && user.emailVerificationExpiry < new Date()) {
+        return res.status(400).json({ 
+          error: "Verification link has expired. Please request a new one.",
+          expired: true
+        });
+      }
+      
+      // Check if already verified
+      if (user.emailVerified) {
+        return res.status(200).json({ 
+          message: "Email already verified. You can now log in.",
+          alreadyVerified: true
+        });
+      }
+      
+      // Mark email as verified and clear token
+      await storage.markEmailAsVerified(user.id);
+      
+      console.log(`[EMAIL_VERIFY] User ${user.userId} (${user.email}) verified their email`);
+      
+      // Auto-login user after verification
+      req.session.userId = user.id;
+      req.session.isAdmin = user.role === 'admin';
+      
+      req.session.save((err) => {
+        if (err) {
+          console.error("Error saving session after verification:", err);
+          return res.status(200).json({ 
+            message: "Email verified successfully! Please log in.",
+            verified: true
+          });
+        }
+        res.json({ 
+          message: "Email verified successfully! You are now logged in.",
+          verified: true,
+          user: serializeUser(user)
+        });
+      });
+    } catch (error) {
+      console.error("Error verifying email:", error);
+      res.status(500).json({ error: "Failed to verify email" });
+    }
   });
   
   // Password Reset Routes
