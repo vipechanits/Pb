@@ -77,6 +77,19 @@ const csrfProtection = csrf({
 });
 app.use(csrfProtection);
 
+// CSRF error handler - must be after csrfProtection
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err.code === 'EBADCSRFTOKEN') {
+    console.error('[CSRF] Invalid or missing CSRF token:', {
+      path: req.path,
+      method: req.method,
+      hasToken: !!req.headers['csrf-token']
+    });
+    return res.status(403).json({ error: 'Invalid or missing CSRF token. Please refresh the page and try again.' });
+  }
+  next(err);
+});
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;

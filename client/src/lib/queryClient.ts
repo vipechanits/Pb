@@ -41,33 +41,54 @@ export async function apiRequest(
   data?: unknown | undefined,
   retryCount = 0,
 ): Promise<Response> {
-  // Fetch CSRF token if not already fetched
-  if (!csrfToken) {
-    await fetchCsrfToken();
-  }
-  
-  const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
-  
-  // Include CSRF token for state-changing requests
-  if (csrfToken && ["POST", "PATCH", "PUT", "DELETE"].includes(method.toUpperCase())) {
-    headers["CSRF-Token"] = csrfToken;
-  }
-  
-  const res = await fetch(url, {
-    method,
-    headers,
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
-  });
+  try {
+    // Fetch CSRF token if not already fetched
+    if (!csrfToken) {
+      console.log('[API] Fetching CSRF token...');
+      await fetchCsrfToken();
+      console.log('[API] CSRF token fetched successfully');
+    }
+    
+    const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
+    
+    // Include CSRF token for state-changing requests
+    if (csrfToken && ["POST", "PATCH", "PUT", "DELETE"].includes(method.toUpperCase())) {
+      headers["CSRF-Token"] = csrfToken;
+      console.log('[API] Including CSRF token in request');
+    }
+    
+    console.log(`[API] Sending ${method} request to ${url}`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: data ? JSON.stringify(data) : undefined,
+      credentials: "include",
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    console.log(`[API] Response received: ${res.status} ${res.statusText}`);
 
-  // If we get 403 (CSRF error), clear token and retry once
-  if (res.status === 403 && retryCount === 0) {
-    resetCsrfToken();
-    return apiRequest(method, url, data, retryCount + 1);
-  }
+    // If we get 403 (CSRF error), clear token and retry once
+    if (res.status === 403 && retryCount === 0) {
+      console.log('[API] 403 error, refreshing CSRF token and retrying...');
+      resetCsrfToken();
+      return apiRequest(method, url, data, retryCount + 1);
+    }
 
-  await throwIfResNotOk(res);
-  return res;
+    await throwIfResNotOk(res);
+    return res;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.error('[API] Request timed out after 30 seconds');
+      throw new Error('Request timed out. Please check your internet connection and try again.');
+    }
+    console.error('[API] Request failed:', error);
+    throw error;
+  }
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";

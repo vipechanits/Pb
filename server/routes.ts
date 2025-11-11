@@ -1131,15 +1131,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Confirm payment (only the designated receiver based on receiverType)
   app.patch("/api/activation-payments/:id/confirm", requireAuth, async (req, res) => {
     try {
+      console.log(`[CONFIRM-ROUTE] Received confirmation request for payment ${req.params.id} from user ${req.session.userId}`);
+      
       const validationResult = confirmPaymentSchema.safeParse(req.body);
       if (!validationResult.success) {
+        console.log('[CONFIRM-ROUTE] Validation failed:', validationResult.error);
         return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
       
       const user = await storage.getUserById(req.session.userId as string);
       if (!user) {
+        console.log('[CONFIRM-ROUTE] User not found');
         return res.status(404).json({ error: "User not found" });
       }
+      
+      console.log(`[CONFIRM-ROUTE] User ${user.userId} (role: ${user.role}) attempting to confirm payment`);
       
       // Check if payment exists
       const existingPayment = await storage.getActivationPayment(req.params.id);
