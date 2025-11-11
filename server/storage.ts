@@ -556,6 +556,7 @@ export class DbStorage implements IStorage {
   async getActivationPaymentsPendingConfirmation(receiverUserId: string): Promise<ActivationPayment[]> {
     return db.select().from(activationPayments).where(
       and(
+        eq(activationPayments.receiverType, 'user'),
         eq(activationPayments.receiverUserId, receiverUserId),
         eq(activationPayments.status, 'submitted')
       )
@@ -563,19 +564,12 @@ export class DbStorage implements IStorage {
   }
   
   async getAdminPendingConfirmations(): Promise<ActivationPayment[]> {
-    // Admin sees submitted payments EXCEPT Direct Sponsor payments (slot 0) to non-admin receivers
-    // Direct Sponsor payments should only be confirmed by the actual sponsor
-    // Admin DOES see slot 0 payments when:
-    // - receiver is PB0 (explicitly set to admin)
-    // - receiverUserId is NULL (no sponsor exists, falls back to admin)
+    // Admin only sees payments where receiverType='admin'
+    // Users with receiverType='user' confirm their own payments separately
     return db.select().from(activationPayments).where(
       and(
-        eq(activationPayments.status, 'submitted'),
-        or(
-          ne(activationPayments.slotIndex, 0),                 // Show all non-slot-0 payments
-          eq(activationPayments.receiverUserId, 'PB0'),        // OR show slot-0 if receiver is PB0
-          isNull(activationPayments.receiverUserId)            // OR show slot-0 if receiver is NULL (fallback)
-        )
+        eq(activationPayments.receiverType, 'admin'),
+        eq(activationPayments.status, 'submitted')
       )
     ).orderBy(desc(activationPayments.updatedAt));
   }
