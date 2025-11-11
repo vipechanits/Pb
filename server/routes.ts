@@ -1075,10 +1075,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "User ID not found" });
       }
       
-      // If admin, get ALL submitted payments; regular users get only their own
+      // If admin, get ALL submitted payments (system + their personal); regular users get only their own
       let payments: any[] = [];
       if (user.role === 'admin') {
-        payments = await storage.getAdminPendingConfirmations();
+        payments = await storage.getAdminPendingConfirmations(user.userId);
       } else {
         payments = await storage.getActivationPaymentsPendingConfirmation(user.userId);
       }

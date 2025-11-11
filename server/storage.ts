@@ -79,7 +79,7 @@ export interface IStorage {
   getActivationPaymentsByPayerUserId(payerUserId: string): Promise<ActivationPayment[]>;
   getActivationPaymentsByReceiverUserId(receiverUserId: string): Promise<ActivationPayment[]>;
   getActivationPaymentsPendingConfirmation(receiverUserId: string): Promise<ActivationPayment[]>;
-  getAdminPendingConfirmations(): Promise<ActivationPayment[]>;
+  getAdminPendingConfirmations(adminUserId: string): Promise<ActivationPayment[]>;
   getAllConfirmedPayments(): Promise<ActivationPayment[]>;
   getConfirmedPaymentsWithDetails(): Promise<Array<ActivationPayment & { payerName: string | null, receiverName: string | null }>>;
   submitPaymentProof(id: string, utrId: string, proofUrl?: string): Promise<ActivationPayment | undefined>;
@@ -692,12 +692,20 @@ export class DbStorage implements IStorage {
     );
   }
   
-  async getAdminPendingConfirmations(): Promise<ActivationPayment[]> {
-    // Admin only sees payments where receiverType='admin'
-    // Users with receiverType='user' confirm their own payments separately
+  async getAdminPendingConfirmations(adminUserId: string): Promise<ActivationPayment[]> {
+    // Admin sees both:
+    // 1. Payments where receiverType='admin' (system payments)
+    // 2. Payments where receiverType='user' AND receiverUserId=their userId (personal sponsor payments)
+    // This ensures admins can confirm both system and their personal sponsor income
     return db.select().from(activationPayments).where(
       and(
-        eq(activationPayments.receiverType, 'admin'),
+        or(
+          eq(activationPayments.receiverType, 'admin'),
+          and(
+            eq(activationPayments.receiverType, 'user'),
+            eq(activationPayments.receiverUserId, adminUserId)
+          )
+        ),
         eq(activationPayments.status, 'submitted')
       )
     ).orderBy(desc(activationPayments.updatedAt));
