@@ -9,7 +9,7 @@ import { z } from "zod";
 import { db } from "./db";
 import { eq, desc, sql, count } from "drizzle-orm";
 import crypto from "crypto";
-import { sendVerificationEmail } from "./lib/email";
+import { sendVerificationEmail, sendPasswordResetEmail } from "./lib/email";
 
 // Middleware to check if user is authenticated
 function requireAuth(req: any, res: any, next: any) {
