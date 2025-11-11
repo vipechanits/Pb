@@ -49,7 +49,7 @@ export default function SignupPage() {
 
     setLoading(true);
     try {
-      const result = await apiRequest('/api/auth/signup', 'POST', {
+      const result = await apiRequest('POST', '/api/auth/signup', {
         email,
         password,
         sponsorId: sponsorId || undefined,
