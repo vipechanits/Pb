@@ -94,6 +94,27 @@ export class DbStorage implements IStorage {
   }
 
   // User methods
+  
+  /**
+   * Shared helper to evaluate if a user's profile is complete.
+   * Profile is complete when user has:
+   * - Name (non-empty)
+   * - Mobile (non-empty)
+   * - At least one payment method: UPI ID OR complete bank details (holder, number, IFSC)
+   */
+  private evaluateProfileCompletion(user: User): boolean {
+    const hasName = !!(user.name && user.name.trim().length > 0);
+    const hasMobile = !!(user.mobile && user.mobile.trim().length > 0);
+    const hasUPI = !!(user.upiId && user.upiId.trim().length > 0);
+    const hasBankAccount = !!(
+      user.bankAccountHolder && user.bankAccountHolder.trim().length > 0 &&
+      user.bankAccountNumber && user.bankAccountNumber.trim().length > 0 &&
+      user.ifscCode && user.ifscCode.trim().length > 0
+    );
+    
+    return hasName && hasMobile && (hasUPI || hasBankAccount);
+  }
+  
   async getUserById(id: string): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
     return result[0];
@@ -143,7 +164,7 @@ export class DbStorage implements IStorage {
       normalizedProfile.securityCode = profile.securityCode?.trim() || null;
     }
     
-    // Use transaction to ensure atomic update and flag clearing
+    // Use transaction to ensure atomic update and flag recalculation
     return await db.transaction(async (tx) => {
       // Update profile with normalized data
       const result = await tx.update(users)
@@ -157,34 +178,27 @@ export class DbStorage implements IStorage {
       const updatedUser = result[0];
       if (!updatedUser) return undefined;
       
-      // Check if profile is now complete using same logic as checkProfileComplete
-      const hasBasicInfo = !!(updatedUser.name && updatedUser.mobile);
-      const hasPaymentInfo = !!(
-        updatedUser.upiId || 
-        (updatedUser.bankAccountNumber && updatedUser.ifscCode && updatedUser.bankAccountHolder)
-      );
-      const isComplete = hasBasicInfo && hasPaymentInfo;
+      // Evaluate profile completion using shared helper
+      const isComplete = this.evaluateProfileCompletion(updatedUser);
       
-      // If profile is complete and flag is set, clear it
+      // Always update isProfileComplete flag based on current state
+      // Clear requiresPostActivationProfileUpdate only when profile becomes complete
+      const flagUpdates: any = {
+        isProfileComplete: isComplete,
+        updatedAt: new Date(),
+      };
+      
       if (isComplete && updatedUser.requiresPostActivationProfileUpdate) {
-        const finalResult = await tx.update(users)
-          .set({
-            requiresPostActivationProfileUpdate: false,
-            isProfileComplete: true,
-            updatedAt: new Date(),
-          })
-          .where(eq(users.id, id))
-          .returning();
-        return finalResult[0];
+        flagUpdates.requiresPostActivationProfileUpdate = false;
       }
       
-      // If profile is complete but flag not set, still update isProfileComplete
-      if (isComplete && !updatedUser.isProfileComplete) {
+      // Only update flags if they changed to avoid unnecessary DB operations
+      if (
+        updatedUser.isProfileComplete !== isComplete ||
+        (isComplete && updatedUser.requiresPostActivationProfileUpdate)
+      ) {
         const finalResult = await tx.update(users)
-          .set({
-            isProfileComplete: true,
-            updatedAt: new Date(),
-          })
+          .set(flagUpdates)
           .where(eq(users.id, id))
           .returning();
         return finalResult[0];
@@ -216,11 +230,8 @@ export class DbStorage implements IStorage {
     const user = await this.getUserByUserId(userId);
     if (!user) return false;
     
-    // Check required profile fields: name, mobile, upiId or bank details
-    const hasBasicInfo = !!(user.name && user.mobile);
-    const hasPaymentInfo = !!(user.upiId || (user.bankAccountNumber && user.ifscCode && user.bankAccountHolder));
-    
-    return hasBasicInfo && hasPaymentInfo;
+    // Use shared helper to ensure consistent evaluation
+    return this.evaluateProfileCompletion(user);
   }
 
   async getUsersBySponsorAndLeg(sponsorUserId: string, leg: 'left' | 'right'): Promise<User[]> {

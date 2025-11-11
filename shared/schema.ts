@@ -112,10 +112,8 @@ export const insertUserSchema = createInsertSchema(users).omit({
 
 // Update profile schema
 export const updateProfileSchema = z.object({
-  name: z.string().optional(),
-  mobile: z.string().optional().refine((val) => !val || val.length === 10, {
-    message: "Mobile number must be exactly 10 digits"
-  }),
+  name: z.string().min(1, "Name is required"),
+  mobile: z.string().length(10, "Mobile number must be exactly 10 digits").regex(/^[0-9]{10}$/, "Mobile number must contain only digits"),
   upiId: z.string().optional(),
   bankAccountHolder: z.string().optional(),
   bankAccountNumber: z.string().optional(),
@@ -126,7 +124,21 @@ export const updateProfileSchema = z.object({
   securityCode: z.string().optional().refine((val) => !val || val.length === 6, {
     message: "Security code must be exactly 6 digits"
   }),
-});
+}).refine(
+  (data) => {
+    // At least one payment method required: UPI or complete bank account details
+    const hasUPI = data.upiId && data.upiId.trim().length > 0;
+    const hasBankAccount = 
+      data.bankAccountHolder && data.bankAccountHolder.trim().length > 0 &&
+      data.bankAccountNumber && data.bankAccountNumber.trim().length > 0 &&
+      data.ifscCode && data.ifscCode.trim().length > 0;
+    return hasUPI || hasBankAccount;
+  },
+  {
+    message: "At least one payment method is required: either UPI ID or complete bank account details (holder name, account number, and IFSC code)",
+    path: ["upiId"], // Error shows on UPI field
+  }
+);
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;

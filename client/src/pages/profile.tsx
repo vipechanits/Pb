@@ -6,6 +6,7 @@ import { updateProfileSchema } from '@shared/schema';
 import type { UpdateProfile } from '@shared/schema';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -242,10 +243,14 @@ export default function Profile() {
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Full Name</FormLabel>
+                    <FormLabel className="flex items-center gap-1">
+                      Full Name
+                      <span className="text-destructive">*</span>
+                    </FormLabel>
                     <FormControl>
                       <Input placeholder="John Doe" {...field} data-testid="input-name" />
                     </FormControl>
+                    <FormDescription className="text-xs text-muted-foreground">Required for profile completion</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -256,11 +261,14 @@ export default function Profile() {
                 name="mobile"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Mobile Number</FormLabel>
+                    <FormLabel className="flex items-center gap-1">
+                      Mobile Number
+                      <span className="text-destructive">*</span>
+                    </FormLabel>
                     <FormControl>
                       <Input placeholder="9876543210" maxLength={10} {...field} data-testid="input-mobile" />
                     </FormControl>
-                    <FormDescription>10-digit mobile number without country code</FormDescription>
+                    <FormDescription>10-digit mobile number without country code (required)</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -270,8 +278,11 @@ export default function Profile() {
 
           <Card>
             <CardHeader>
-              <CardTitle>UPI Payment Details</CardTitle>
-              <CardDescription>For receiving payments via UPI</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                UPI Payment Details
+                <Badge variant="secondary" className="text-xs">At least one payment method required</Badge>
+              </CardTitle>
+              <CardDescription>For receiving payments via UPI (Recommended)</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <FormField
@@ -283,7 +294,7 @@ export default function Profile() {
                     <FormControl>
                       <Input placeholder="yourname@paytm" {...field} data-testid="input-upi-id" />
                     </FormControl>
-                    <FormDescription>Your UPI ID for Google Pay, Paytm, or PhonePe</FormDescription>
+                    <FormDescription>Your UPI ID for Google Pay, Paytm, or PhonePe (fill this OR bank details below)</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -360,8 +371,11 @@ export default function Profile() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Bank Account Details</CardTitle>
-              <CardDescription>For receiving payments via bank transfer</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                Bank Account Details
+                <Badge variant="secondary" className="text-xs">Alternative payment method</Badge>
+              </CardTitle>
+              <CardDescription>For receiving payments via bank transfer (if you don't have UPI)</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <FormField
