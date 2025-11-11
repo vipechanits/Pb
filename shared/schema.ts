@@ -42,6 +42,26 @@ export const triggeredByEnum = pgEnum("triggered_by", ["activation", "reentry", 
 
 export const reentryStatusEnum = pgEnum("reentry_status", ["pending", "in_progress", "completed", "failed"]);
 
+export const notificationTypeEnum = pgEnum("notification_type", [
+  "payment_received",      // You received a payment
+  "payment_confirmed",     // Payment you made was confirmed
+  "payment_rejected",      // Payment you made was rejected
+  "income_earned",         // You earned income from downline
+  "activation_complete",   // Your activation is complete
+  "reentry_eligible",      // You're eligible for re-entry
+  "new_referral",          // Someone joined under you
+  "binary_match",          // Binary match income generated
+  "profile_incomplete",    // Reminder to complete profile
+]);
+
+export const notificationEntityTypeEnum = pgEnum("notification_entity_type", [
+  "payment",
+  "activation",
+  "income",
+  "user",
+  "reentry",
+]);
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
@@ -348,6 +368,35 @@ export const insertReentrySchema = createInsertSchema(reentries).omit({
 
 export type InsertReentry = z.infer<typeof insertReentrySchema>;
 export type Reentry = typeof reentries.$inferSelect;
+
+// Notifications table
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id", { length: 20 }).notNull(), // Recipient of notification
+  type: notificationTypeEnum("type").notNull(),
+  title: text("title").notNull(), // Short summary (e.g., "Payment Received")
+  message: text("message").notNull(), // Detailed message
+  
+  // Related entity tracking (optional - for linking to payments, activations, etc.)
+  relatedEntityType: notificationEntityTypeEnum("related_entity_type"),
+  relatedEntityId: varchar("related_entity_id", { length: 100 }),
+  
+  // Metadata for additional context (JSON string)
+  metadata: text("metadata"), // e.g., { "amount": "500", "slotType": "matrix_level_1", "payerName": "John" }
+  
+  // Read status
+  isRead: boolean("is_read").notNull().default(false),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Notification = typeof notifications.$inferSelect;
 
 // Matrix tree node for visualization
 export interface MatrixNode {
