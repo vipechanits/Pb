@@ -564,6 +564,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user.sponsorId || null
       );
       
+      // Link activation to in-progress re-entry (if any)
+      try {
+        const { ReentryService } = await import('./reentry-service');
+        const reentryService = new ReentryService(db as any);
+        await reentryService.linkReentryActivation(user.userId, activationId);
+      } catch (error) {
+        console.log('[ACTIVATION] No in-progress re-entry to link');
+      }
+      
       res.status(201).json(result);
     } catch (error: any) {
       console.error("Error requesting activation:", error);
@@ -791,6 +800,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!payment) {
         return res.status(404).json({ error: "Payment not found" });
       }
+
+      // Check if this completes all 8 payments and triggers re-entry completion
+      try {
+        const allPayments = await storage.getActivationPaymentsByActivationId(payment.activationId);
+        const confirmedCount = allPayments.filter(p => p.status === 'confirmed').length;
+        
+        if (confirmedCount === 8) {
+          // All payments confirmed - complete re-entry if in progress
+          const payerUserId = payment.payerUserId;
+          if (payerUserId) {
+            const { ReentryService } = await import('./reentry-service');
+            const reentryService = new ReentryService(db as any);
+            await reentryService.completeReentry(payerUserId);
+            console.log(`[RE-ENTRY] Completed re-entry for user ${payerUserId} after 8th payment`);
+          }
+        }
+      } catch (error) {
+        console.error('[RE-ENTRY] Error checking re-entry completion:', error);
+        // Don't fail the payment confirmation if re-entry completion fails
+      }
+
       res.json(payment);
     } catch (error) {
       console.error("Error confirming payment:", error);
@@ -891,6 +921,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching confirmed payments:", error);
       res.status(500).json({ error: "Failed to fetch confirmed payments" });
+    }
+  });
+
+  // Re-entry routes
+  
+  // Get current re-entry status
+  app.get("/api/reentry/status", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user || !user.userId) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Check if user has completed matrix
+      const isMatrixComplete = await storage.checkMatrixCompletion(user.userId);
+      
+      // Get current re-entry record (if any)
+      const currentReentry = await storage.getCurrentReentryStatus(user.userId);
+
+      res.json({
+        isEligibleForReentry: user.isEligibleForReentry,
+        isMatrixComplete,
+        currentCycleNumber: user.currentCycleNumber,
+        reentryCount: user.reentryCount,
+        currentReentry,
+        lastReentryAt: user.lastReentryAt,
+      });
+    } catch (error) {
+      console.error("Error fetching re-entry status:", error);
+      res.status(500).json({ error: "Failed to fetch re-entry status" });
+    }
+  });
+
+  // Get re-entry history
+  app.get("/api/reentry/history", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user || !user.userId) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const history = await storage.getUserReentryHistory(user.userId);
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching re-entry history:", error);
+      res.status(500).json({ error: "Failed to fetch re-entry history" });
+    }
+  });
+
+  // Initiate re-entry
+  app.post("/api/reentry/initiate", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user || !user.userId) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Check if profile is complete
+      const isProfileComplete = await storage.checkProfileComplete(user.userId);
+      if (!isProfileComplete) {
+        return res.status(400).json({ error: "Please complete your profile before initiating re-entry" });
+      }
+
+      // Check if user is eligible
+      if (!user.isEligibleForReentry) {
+        return res.status(400).json({ error: "You are not eligible for re-entry yet" });
+      }
+
+      // Check for existing in-progress re-entry
+      const existingReentry = await storage.getCurrentReentryStatus(user.userId);
+      if (existingReentry && existingReentry.status === 'in_progress') {
+        return res.status(400).json({ error: "You already have a re-entry in progress" });
+      }
+
+      // Initiate re-entry
+      const reentry = await storage.initiateReentry(user.userId);
+      
+      res.json({
+        reentry,
+        message: "Re-entry initiated successfully. Please proceed to activation payment.",
+        redirectTo: "/activate"
+      });
+    } catch (error: any) {
+      console.error("Error initiating re-entry:", error);
+      res.status(500).json({ error: error.message || "Failed to initiate re-entry" });
+    }
+  });
+
+  // Admin: Check eligibility for specific user (optional/manual trigger)
+  app.post("/api/admin/reentry/eligibility/:userId/check", requireAdmin, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      
+      const targetUser = await storage.getUserByUserId(userId);
+      if (!targetUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Check and mark if eligible
+      await storage.markEligibleForReentry(userId);
+      
+      const updatedUser = await storage.getUserByUserId(userId);
+      res.json({
+        userId,
+        isEligibleForReentry: updatedUser?.isEligibleForReentry,
+        message: "Eligibility check completed"
+      });
+    } catch (error) {
+      console.error("Error checking re-entry eligibility:", error);
+      res.status(500).json({ error: "Failed to check re-entry eligibility" });
     }
   });
 
