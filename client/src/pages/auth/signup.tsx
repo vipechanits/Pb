@@ -1,16 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
-import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Mail } from 'lucide-react';
+import { apiRequest } from '@/lib/queryClient';
 
 export default function SignupPage() {
   const [, setLocation] = useLocation();
-  const { signup } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -18,6 +17,7 @@ export default function SignupPage() {
   const [binaryLeg, setBinaryLeg] = useState<'left' | 'right' | undefined>();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [signupSuccess, setSignupSuccess] = useState(false);
 
   // Read URL parameters for referral
   useEffect(() => {
@@ -49,20 +49,58 @@ export default function SignupPage() {
 
     setLoading(true);
     try {
-      const user = await signup(email, password, sponsorId || undefined, binaryLeg);
-      // Redirect based on role
-      if (user.role === 'admin') {
-        setLocation('/admin/dashboard');
-      } else {
-        // Redirect new users to complete their profile before accessing dashboard
-        setLocation('/user/profile');
-      }
+      const result = await apiRequest('/api/auth/signup', 'POST', {
+        email,
+        password,
+        sponsorId: sponsorId || undefined,
+        binaryLeg: binaryLeg || undefined
+      });
+      
+      // Show success message
+      setSignupSuccess(true);
     } catch (err: any) {
       setError(err.message || 'Failed to create account');
     } finally {
       setLoading(false);
     }
   };
+
+  // Show success message after signup
+  if (signupSuccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4">
+              <Mail className="h-16 w-16 text-primary" data-testid="icon-email" />
+            </div>
+            <CardTitle className="text-2xl font-bold" data-testid="text-success-title">
+              Check Your Email
+            </CardTitle>
+            <CardDescription data-testid="text-success-description">
+              We've sent a verification link to <strong className="text-foreground">{email}</strong>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert data-testid="alert-info">
+              <Mail className="h-4 w-4" />
+              <AlertDescription>
+                Please check your email and click the verification link to activate your account. The link will expire in 24 hours.
+              </AlertDescription>
+            </Alert>
+            <Button
+              onClick={() => setLocation('/auth/login')}
+              variant="outline"
+              className="w-full"
+              data-testid="button-goto-login"
+            >
+              Go to Login
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">

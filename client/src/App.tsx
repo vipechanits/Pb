@@ -15,6 +15,7 @@ import LoginPage from '@/pages/auth/login';
 import SignupPage from '@/pages/auth/signup';
 import ForgotPasswordPage from '@/pages/auth/forgot-password';
 import ResetPasswordPage from '@/pages/auth/reset-password';
+import VerifyEmailPage from '@/pages/auth/verify-email';
 import UserDashboard from '@/pages/user-dashboard';
 import DirectSponsoring from '@/pages/direct-sponsoring';
 import BinaryMatching from '@/pages/binary-matching';
@@ -71,6 +72,7 @@ function Router() {
       <Route path="/auth/signup" component={SignupPage} />
       <Route path="/auth/forgot-password" component={ForgotPasswordPage} />
       <Route path="/auth/reset-password/:token" component={ResetPasswordPage} />
+      <Route path="/auth/verify-email/:token" component={VerifyEmailPage} />
       
       <Route path="/user/dashboard">
         {() => (
