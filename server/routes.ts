@@ -719,7 +719,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Confirm payment (receiver or admin only)
+  // Confirm payment (only the designated receiver based on receiverType)
   app.patch("/api/activation-payments/:id/confirm", requireAuth, async (req, res) => {
     try {
       const validationResult = confirmPaymentSchema.safeParse(req.body);
@@ -732,17 +732,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "User not found" });
       }
       
-      // Check if payment exists and user is the receiver or admin
+      // Check if payment exists
       const existingPayment = await storage.getActivationPayment(req.params.id);
       if (!existingPayment) {
         return res.status(404).json({ error: "Payment not found" });
       }
       
-      const isReceiver = existingPayment.receiverUserId === user.userId;
-      const isAdmin = user.role === 'admin';
-      
-      if (!isReceiver && !isAdmin) {
-        return res.status(403).json({ error: "Forbidden - Only the receiver or admin can confirm payments" });
+      // Enforce receiverType-based authorization
+      if (existingPayment.receiverType === 'user') {
+        // Only the specific user receiver can confirm
+        if (existingPayment.receiverUserId !== user.userId) {
+          return res.status(403).json({ error: "Forbidden - Only the receiver user can confirm this payment" });
+        }
+      } else if (existingPayment.receiverType === 'admin') {
+        // Only admin can confirm
+        if (user.role !== 'admin') {
+          return res.status(403).json({ error: "Forbidden - Only admin can confirm this payment" });
+        }
+      } else {
+        return res.status(400).json({ error: "Invalid receiver type" });
       }
       
       const payment = await storage.confirmActivationPayment(req.params.id, validationResult.data.notes);
@@ -756,7 +764,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Reject payment (receiver or admin only)
+  // Reject payment (only the designated receiver based on receiverType)
   app.patch("/api/activation-payments/:id/reject", requireAuth, async (req, res) => {
     try {
       const validationResult = rejectPaymentSchema.safeParse(req.body);
@@ -769,17 +777,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "User not found" });
       }
       
-      // Check if payment exists and user is the receiver or admin
+      // Check if payment exists
       const existingPayment = await storage.getActivationPayment(req.params.id);
       if (!existingPayment) {
         return res.status(404).json({ error: "Payment not found" });
       }
       
-      const isReceiver = existingPayment.receiverUserId === user.userId;
-      const isAdmin = user.role === 'admin';
-      
-      if (!isReceiver && !isAdmin) {
-        return res.status(403).json({ error: "Forbidden - Only the receiver or admin can reject payments" });
+      // Enforce receiverType-based authorization
+      if (existingPayment.receiverType === 'user') {
+        // Only the specific user receiver can reject
+        if (existingPayment.receiverUserId !== user.userId) {
+          return res.status(403).json({ error: "Forbidden - Only the receiver user can reject this payment" });
+        }
+      } else if (existingPayment.receiverType === 'admin') {
+        // Only admin can reject
+        if (user.role !== 'admin') {
+          return res.status(403).json({ error: "Forbidden - Only admin can reject this payment" });
+        }
+      } else {
+        return res.status(400).json({ error: "Invalid receiver type" });
       }
       
       const payment = await storage.rejectActivationPayment(req.params.id, validationResult.data.rejectionReason);
