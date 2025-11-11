@@ -2,12 +2,12 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema, users } from "@shared/schema";
+import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema, users, reentries } from "@shared/schema";
 import { hashPassword, verifyPassword, serializeUser } from "./auth";
 import { generateUserPaymentQR } from "./qrcode-generator";
 import { z } from "zod";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, desc, sql, count } from "drizzle-orm";
 
 // Middleware to check if user is authenticated
 function requireAuth(req: any, res: any, next: any) {
@@ -1006,6 +1006,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error initiating re-entry:", error);
       res.status(500).json({ error: error.message || "Failed to initiate re-entry" });
+    }
+  });
+
+  // Admin: Get all re-entries for management
+  app.get("/api/admin/reentry/all", requireAdmin, async (req, res) => {
+    try {
+      const reentryList = await db
+        .select({
+          id: reentries.id,
+          userId: reentries.userId,
+          userName: users.name,
+          cycleNumber: reentries.cycleNumber,
+          status: reentries.status,
+          initiatedAt: reentries.reentryInitiatedAt,
+          completedAt: reentries.reentryCompletedAt,
+          activationId: reentries.newActivationId,
+        })
+        .from(reentries)
+        .leftJoin(users, eq(reentries.userId, users.userId))
+        .orderBy(desc(reentries.reentryInitiatedAt));
+
+      res.json(reentryList);
+    } catch (error) {
+      console.error("Error fetching all re-entries:", error);
+      res.status(500).json({ error: "Failed to fetch re-entries" });
+    }
+  });
+
+  // Admin: Get re-entry statistics
+  app.get("/api/admin/reentry/stats", requireAdmin, async (req, res) => {
+    try {
+      const stats = await db
+        .select({
+          status: reentries.status,
+          count: count(),
+        })
+        .from(reentries)
+        .groupBy(reentries.status);
+
+      const eligibleUsersCount = await db
+        .select({ count: count() })
+        .from(users)
+        .where(eq(users.isEligibleForReentry, true));
+
+      res.json({
+        byStatus: stats,
+        eligibleUsers: eligibleUsersCount[0]?.count || 0,
+      });
+    } catch (error) {
+      console.error("Error fetching re-entry stats:", error);
+      res.status(500).json({ error: "Failed to fetch re-entry statistics" });
     }
   });
 

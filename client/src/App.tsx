@@ -29,6 +29,7 @@ import AdminPayments from '@/pages/admin-payments';
 import AdminPaymentsReport from '@/pages/admin-payments-report';
 import AdminSettings from '@/pages/admin-settings';
 import AdminUsers from '@/pages/admin-users';
+import AdminReentry from '@/pages/admin-reentry';
 import AdminConfig from '@/pages/admin-config';
 import { useEffect } from 'react';
 function DashboardLayout({ children, isAdmin = false }: { children: React.ReactNode; isAdmin?: boolean }) {
@@ -248,6 +249,16 @@ function Router() {
           <ProtectedRoute requireAdmin={true}>
             <DashboardLayout isAdmin={true}>
               <AdminUsers />
+            </DashboardLayout>
+          </ProtectedRoute>
+        )}
+      </Route>
+      
+      <Route path="/admin/reentry">
+        {() => (
+          <ProtectedRoute requireAdmin={true}>
+            <DashboardLayout isAdmin={true}>
+              <AdminReentry />
             </DashboardLayout>
           </ProtectedRoute>
         )}

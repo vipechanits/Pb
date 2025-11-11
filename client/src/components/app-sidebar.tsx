@@ -112,6 +112,11 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       icon: FileText,
     },
     {
+      title: 'Re-entry Management',
+      url: '/admin/reentry',
+      icon: RefreshCw,
+    },
+    {
       title: 'System Configuration',
       url: '/admin/config',
       icon: Settings,
