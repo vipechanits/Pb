@@ -24,6 +24,28 @@ export function ReferralLinks() {
     );
   }
 
+  // Check if user is activated - referral links only available after activation
+  if (!user?.isActivated) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Referral Links</CardTitle>
+          <CardDescription>Complete your activation to unlock referral links</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-lg bg-muted p-4 space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Your referral links will be available once you complete your activation by making all 8 payments.
+            </p>
+            <p className="text-sm font-medium">
+              Go to <span className="text-primary">Activation</span> to complete your payment process.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   // Use custom domain if configured, fallback to current origin
   const baseUrl = 'https://payback247.com';
   const leftLegLink = `${baseUrl}/auth/signup?ref=${user.userId}&leg=left`;
