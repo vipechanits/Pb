@@ -35,9 +35,14 @@ export default function UserConfirmationPage() {
 
     setProcessing(true);
     try {
-      await apiRequest('PATCH', `/api/activation-payments/${selectedPayment.id}/confirm`, {
+      console.log('[CONFIRM] Starting confirmation for payment:', selectedPayment.id);
+      const response = await apiRequest('PATCH', `/api/activation-payments/${selectedPayment.id}/confirm`, {
         notes: confirmNotes || undefined,
       });
+      console.log('[CONFIRM] Confirmation response received:', response.status);
+      
+      const data = await response.json();
+      console.log('[CONFIRM] Confirmation successful:', data);
 
       toast({
         title: 'Success',
@@ -49,13 +54,15 @@ export default function UserConfirmationPage() {
       setSelectedPayment(null);
       setAction(null);
     } catch (error) {
-      console.error('Error confirming payment:', error);
+      console.error('[CONFIRM] Error confirming payment:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to confirm payment';
       toast({
         title: 'Error',
-        description: 'Failed to confirm payment',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
+      console.log('[CONFIRM] Finally block - resetting processing state');
       setProcessing(false);
     }
   };
@@ -72,9 +79,14 @@ export default function UserConfirmationPage() {
 
     setProcessing(true);
     try {
-      await apiRequest('PATCH', `/api/activation-payments/${selectedPayment.id}/reject`, {
+      console.log('[REJECT] Starting rejection for payment:', selectedPayment.id);
+      const response = await apiRequest('PATCH', `/api/activation-payments/${selectedPayment.id}/reject`, {
         rejectionReason,
       });
+      console.log('[REJECT] Rejection response received:', response.status);
+      
+      const data = await response.json();
+      console.log('[REJECT] Rejection successful:', data);
 
       toast({
         title: 'Payment Rejected',
@@ -86,7 +98,7 @@ export default function UserConfirmationPage() {
       setSelectedPayment(null);
       setAction(null);
     } catch (error) {
-      console.error('Error rejecting payment:', error);
+      console.error('[REJECT] Error rejecting payment:', error);
       toast({
         title: 'Error',
         description: 'Failed to reject payment',
