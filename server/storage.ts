@@ -10,11 +10,14 @@ import {
   type UpdateSystemConfig,
   type MatrixNode,
   type Reentry,
+  type Notification,
+  type InsertNotification,
   users,
   activations,
   activationPayments,
   systemConfig,
-  reentries
+  reentries,
+  notifications
 } from "@shared/schema";
 import { SLOT_TO_PAYMENT_TYPE, PAYMENT_TYPE_AMOUNTS } from "@shared/constants";
 import { eq, and, or, ne, isNull, desc, sql } from "drizzle-orm";
@@ -73,6 +76,14 @@ export interface IStorage {
   submitPaymentProof(id: string, utrId: string, proofUrl?: string): Promise<ActivationPayment | undefined>;
   confirmActivationPayment(id: string, notes?: string): Promise<ActivationPayment | undefined>;
   rejectActivationPayment(id: string, rejectionReason: string): Promise<ActivationPayment | undefined>;
+  
+  // Notification methods
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  getNotificationsByUserId(userId: string, limit?: number, offset?: number, isRead?: boolean): Promise<Notification[]>;
+  getUnreadNotificationCount(userId: string): Promise<number>;
+  markNotificationAsRead(notificationId: string): Promise<Notification | undefined>;
+  markAllNotificationsAsRead(userId: string): Promise<number>;
+  deleteNotification(notificationId: string): Promise<void>;
 }
 
 export class DbStorage implements IStorage {
@@ -879,6 +890,67 @@ export class DbStorage implements IStorage {
     const { ReentryService } = await import('./reentry-service');
     const reentryService = new ReentryService(db as any);
     return await reentryService.getCurrentReentryStatus(userId);
+  }
+
+  // Notification methods
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const result = await db.insert(notifications)
+      .values(notification)
+      .returning();
+    return result[0];
+  }
+
+  async getNotificationsByUserId(
+    userId: string, 
+    limit: number = 20, 
+    offset: number = 0,
+    isRead?: boolean
+  ): Promise<Notification[]> {
+    const baseWhere = eq(notifications.userId, userId);
+    const whereClause = isRead === undefined 
+      ? baseWhere 
+      : and(baseWhere, eq(notifications.isRead, isRead));
+    
+    return await db.select()
+      .from(notifications)
+      .where(whereClause)
+      .orderBy(desc(notifications.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async getUnreadNotificationCount(userId: string): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(notifications)
+      .where(and(
+        eq(notifications.userId, userId),
+        eq(notifications.isRead, false)
+      ));
+    return Number(result[0]?.count || 0);
+  }
+
+  async markNotificationAsRead(notificationId: string): Promise<Notification | undefined> {
+    const result = await db.update(notifications)
+      .set({ isRead: true })
+      .where(eq(notifications.id, notificationId))
+      .returning();
+    return result[0];
+  }
+
+  async markAllNotificationsAsRead(userId: string): Promise<number> {
+    const result = await db.update(notifications)
+      .set({ isRead: true })
+      .where(and(
+        eq(notifications.userId, userId),
+        eq(notifications.isRead, false)
+      ))
+      .returning();
+    return result.length;
+  }
+
+  async deleteNotification(notificationId: string): Promise<void> {
+    await db.delete(notifications)
+      .where(eq(notifications.id, notificationId));
   }
 }
 

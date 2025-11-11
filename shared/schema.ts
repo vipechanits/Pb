@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, decimal, boolean, pgEnum, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, decimal, boolean, pgEnum, integer, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -369,6 +369,103 @@ export const insertReentrySchema = createInsertSchema(reentries).omit({
 export type InsertReentry = z.infer<typeof insertReentrySchema>;
 export type Reentry = typeof reentries.$inferSelect;
 
+// Notification metadata discriminated union types
+export type PaymentReceivedMetadata = {
+  type: 'payment_received';
+  amount: string;
+  slotType: string;
+  payerUserId: string;
+  payerName: string;
+  activationId: string;
+};
+
+export type PaymentConfirmedMetadata = {
+  type: 'payment_confirmed';
+  amount: string;
+  slotType: string;
+  receiverUserId: string;
+  receiverName: string;
+  activationId: string;
+};
+
+export type PaymentRejectedMetadata = {
+  type: 'payment_rejected';
+  amount: string;
+  slotType: string;
+  receiverUserId: string;
+  receiverName: string;
+  reason: string;
+  activationId: string;
+};
+
+export type IncomeEarnedMetadata = {
+  type: 'income_earned';
+  amount: string;
+  incomeType: string;
+  sourceUserId: string;
+  sourceName: string;
+  level?: number;
+};
+
+export type ActivationCompleteMetadata = {
+  type: 'activation_complete';
+  activationId: string;
+  totalAmount: string;
+  completedAt: string;
+};
+
+export type ReentryEligibleMetadata = {
+  type: 'reentry_eligible';
+  cycleNumber: number;
+  matrixLevel: number;
+  totalEarnings: string;
+};
+
+export type NewReferralMetadata = {
+  type: 'new_referral';
+  referralUserId: string;
+  referralName: string;
+  referralEmail: string;
+  binaryLeg: 'left' | 'right';
+};
+
+export type BinaryMatchMetadata = {
+  type: 'binary_match';
+  amount: string;
+  leftCount: number;
+  rightCount: number;
+  pairsMatched: number;
+};
+
+export type ProfileIncompleteMetadata = {
+  type: 'profile_incomplete';
+  missingFields: string[];
+};
+
+export type NotificationMetadata =
+  | PaymentReceivedMetadata
+  | PaymentConfirmedMetadata
+  | PaymentRejectedMetadata
+  | IncomeEarnedMetadata
+  | ActivationCompleteMetadata
+  | ReentryEligibleMetadata
+  | NewReferralMetadata
+  | BinaryMatchMetadata
+  | ProfileIncompleteMetadata;
+
+// Zod validation schema for notification metadata (discriminated union)
+const notificationMetadataSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('payment_received'), amount: z.string(), slotType: z.string(), payerUserId: z.string(), payerName: z.string(), activationId: z.string() }),
+  z.object({ type: z.literal('payment_confirmed'), amount: z.string(), slotType: z.string(), receiverUserId: z.string(), receiverName: z.string(), activationId: z.string() }),
+  z.object({ type: z.literal('payment_rejected'), amount: z.string(), slotType: z.string(), receiverUserId: z.string(), receiverName: z.string(), reason: z.string(), activationId: z.string() }),
+  z.object({ type: z.literal('income_earned'), amount: z.string(), incomeType: z.string(), sourceUserId: z.string(), sourceName: z.string(), level: z.number().optional() }),
+  z.object({ type: z.literal('activation_complete'), activationId: z.string(), totalAmount: z.string(), completedAt: z.string() }),
+  z.object({ type: z.literal('reentry_eligible'), cycleNumber: z.number(), matrixLevel: z.number(), totalEarnings: z.string() }),
+  z.object({ type: z.literal('new_referral'), referralUserId: z.string(), referralName: z.string(), referralEmail: z.string(), binaryLeg: z.enum(['left', 'right']) }),
+  z.object({ type: z.literal('binary_match'), amount: z.string(), leftCount: z.number(), rightCount: z.number(), pairsMatched: z.number() }),
+  z.object({ type: z.literal('profile_incomplete'), missingFields: z.array(z.string()) }),
+]);
+
 // Notifications table
 export const notifications = pgTable("notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -378,11 +475,11 @@ export const notifications = pgTable("notifications", {
   message: text("message").notNull(), // Detailed message
   
   // Related entity tracking (optional - for linking to payments, activations, etc.)
-  relatedEntityType: notificationEntityTypeEnum("related_entity_type"),
-  relatedEntityId: varchar("related_entity_id", { length: 100 }),
+  relatedEntityType: notificationEntityTypeEnum("related_entity_type"), // Nullable by default
+  relatedEntityId: varchar("related_entity_id", { length: 100 }), // Nullable by default
   
-  // Metadata for additional context (JSON string)
-  metadata: text("metadata"), // e.g., { "amount": "500", "slotType": "matrix_level_1", "payerName": "John" }
+  // Metadata for additional context (structured JSON object with discriminant type)
+  metadata: jsonb("metadata").$type<NotificationMetadata>().notNull(),
   
   // Read status
   isRead: boolean("is_read").notNull().default(false),
@@ -390,10 +487,14 @@ export const notifications = pgTable("notifications", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export const insertNotificationSchema = createInsertSchema(notifications).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertNotificationSchema = createInsertSchema(notifications)
+  .omit({
+    id: true,
+    createdAt: true,
+  })
+  .extend({
+    metadata: notificationMetadataSchema,
+  });
 
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
