@@ -838,6 +838,37 @@ export class DbStorage implements IStorage {
       .where(eq(incomeTransactions.userId, userId))
       .orderBy(desc(incomeTransactions.createdAt));
   }
+
+  // Re-entry methods
+  async checkMatrixCompletion(userId: string): Promise<boolean> {
+    const { ReentryService } = await import('./reentry-service');
+    const reentryService = new ReentryService(db as any);
+    return await reentryService.checkMatrixCompletion(userId);
+  }
+
+  async markEligibleForReentry(userId: string): Promise<void> {
+    const { ReentryService } = await import('./reentry-service');
+    const reentryService = new ReentryService(db as any);
+    return await reentryService.markEligibleForReentry(userId);
+  }
+
+  async initiateReentry(userId: string): Promise<Reentry> {
+    const { ReentryService } = await import('./reentry-service');
+    const reentryService = new ReentryService(db as any);
+    return await reentryService.initiateReentry(userId);
+  }
+
+  async getUserReentryHistory(userId: string): Promise<Reentry[]> {
+    const { ReentryService } = await import('./reentry-service');
+    const reentryService = new ReentryService(db as any);
+    return await reentryService.getUserReentryHistory(userId);
+  }
+
+  async getCurrentReentryStatus(userId: string): Promise<Reentry | null> {
+    const { ReentryService } = await import('./reentry-service');
+    const reentryService = new ReentryService(db as any);
+    return await reentryService.getCurrentReentryStatus(userId);
+  }
 }
 
 export const storage = new DbStorage();
