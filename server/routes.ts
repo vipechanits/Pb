@@ -387,17 +387,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           expiresAt // expiresAt
         );
         
-        // TODO: Send email with reset link
-        // For development/testing ONLY: Log token to server console
-        // SECURITY: Never expose token in API response - this defeats the purpose of email-based recovery!
-        console.log(`[FORGOT_PASSWORD] ==========================================`);
-        console.log(`[FORGOT_PASSWORD] Password reset token for ${user.userId} (${normalizedEmail}):`);
-        console.log(`[FORGOT_PASSWORD] Token: ${rawToken}`);
-        console.log(`[FORGOT_PASSWORD] Reset URL: /reset-password/${rawToken}`);
-        console.log(`[FORGOT_PASSWORD] Expires: ${expiresAt.toISOString()}`);
-        console.log(`[FORGOT_PASSWORD] ==========================================`);
-        console.log(`[FORGOT_PASSWORD] IMPORTANT: In production, this token would be sent via email.`);
-        console.log(`[FORGOT_PASSWORD] NEVER expose tokens in API responses!`);
+        // Send password reset email (async, don't wait)
+        const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+          ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
+          : `http://localhost:5000`;
+        
+        sendPasswordResetEmail(normalizedEmail, rawToken, baseUrl).catch((err) => {
+          console.error('[FORGOT_PASSWORD] Failed to send password reset email:', err);
+        });
+        
+        console.log(`[FORGOT_PASSWORD] Password reset email sent to ${normalizedEmail}`);
         
         // Return generic success message only (prevent email enumeration + token exposure)
         res.json({ 
