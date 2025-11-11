@@ -15,8 +15,20 @@ neonConfig.webSocketConstructor = ws;
 
 // Require SESSION_SECRET at boot - fail fast if missing
 if (!process.env.SESSION_SECRET) {
-  throw new Error('SESSION_SECRET environment variable is required');
+  console.error('FATAL: SESSION_SECRET environment variable is required');
+  console.error('Please set SESSION_SECRET in deployment secrets');
+  process.exit(1);
 }
+
+// Verify database connection environment variables
+if (!process.env.DATABASE_URL) {
+  console.error('FATAL: DATABASE_URL environment variable is required');
+  console.error('Database connection is not configured');
+  process.exit(1);
+}
+
+console.log('✓ Environment variables validated');
+console.log('✓ Starting PAYBACK247 server...');
 
 const app = express();
 
@@ -96,38 +108,77 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  const server = await registerRoutes(app);
+  try {
+    console.log('✓ Initializing Express server...');
+    const server = await registerRoutes(app);
 
-  // Initialize system configuration (ensure singleton row exists)
-  await storage.initializeSystemConfig();
+    // Health check endpoint for deployment monitoring
+    app.get('/health', (_req, res) => {
+      res.status(200).json({ 
+        status: 'ok', 
+        timestamp: new Date().toISOString(),
+        env: app.get('env')
+      });
+    });
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    console.log('✓ Initializing database...');
+    // Initialize system configuration (ensure singleton row exists)
+    await storage.initializeSystemConfig();
+    console.log('✓ Database initialized successfully');
 
-    res.status(status).json({ message });
-    throw err;
-  });
+    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+      const status = err.status || err.statusCode || 500;
+      const message = err.message || "Internal Server Error";
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
+      console.error(`Error ${status}: ${message}`, err);
+      res.status(status).json({ message });
+    });
+
+    // importantly only setup vite in development and after
+    // setting up all the other routes so the catch-all route
+    // doesn't interfere with the other routes
+    if (app.get("env") === "development") {
+      console.log('✓ Setting up Vite dev server...');
+      await setupVite(app, server);
+    } else {
+      console.log('✓ Serving static files...');
+      serveStatic(app);
+    }
+
+    // ALWAYS serve the app on the port specified in the environment variable PORT
+    // Other ports are firewalled. Default to 5000 if not specified.
+    // this serves both the API and the client.
+    // It is the only port that is not firewalled.
+    const port = parseInt(process.env.PORT || '5000', 10);
+    
+    console.log(`✓ Starting server on 0.0.0.0:${port}...`);
+    server.listen({
+      port,
+      host: "0.0.0.0",
+      reusePort: true,
+    }, () => {
+      console.log(`✓ Server successfully started!`);
+      console.log(`✓ Listening on http://0.0.0.0:${port}`);
+      console.log(`✓ Environment: ${app.get('env')}`);
+      console.log(`✓ Health check: http://0.0.0.0:${port}/health`);
+      log(`serving on port ${port}`);
+    });
+
+    // Handle server errors
+    server.on('error', (err: any) => {
+      console.error('FATAL: Server error:', err);
+      if (err.code === 'EADDRINUSE') {
+        console.error(`Port ${port} is already in use`);
+      }
+      process.exit(1);
+    });
+
+  } catch (error) {
+    console.error('FATAL: Failed to start server:', error);
+    if (error instanceof Error) {
+      console.error('Error message:', error.message);
+      console.error('Stack trace:', error.stack);
+    }
+    process.exit(1);
   }
-
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
-  });
 })();
