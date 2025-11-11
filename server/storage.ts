@@ -9,10 +9,12 @@ import {
   type SystemConfig,
   type UpdateSystemConfig,
   type MatrixNode,
+  type Reentry,
   users,
   activations,
   activationPayments,
-  systemConfig
+  systemConfig,
+  reentries
 } from "@shared/schema";
 import { SLOT_TO_PAYMENT_TYPE, PAYMENT_TYPE_AMOUNTS } from "@shared/constants";
 import { eq, and, or, ne, isNull, desc, sql } from "drizzle-orm";
@@ -38,6 +40,13 @@ export interface IStorage {
   // Income methods
   getUserIncomeSummary(userId: string): Promise<any>;
   getUserIncomeTransactions(userId: string): Promise<any[]>;
+  
+  // Re-entry methods
+  checkMatrixCompletion(userId: string): Promise<boolean>;
+  markEligibleForReentry(userId: string): Promise<void>;
+  initiateReentry(userId: string): Promise<Reentry>;
+  getUserReentryHistory(userId: string): Promise<Reentry[]>;
+  getCurrentReentryStatus(userId: string): Promise<Reentry | null>;
   
   // System configuration methods
   getSystemConfig(): Promise<SystemConfig>;

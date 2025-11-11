@@ -40,6 +40,8 @@ export const incomeStatusEnum = pgEnum("income_status", ["pending", "confirmed",
 
 export const triggeredByEnum = pgEnum("triggered_by", ["activation", "reentry", "adjustment"]);
 
+export const reentryStatusEnum = pgEnum("reentry_status", ["pending", "in_progress", "completed", "failed"]);
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
@@ -87,6 +89,12 @@ export const users = pgTable("users", {
   // Account status
   isActivated: boolean("is_activated").notNull().default(false),
   activatedAt: timestamp("activated_at"),
+  
+  // Re-entry tracking
+  reentryCount: integer("reentry_count").notNull().default(0), // Number of times user has re-entered
+  currentCycleNumber: integer("current_cycle_number").notNull().default(1), // Current cycle (1 = first activation)
+  isEligibleForReentry: boolean("is_eligible_for_reentry").notNull().default(false), // Matrix completed
+  lastReentryAt: timestamp("last_reentry_at"),
   
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -286,6 +294,48 @@ export const userIncomeSummaries = pgTable("user_income_summaries", {
 });
 
 export type UserIncomeSummary = typeof userIncomeSummaries.$inferSelect;
+
+// Re-entry tracking table
+export const reentries = pgTable("reentries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id", { length: 20 }).notNull(), // User re-entering
+  cycleNumber: integer("cycle_number").notNull(), // Which cycle is this (2, 3, 4, etc.)
+  previousActivationId: varchar("previous_activation_id", { length: 100 }).notNull(), // Reference to completed activation
+  newActivationId: varchar("new_activation_id", { length: 100 }), // New activation created for this re-entry
+  
+  // Matrix completion snapshot (capture state at cycle end for auditing)
+  completedMatrixLevel: integer("completed_matrix_level"), // Level when completed (usually 5)
+  completedMatrixPath: text("completed_matrix_path"), // Matrix path snapshot
+  completedMatrixParentId: varchar("completed_matrix_parent_id", { length: 20 }), // Parent in matrix when completed
+  
+  // Earnings snapshot from completed cycle
+  totalMatrixEarnings: decimal("total_matrix_earnings", { precision: 15, scale: 2 }).notNull().default('0'),
+  
+  // Timestamps
+  eligibilityDetectedAt: timestamp("eligibility_detected_at").notNull().defaultNow(), // When eligibility was first detected
+  matrixCompletedAt: timestamp("matrix_completed_at"), // When matrix was actually completed (nullable)
+  
+  // Re-entry payment tracking
+  status: reentryStatusEnum("reentry_status").notNull().default('pending'),
+  reentryInitiatedAt: timestamp("reentry_initiated_at"), // When user clicked "re-enter" (nullable until initiated)
+  reentryCompletedAt: timestamp("reentry_completed_at"), // When new activation completed
+  
+  // Preserve genealogy
+  originalSponsorId: varchar("original_sponsor_id", { length: 20 }).notNull(), // Keep original sponsor
+  originalBinaryLeg: binaryLegEnum("original_binary_leg").notNull(), // Keep original leg placement
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertReentrySchema = createInsertSchema(reentries).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertReentry = z.infer<typeof insertReentrySchema>;
+export type Reentry = typeof reentries.$inferSelect;
 
 // Matrix tree node for visualization
 export interface MatrixNode {
