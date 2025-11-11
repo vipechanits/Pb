@@ -35,6 +35,10 @@ export interface IStorage {
   findAndAssignMatrixSlot(userId: string): Promise<User | undefined>;
   getMatrixSubtree(userId: string, maxDepth: number): Promise<MatrixNode | null>;
   
+  // Income methods
+  getUserIncomeSummary(userId: string): Promise<any>;
+  getUserIncomeTransactions(userId: string): Promise<any[]>;
+  
   // System configuration methods
   getSystemConfig(): Promise<SystemConfig>;
   updateSystemConfig(config: Partial<UpdateSystemConfig>): Promise<SystemConfig>;
@@ -627,23 +631,34 @@ export class DbStorage implements IStorage {
   }
 
   async confirmActivationPayment(id: string, notes?: string): Promise<ActivationPayment | undefined> {
-    const result = await db.update(activationPayments)
-      .set({ 
-        status: 'confirmed',
-        confirmedAt: new Date(),
-        notes: notes,
-        updatedAt: new Date()
-      })
-      .where(eq(activationPayments.id, id))
-      .returning();
-    
-    const payment = result[0];
-    if (payment) {
-      // Check if all 8 payments are confirmed and activate user
+    return await db.transaction(async (tx) => {
+      const result = await tx.update(activationPayments)
+        .set({ 
+          status: 'confirmed',
+          confirmedAt: new Date(),
+          notes: notes,
+          updatedAt: new Date()
+        })
+        .where(eq(activationPayments.id, id))
+        .returning();
+      
+      const payment = result[0];
+      if (!payment) return undefined;
+
+      const { IncomeService } = await import('./income-service');
+      const incomeService = new IncomeService(tx as any);
+      
+      try {
+        await incomeService.createIncomesForPayment(payment);
+      } catch (error) {
+        console.error('Error creating income for payment:', error);
+        throw error;
+      }
+
       await this.checkAndCompleteActivation(payment.activationId, payment.payerUserId);
-    }
-    
-    return payment;
+      
+      return payment;
+    });
   }
 
   async checkAndCompleteActivation(activationId: string, payerUserId: string): Promise<void> {
@@ -790,6 +805,29 @@ export class DbStorage implements IStorage {
       .where(eq(activationPayments.id, id))
       .returning();
     return result[0];
+  }
+
+  async getUserIncomeSummary(userId: string): Promise<any> {
+    const { userIncomeSummaries } = await import('@shared/schema');
+    const result = await db.select().from(userIncomeSummaries).where(eq(userIncomeSummaries.userId, userId)).limit(1);
+    return result[0] || {
+      userId,
+      totalEarnings: '0',
+      directSponsorIncome: '0',
+      binaryMatchIncome: '0',
+      matrixLevel1Income: '0',
+      matrixLevel2Income: '0',
+      matrixLevel3Income: '0',
+      matrixLevel4Income: '0',
+      matrixLevel5Income: '0',
+    };
+  }
+
+  async getUserIncomeTransactions(userId: string): Promise<any[]> {
+    const { incomeTransactions } = await import('@shared/schema');
+    return await db.select().from(incomeTransactions)
+      .where(eq(incomeTransactions.userId, userId))
+      .orderBy(desc(incomeTransactions.createdAt));
   }
 }
 

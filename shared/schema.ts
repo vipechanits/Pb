@@ -26,6 +26,20 @@ export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
 
 export const binaryLegEnum = pgEnum("binary_leg", ["left", "right"]);
 
+export const incomeTypeEnum = pgEnum("income_type", [
+  "direct_sponsor",
+  "binary_match",
+  "matrix_level_1",
+  "matrix_level_2",
+  "matrix_level_3",
+  "matrix_level_4",
+  "matrix_level_5",
+]);
+
+export const incomeStatusEnum = pgEnum("income_status", ["pending", "confirmed", "failed", "reversed"]);
+
+export const triggeredByEnum = pgEnum("triggered_by", ["activation", "reentry", "adjustment"]);
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
@@ -229,6 +243,49 @@ export const updateSystemConfigSchema = createInsertSchema(systemConfig).omit({
 
 export type SystemConfig = typeof systemConfig.$inferSelect;
 export type UpdateSystemConfig = z.infer<typeof updateSystemConfigSchema>;
+
+// Income transactions table
+export const incomeTransactions = pgTable("income_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id", { length: 20 }).notNull(), // User receiving income
+  activationId: varchar("activation_id", { length: 100 }), // Optional: activation that triggered this income
+  activationPaymentId: varchar("activation_payment_id"), // Link to source payment
+  incomeType: incomeTypeEnum("income_type").notNull(),
+  amountInr: decimal("amount_inr", { precision: 10, scale: 2 }).notNull(),
+  status: incomeStatusEnum("income_status").notNull().default('pending'),
+  sourceUserId: varchar("source_user_id", { length: 20 }), // User who paid (payer)
+  triggeredBy: triggeredByEnum("triggered_by").notNull().default('activation'),
+  notes: text("notes"),
+  metadata: text("metadata"), // JSON string for additional context
+  confirmedAt: timestamp("confirmed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertIncomeTransactionSchema = createInsertSchema(incomeTransactions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertIncomeTransaction = z.infer<typeof insertIncomeTransactionSchema>;
+export type IncomeTransaction = typeof incomeTransactions.$inferSelect;
+
+// User income summaries for fast dashboard queries (denormalized)
+export const userIncomeSummaries = pgTable("user_income_summaries", {
+  userId: varchar("user_id", { length: 20 }).primaryKey(),
+  totalEarnings: decimal("total_earnings", { precision: 15, scale: 2 }).notNull().default('0'),
+  directSponsorIncome: decimal("direct_sponsor_income", { precision: 15, scale: 2 }).notNull().default('0'),
+  binaryMatchIncome: decimal("binary_match_income", { precision: 15, scale: 2 }).notNull().default('0'),
+  matrixLevel1Income: decimal("matrix_level_1_income", { precision: 15, scale: 2 }).notNull().default('0'),
+  matrixLevel2Income: decimal("matrix_level_2_income", { precision: 15, scale: 2 }).notNull().default('0'),
+  matrixLevel3Income: decimal("matrix_level_3_income", { precision: 15, scale: 2 }).notNull().default('0'),
+  matrixLevel4Income: decimal("matrix_level_4_income", { precision: 15, scale: 2 }).notNull().default('0'),
+  matrixLevel5Income: decimal("matrix_level_5_income", { precision: 15, scale: 2 }).notNull().default('0'),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export type UserIncomeSummary = typeof userIncomeSummaries.$inferSelect;
 
 // Matrix tree node for visualization
 export interface MatrixNode {

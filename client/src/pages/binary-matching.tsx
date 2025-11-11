@@ -1,32 +1,52 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { GitBranch, TrendingUp, DollarSign, Users } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { useQuery } from '@tanstack/react-query';
+
+interface IncomeSummary {
+  totalEarnings: string;
+  directSponsorIncome: string;
+  binaryMatchIncome: string;
+  matrixLevel1Income: string;
+  matrixLevel2Income: string;
+  matrixLevel3Income: string;
+  matrixLevel4Income: string;
+  matrixLevel5Income: string;
+}
 
 export default function BinaryMatching() {
   const { user } = useAuth();
 
+  const { data: incomeSummary } = useQuery<IncomeSummary>({
+    queryKey: ['/api/users', user?.userId, 'income-summary'],
+    enabled: !!user?.userId,
+  });
+
+  const binaryEarnings = incomeSummary?.binaryMatchIncome ? parseFloat(incomeSummary.binaryMatchIncome) : 0;
+  const binaryMatches = Math.floor(binaryEarnings / 1000);
+
   const stats = [
     {
       title: 'Binary Matches',
-      value: '0',
+      value: binaryMatches.toString(),
       description: 'Completed matches',
       icon: GitBranch,
     },
     {
       title: 'Left Leg',
-      value: '0',
+      value: user?.leftLegCount?.toString() || '0',
       description: 'Members on left',
       icon: Users,
     },
     {
       title: 'Right Leg',
-      value: '0',
+      value: user?.rightLegCount?.toString() || '0',
       description: 'Members on right',
       icon: Users,
     },
     {
       title: 'Binary Earnings',
-      value: '₹0',
+      value: `₹${binaryEarnings.toLocaleString('en-IN')}`,
       description: 'From matches',
       icon: DollarSign,
     },

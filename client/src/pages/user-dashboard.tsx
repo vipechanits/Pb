@@ -10,6 +10,17 @@ import { Users, GitBranch, Grid3x3, TrendingUp, Copy, Check, ArrowLeft, ArrowRig
 import { Link } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 
+interface IncomeSummary {
+  totalEarnings: string;
+  directSponsorIncome: string;
+  binaryMatchIncome: string;
+  matrixLevel1Income: string;
+  matrixLevel2Income: string;
+  matrixLevel3Income: string;
+  matrixLevel4Income: string;
+  matrixLevel5Income: string;
+}
+
 export default function UserDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -22,6 +33,12 @@ export default function UserDashboard() {
   const { data: sponsorData, isLoading: sponsorLoading } = useQuery<{ userId: string; name: string | null }>({
     queryKey: ['/api/users', user?.sponsorId, 'public'],
     enabled: !!user?.sponsorId,
+  });
+
+  // Fetch income summary
+  const { data: incomeSummary } = useQuery<IncomeSummary>({
+    queryKey: ['/api/users', user?.userId, 'income-summary'],
+    enabled: !!user?.userId,
   });
   const baseUrl = window.location.origin;
   const leftLegLink = `${baseUrl}/auth/signup?ref=${user?.userId}&leg=left`;
@@ -50,6 +67,8 @@ export default function UserDashboard() {
     }
   };
 
+  const totalEarnings = incomeSummary?.totalEarnings ? parseFloat(incomeSummary.totalEarnings) : 0;
+
   const stats = [
     {
       title: 'Total Referrals',
@@ -71,8 +90,8 @@ export default function UserDashboard() {
     },
     {
       title: 'Total Earnings',
-      value: '₹0',
-      description: 'Coming soon',
+      value: `₹${totalEarnings.toLocaleString('en-IN')}`,
+      description: 'All time income',
       icon: TrendingUp,
     },
   ];

@@ -286,6 +286,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/users/:userId/income-summary", requireAuth, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const requestingUser = await storage.getUserById(req.session.userId!);
+      
+      if (requestingUser?.userId !== userId && requestingUser?.role !== 'admin') {
+        return res.status(403).json({ error: "Forbidden - You can only view your own income" });
+      }
+      
+      const summary = await storage.getUserIncomeSummary(userId);
+      res.json(summary);
+    } catch (error) {
+      console.error("Error fetching income summary:", error);
+      res.status(500).json({ error: "Failed to fetch income summary" });
+    }
+  });
+
+  app.get("/api/users/:userId/income-transactions", requireAuth, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const requestingUser = await storage.getUserById(req.session.userId!);
+      
+      if (requestingUser?.userId !== userId && requestingUser?.role !== 'admin') {
+        return res.status(403).json({ error: "Forbidden - You can only view your own income transactions" });
+      }
+      
+      const transactions = await storage.getUserIncomeTransactions(userId);
+      res.json(transactions);
+    } catch (error) {
+      console.error("Error fetching income transactions:", error);
+      res.status(500).json({ error: "Failed to fetch income transactions" });
+    }
+  });
+
   // Update user profile
   app.patch("/api/profile", requireAuth, async (req, res) => {
     try {

@@ -1,38 +1,74 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Grid3x3, DollarSign, TrendingUp, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/lib/auth-context';
+
+interface IncomeSummary {
+  totalEarnings: string;
+  directSponsorIncome: string;
+  binaryMatchIncome: string;
+  matrixLevel1Income: string;
+  matrixLevel2Income: string;
+  matrixLevel3Income: string;
+  matrixLevel4Income: string;
+  matrixLevel5Income: string;
+}
 
 export default function MatrixIncome() {
+  const { user } = useAuth();
+
+  const { data: incomeSummary } = useQuery<IncomeSummary>({
+    queryKey: ['/api/users', user?.userId, 'income-summary'],
+    enabled: !!user?.userId,
+  });
+
+  const matrixEarnings = incomeSummary ? 
+    parseFloat(incomeSummary.matrixLevel1Income || '0') +
+    parseFloat(incomeSummary.matrixLevel2Income || '0') +
+    parseFloat(incomeSummary.matrixLevel3Income || '0') +
+    parseFloat(incomeSummary.matrixLevel4Income || '0') +
+    parseFloat(incomeSummary.matrixLevel5Income || '0') : 0;
+
+  const level1Filled = incomeSummary ? Math.floor(parseFloat(incomeSummary.matrixLevel1Income || '0') / 500) : 0;
+  const level2Filled = incomeSummary ? Math.floor(parseFloat(incomeSummary.matrixLevel2Income || '0') / 500) : 0;
+  const level3Filled = incomeSummary ? Math.floor(parseFloat(incomeSummary.matrixLevel3Income || '0') / 500) : 0;
+  const level4Filled = incomeSummary ? Math.floor(parseFloat(incomeSummary.matrixLevel4Income || '0') / 500) : 0;
+  const level5Filled = incomeSummary ? Math.floor(parseFloat(incomeSummary.matrixLevel5Income || '0') / 500) : 0;
+  
+  const totalFilled = level1Filled + level2Filled + level3Filled + level4Filled + level5Filled;
+  const activeLevels = [level1Filled > 0, level2Filled > 0, level3Filled > 0, level4Filled > 0, level5Filled > 0].filter(Boolean).length;
+
   const matrixLevels = [
-    { level: 1, positions: 2, filled: 0, earning: '₹625 per position' },
-    { level: 2, positions: 4, filled: 0, earning: '₹625 per position' },
-    { level: 3, positions: 8, filled: 0, earning: '₹625 per position' },
-    { level: 4, positions: 16, filled: 0, earning: '₹625 per position' },
-    { level: 5, positions: 32, filled: 0, earning: '₹625 per position' },
+    { level: 1, positions: 2, filled: level1Filled, earning: '₹500 per position' },
+    { level: 2, positions: 4, filled: level2Filled, earning: '₹500 per position' },
+    { level: 3, positions: 8, filled: level3Filled, earning: '₹500 per position' },
+    { level: 4, positions: 16, filled: level4Filled, earning: '₹500 per position' },
+    { level: 5, positions: 32, filled: level5Filled, earning: '₹500 per position' },
   ];
 
   const stats = [
     {
       title: 'Matrix Earnings',
-      value: '₹0',
+      value: `₹${matrixEarnings.toLocaleString('en-IN')}`,
       description: 'From 5 levels',
       icon: DollarSign,
     },
     {
       title: 'Total Positions',
-      value: '0/62',
+      value: `${totalFilled}/62`,
       description: 'Filled positions',
       icon: Grid3x3,
     },
     {
       title: 'Active Levels',
-      value: '0/5',
+      value: `${activeLevels}/5`,
       description: 'Completed levels',
       icon: TrendingUp,
     },
     {
       title: 'Matrix Team',
-      value: '0',
+      value: totalFilled.toString(),
       description: 'Members in matrix',
       icon: Users,
     },
