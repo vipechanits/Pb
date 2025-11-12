@@ -198,8 +198,8 @@ export const activationPayments = pgTable("activation_payments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   activationId: varchar("activation_id", { length: 100 }).notNull(),
   slotIndex: integer("slot_index").notNull(), // 0-7 for the 8 payment slots
-  payerUserId: varchar("payer_user_id", { length: 20 }).notNull(), // User ID of sender
-  receiverUserId: varchar("receiver_user_id", { length: 20 }), // User ID of receiver (null if admin)
+  payerUserId: varchar("payer_user_id", { length: 50 }).notNull(), // User database ID (UUID) or PB#### after activation
+  receiverUserId: varchar("receiver_user_id", { length: 50 }), // User PB#### ID of receiver (null if admin)
   paymentType: paymentTypeEnum("payment_type").notNull(),
   receiverType: receiverTypeEnum("receiver_type").notNull(),
   amountInr: decimal("amount_inr", { precision: 10, scale: 2 }).notNull(),

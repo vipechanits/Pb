@@ -340,12 +340,15 @@ export class DbStorage implements IStorage {
   }
 
   async getUsersBySponsorAndLeg(sponsorUserId: string, leg: 'left' | 'right'): Promise<User[]> {
+    // Only return ACTIVATED users - inactive users are not visible in binary tree
     const result = await db
       .select()
       .from(users)
       .where(and(
         eq(users.sponsorId, sponsorUserId),
-        eq(users.binaryLeg, leg)
+        eq(users.binaryLeg, leg),
+        eq(users.isActivated, true), // CRITICAL: Only show activated users in binary tree
+        sql`${users.userId} IS NOT NULL` // Ensure user has PB#### ID assigned
       ))
       .orderBy(users.createdAt);
     return result;
@@ -493,7 +496,7 @@ export class DbStorage implements IStorage {
       });
     });
 
-    nodeMap.forEach((node, userId) => {
+    nodeMap.forEach((node, userId: string) => {
       const row = rows.rows.find((r: any) => r.user_id === userId);
       if (row && row.matrix_parent_id) {
         const parent = nodeMap.get(row.matrix_parent_id);
@@ -794,7 +797,7 @@ export class DbStorage implements IStorage {
     });
   }
 
-  async checkAndCompleteActivation(activationId: string, payerUserId: string, existingTx?: any): Promise<void> {
+  async checkAndCompleteActivation(activationId: string, payerUserIdOrDbId: string, existingTx?: any): Promise<void> {
     try {
       // Execute the logic within the provided transaction or create a new one
       const executeLogic = async (tx: any) => {
@@ -808,20 +811,52 @@ export class DbStorage implements IStorage {
         const allConfirmed = payments.length === 8 && payments.every((p: any) => p.status === 'confirmed');
         
         if (allConfirmed) {
-          console.log(`[ACTIVATION] All 8 payments confirmed for ${payerUserId}. Activating user...`);
+          console.log(`[ACTIVATION] All 8 payments confirmed for user. Activating...`);
           
-          // Load the activated user to get their sponsor relationship and binary leg
+          // Load the user by database ID (since userId is null pre-activation)
+          // payerUserIdOrDbId is now the database UUID
           const activatedUserRows = await tx.select()
             .from(users)
-            .where(eq(users.userId, payerUserId))
+            .where(eq(users.id, payerUserIdOrDbId))
             .limit(1);
           
           if (activatedUserRows.length === 0) {
-            throw new Error(`User ${payerUserId} not found`);
+            throw new Error(`User with ID ${payerUserIdOrDbId} not found`);
           }
           
           const activatedUser = activatedUserRows[0];
           const now = new Date();
+          
+          // CRITICAL: Generate PB#### ID and assign binary placement NOW (before activation)
+          // This is the ONLY time userId is assigned
+          
+          // Step 1: Generate next PB#### userId
+          const lastUserWithId = await tx.select()
+            .from(users)
+            .where(sql`${users.userId} IS NOT NULL`)
+            .orderBy(desc(users.userId))
+            .limit(1);
+          
+          let nextUserNumber = 10000; // Start from PB10000
+          if (lastUserWithId.length > 0 && lastUserWithId[0].userId) {
+            const match = lastUserWithId[0].userId.match(/PB(\d+)/);
+            if (match) {
+              nextUserNumber = parseInt(match[1], 10) + 1;
+            }
+          }
+          
+          const newUserId = `PB${nextUserNumber}`;
+          console.log(`[ACTIVATION] Assigning userId ${newUserId} to user`);
+          
+          // Step 2: Determine binary leg placement
+          let assignedBinaryLeg = activatedUser.binaryLeg; // May be null or pre-specified
+          if (activatedUser.sponsorId && !assignedBinaryLeg) {
+            // Auto-assign to the leg with fewer members
+            assignedBinaryLeg = await this.determineBestLeg(activatedUser.sponsorId);
+            console.log(`[ACTIVATION] Auto-assigned ${newUserId} to ${assignedBinaryLeg} leg under sponsor ${activatedUser.sponsorId}`);
+          }
+          
+          console.log(`[ACTIVATION] Binary placement: Sponsor=${activatedUser.sponsorId}, Leg=${assignedBinaryLeg}`);
           
           // Update activation status to completed (with guard to prevent double-activation)
           const activationUpdateResult = await tx.update(activations)
@@ -841,26 +876,48 @@ export class DbStorage implements IStorage {
             return;
           }
           
-          // Activate user - this makes their referral links visible
-          // Also require post-activation profile update
+          // Step 3: Activate user and assign PB#### ID + binary placement
+          // This is THE critical step that assigns the permanent user ID
           await tx.update(users)
             .set({ 
+              userId: newUserId, // ASSIGN PB#### ID
+              binaryLeg: assignedBinaryLeg, // ASSIGN binary leg placement
               isActivated: true,
               activatedAt: now,
               requiresPostActivationProfileUpdate: true,
               updatedAt: now
             })
-            .where(eq(users.userId, payerUserId));
+            .where(eq(users.id, payerUserIdOrDbId));
+          
+          console.log(`[ACTIVATION] User ${newUserId} activated with binary leg: ${assignedBinaryLeg}`);
+          
+          // CRITICAL: Update activation_payments to use new PB#### ID instead of database UUID
+          // This ensures all queries by userId work correctly after activation
+          await tx.update(activationPayments)
+            .set({ 
+              payerUserId: newUserId, // Replace UUID with PB#### ID
+              updatedAt: now
+            })
+            .where(eq(activationPayments.activationId, activationId));
+          
+          // Also update activations table to reflect new PB#### ID
+          await tx.update(activations)
+            .set({ 
+              payerWallet: newUserId, // Replace UUID with PB#### ID
+            })
+            .where(eq(activations.id, activationId));
+          
+          console.log(`[ACTIVATION] Updated activation records to use PB#### ID ${newUserId}`);
           
           // Assign user to next available global matrix slot
           // This happens atomically within the activation transaction
           // If matrix is full or placement fails, entire activation rolls back
-          console.log(`[MATRIX] Placing ${payerUserId} in global matrix...`);
-          await this.findAndAssignMatrixSlot(payerUserId, tx);
+          console.log(`[MATRIX] Placing ${newUserId} in global matrix...`);
+          await this.findAndAssignMatrixSlot(newUserId, tx);
           
           // Get matrix ancestors (up to 5 levels) for payment routing
-          const matrixAncestors = await this.getMatrixAncestors(payerUserId, 5, tx);
-          console.log(`[MATRIX] Found ${matrixAncestors.length} matrix ancestors for ${payerUserId}:`, matrixAncestors);
+          const matrixAncestors = await this.getMatrixAncestors(newUserId, 5, tx);
+          console.log(`[MATRIX] Found ${matrixAncestors.length} matrix ancestors for ${newUserId}:`, matrixAncestors);
           
           // Update matrix payment receivers (slots 3-7) with ancestors or admin fallback
           const matrixUplines: Record<string, string> = {};
@@ -892,10 +949,10 @@ export class DbStorage implements IStorage {
             .set(matrixUplines)
             .where(eq(activations.id, activationId));
           
-          // Update sponsor's network statistics if user has a sponsor
-          if (activatedUser.sponsorId && activatedUser.binaryLeg) {
+          // Step 4: Update sponsor's network statistics NOW (only after activation)
+          // This is when the user becomes visible in the binary tree
+          if (activatedUser.sponsorId && assignedBinaryLeg) {
             const sponsorId = activatedUser.sponsorId;
-            const binaryLeg = activatedUser.binaryLeg;
             
             // Increment sponsor's referral count, global leg count, AND personal leg count
             const updateData: any = {
@@ -903,10 +960,10 @@ export class DbStorage implements IStorage {
               updatedAt: now
             };
             
-            if (binaryLeg === 'left') {
+            if (assignedBinaryLeg === 'left') {
               updateData.leftLegCount = sql`${users.leftLegCount} + 1`; // Global count
               updateData.personalLeftCount = sql`${users.personalLeftCount} + 1`; // Personal count
-            } else if (binaryLeg === 'right') {
+            } else if (assignedBinaryLeg === 'right') {
               updateData.rightLegCount = sql`${users.rightLegCount} + 1`; // Global count
               updateData.personalRightCount = sql`${users.personalRightCount} + 1`; // Personal count
             }
@@ -915,10 +972,10 @@ export class DbStorage implements IStorage {
               .set(updateData)
               .where(eq(users.userId, sponsorId));
             
-            console.log(`[ACTIVATION] Updated sponsor ${sponsorId} stats: +1 total, +1 to ${binaryLeg} leg (global & personal)`);
+            console.log(`[ACTIVATION] Updated sponsor ${sponsorId} stats: +1 total, +1 to ${assignedBinaryLeg} leg (global & personal)`);
           }
           
-          console.log(`[ACTIVATION] User ${payerUserId} successfully activated!`);
+          console.log(`[ACTIVATION] User ${newUserId} successfully activated and placed in binary tree!`);
         }
       };
 
@@ -929,7 +986,7 @@ export class DbStorage implements IStorage {
         await db.transaction(executeLogic);
       }
     } catch (error) {
-      console.error(`[ACTIVATION ERROR] Failed to complete activation for ${payerUserId}:`, error);
+      console.error(`[ACTIVATION ERROR] Failed to complete activation:`, error);
       throw error;
     }
   }

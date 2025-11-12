@@ -156,42 +156,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Hash password
       const hashedPassword = await hashPassword(password);
       
-      // Generate next userId starting from PB10000
-      const lastUser = await storage.getLastUser();
-      let nextUserNumber = 10000; // Start from PB10000
-      
-      if (lastUser && lastUser.userId) {
-        // Extract number from userId (e.g., "PB10005" -> 10005)
-        const match = lastUser.userId.match(/PB(\d+)/);
-        if (match) {
-          nextUserNumber = parseInt(match[1], 10) + 1;
-        }
-      }
-      
-      const userId = `PB${nextUserNumber}`;
-      
-      // Auto-assign binary leg if sponsor provided but leg not specified
-      let assignedBinaryLeg = binaryLeg;
-      if (sponsorId && !binaryLeg) {
-        assignedBinaryLeg = await storage.determineBestLeg(sponsorId);
-        console.log(`[SIGNUP] Auto-assigned ${userId} to ${assignedBinaryLeg} leg under sponsor ${sponsorId}`);
-      }
+      // DO NOT assign PB#### userId or binary placement during registration
+      // These will be assigned after full activation (all 8 payments confirmed)
+      // Store sponsor info and requested binary leg for later placement
       
       // Create user with email auto-verified (verification disabled)
+      // userId and binaryLeg will be assigned after activation
       const user = await storage.createUser({
         email,
         password: hashedPassword,
         role: 'user',
-        userId,
-        sponsorId: sponsorId || null,
-        binaryLeg: assignedBinaryLeg || null,
+        userId: null, // Will be assigned after activation
+        sponsorId: sponsorId || null, // Store sponsor for later placement
+        binaryLeg: binaryLeg || null, // Store requested leg (or null for auto-assign)
         isActivated: false,
         emailVerified: true, // Auto-verify email (no verification required)
         emailVerificationToken: null,
         emailVerificationExpiry: null,
       });
       
-      console.log(`[SIGNUP] Created user ${userId} (${email}) - email verification disabled`);
+      console.log(`[SIGNUP] Created user (${email}) - awaiting activation for PB#### ID assignment`);
       
       // Auto-login after signup
       req.session.userId = user.id;
@@ -905,15 +889,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create activation record and payment slots transactionally
       // Database unique constraint on payerWallet prevents duplicates at DB level
       // Using crypto.randomUUID() for collision-safe ID generation
-      const activationId = `ACT-${user.userId}-${crypto.randomUUID().substring(0, 8)}`;
+      // Use database ID (user.id) since user.userId is not assigned until activation completion
+      const activationId = `ACT-${user.id}-${crypto.randomUUID().substring(0, 8)}`;
       const result = await storage.createActivationWithPayments(
         {
           id: activationId,
-          payerWallet: user.userId, // Store as-is (not lowercased)
-          sponsorWallet: user.sponsorId || null, // Store as-is (not lowercased)
+          payerWallet: user.id, // Store database ID (UUID) until activation assigns PB#### ID
+          sponsorWallet: user.sponsorId || null, // Sponsor's PB#### ID (if they have one)
           status: 'pending',
         },
-        user.userId,
+        user.id, // Use database ID instead of userId (which is null pre-activation)
         user.sponsorId || null
       );
       
@@ -921,7 +906,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const { ReentryService } = await import('./reentry-service');
         const reentryService = new ReentryService(db as any);
-        await reentryService.linkReentryActivation(user.userId, activationId);
+        // Use database ID since userId not yet assigned
+        await reentryService.linkReentryActivation(user.id, activationId);
       } catch (error) {
         console.log('[ACTIVATION] No in-progress re-entry to link');
       }
