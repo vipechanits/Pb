@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef } from 'react';
 
 /**
  * Custom hook for playing notification sounds
@@ -7,28 +7,43 @@ import { useCallback, useRef, useEffect } from 'react';
 export function useNotificationSound() {
   const audioContextRef = useRef<AudioContext | null>(null);
 
-  useEffect(() => {
-    // Initialize AudioContext on mount
-    if (typeof window !== 'undefined' && 'AudioContext' in window) {
-      audioContextRef.current = new AudioContext();
+  /**
+   * Get or create AudioContext and ensure it's resumed
+   * Required for Chrome/Safari which suspend context until user interaction
+   */
+  const getAudioContext = useCallback(async (): Promise<AudioContext | null> => {
+    if (typeof window === 'undefined') return null;
+
+    // Create context if it doesn't exist (with webkit fallback)
+    if (!audioContextRef.current) {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return null;
+      audioContextRef.current = new AudioContextClass();
     }
 
-    // Cleanup on unmount
-    return () => {
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
+    const audioContext = audioContextRef.current;
+
+    // Resume context if suspended (required by Chrome/Safari)
+    if (audioContext.state === 'suspended') {
+      try {
+        await audioContext.resume();
+      } catch (error) {
+        console.warn('Failed to resume AudioContext:', error);
+        return null;
       }
-    };
+    }
+
+    return audioContext;
   }, []);
 
   /**
    * Play a pleasant notification sound (similar to Replit's notification)
    * Uses a combination of tones for a professional sound
    */
-  const playNotificationSound = useCallback(() => {
-    if (!audioContextRef.current) return;
+  const playNotificationSound = useCallback(async () => {
+    const audioContext = await getAudioContext();
+    if (!audioContext) return;
 
-    const audioContext = audioContextRef.current;
     const currentTime = audioContext.currentTime;
 
     // Create oscillators for a pleasant two-tone notification
@@ -62,15 +77,15 @@ export function useNotificationSound() {
     // Stop after duration
     oscillator1.stop(currentTime + 0.3);
     oscillator2.stop(currentTime + 0.3);
-  }, []);
+  }, [getAudioContext]);
 
   /**
    * Play a success sound (payment confirmed, activation complete)
    */
-  const playSuccessSound = useCallback(() => {
-    if (!audioContextRef.current) return;
+  const playSuccessSound = useCallback(async () => {
+    const audioContext = await getAudioContext();
+    if (!audioContext) return;
 
-    const audioContext = audioContextRef.current;
     const currentTime = audioContext.currentTime;
 
     // Create a pleasant ascending tone sequence
@@ -93,15 +108,15 @@ export function useNotificationSound() {
       oscillator.start(currentTime + index * 0.1);
       oscillator.stop(currentTime + index * 0.1 + 0.2);
     });
-  }, []);
+  }, [getAudioContext]);
 
   /**
    * Play a warning/alert sound
    */
-  const playAlertSound = useCallback(() => {
-    if (!audioContextRef.current) return;
+  const playAlertSound = useCallback(async () => {
+    const audioContext = await getAudioContext();
+    if (!audioContext) return;
 
-    const audioContext = audioContextRef.current;
     const currentTime = audioContext.currentTime;
 
     // Create a two-tone alert
@@ -122,7 +137,7 @@ export function useNotificationSound() {
       oscillator.start(currentTime + index * 0.15);
       oscillator.stop(currentTime + index * 0.15 + 0.12);
     });
-  }, []);
+  }, [getAudioContext]);
 
   return {
     playNotificationSound,
