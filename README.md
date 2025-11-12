@@ -342,13 +342,13 @@ Each activation requires 8 payments to different receivers:
 | 0 | Direct Sponsor | ₹1,000 | Your sponsor | Person who referred you |
 | 1 | Binary Match | ₹1,000 | Admin/Matcher | Admin or binary match partner |
 | 2 | Creator Fee | ₹625 | Admin (PB0) | Platform maintenance |
-| 3 | Matrix Level 1 | ₹625 | Level 1 upline | Immediate upline in matrix |
-| 4 | Matrix Level 2 | ₹625 | Level 2 upline | 2nd level upline |
-| 5 | Matrix Level 3 | ₹625 | Level 3 upline | 3rd level upline |
-| 6 | Matrix Level 4 | ₹625 | Level 4 upline | 4th level upline |
-| 7 | Matrix Level 5 | ₹625 | Level 5 upline | 5th level upline |
+| 3 | Matrix Level 1 | ₹500 | Level 1 upline | Immediate upline in matrix |
+| 4 | Matrix Level 2 | ₹500 | Level 2 upline | 2nd level upline |
+| 5 | Matrix Level 3 | ₹500 | Level 3 upline | 3rd level upline |
+| 6 | Matrix Level 4 | ₹500 | Level 4 upline | 4th level upline |
+| 7 | Matrix Level 5 | ₹500 | Level 5 upline | 5th level upline |
 
-**Total Activation Cost**: ₹5,750 (configurable by admin)
+**Total Activation Cost**: ₹5,125 (configurable by admin)
 
 ### Payment Process
 
