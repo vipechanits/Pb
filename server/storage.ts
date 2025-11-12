@@ -496,7 +496,7 @@ export class DbStorage implements IStorage {
       });
     });
 
-    nodeMap.forEach((node, userId: string) => {
+    nodeMap.forEach((node, userId) => {
       const row = rows.rows.find((r: any) => r.user_id === userId);
       if (row && row.matrix_parent_id) {
         const parent = nodeMap.get(row.matrix_parent_id);
