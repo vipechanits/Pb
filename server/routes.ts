@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema, users, reentries, forgotPasswordSchema, resetPasswordSchema } from "@shared/schema";
+import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema, users, reentries, activationPayments, forgotPasswordSchema, resetPasswordSchema } from "@shared/schema";
 import { hashPassword, verifyPassword, serializeUser } from "./auth";
 import { generateUserPaymentQR } from "./qrcode-generator";
 import { z } from "zod";
@@ -1232,6 +1232,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Public: Get system configuration (for landing page, dashboard, etc.)
+  app.get("/api/system-config", async (req, res) => {
+    try {
+      const config = await storage.getSystemConfig();
+      
+      // Convert decimal strings to numbers for client consumption
+      const normalizedConfig = {
+        sponsorPaymentAmount: parseFloat(config.sponsorPaymentAmount),
+        binaryMatchPaymentAmount: parseFloat(config.binaryMatchPaymentAmount),
+        creatorFeeAmount: parseFloat(config.creatorFeeAmount),
+        matrixLevel1Amount: parseFloat(config.matrixLevel1Amount),
+        matrixLevel2Amount: parseFloat(config.matrixLevel2Amount),
+        matrixLevel3Amount: parseFloat(config.matrixLevel3Amount),
+        matrixLevel4Amount: parseFloat(config.matrixLevel4Amount),
+        matrixLevel5Amount: parseFloat(config.matrixLevel5Amount),
+        binaryLeftQualification: config.binaryLeftQualification,
+        binaryRightQualification: config.binaryRightQualification,
+        binaryMatchingRatioLeft: config.binaryMatchingRatioLeft,
+        binaryMatchingRatioRight: config.binaryMatchingRatioRight,
+        adminUpiId: config.adminUpiId,
+        adminBankAccount: config.adminBankAccount,
+        adminIfscCode: config.adminIfscCode,
+        adminMobile: config.adminMobile,
+        adminQrCodeUrl: config.adminQrCodeUrl,
+      };
+      
+      res.json(normalizedConfig);
+    } catch (error) {
+      console.error("Error fetching system config:", error);
+      res.status(500).json({ error: "Failed to fetch system configuration" });
+    }
+  });
+
   // Admin: Get system configuration
   app.get("/api/admin/config", requireAuth, async (req, res) => {
     try {
@@ -1452,11 +1485,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const activeUsers = await db
         .select({ count: count() })
         .from(users)
-        .where(eq(users.isActive, true));
+        .where(eq(users.isActivated, true));
       const completedUsers = await db
         .select({ count: count() })
         .from(users)
-        .where(eq(users.hasCompletedActivation, true));
+        .where(eq(users.isActivated, true));
 
       // Payment statistics
       const confirmedPayments = await db
@@ -1495,7 +1528,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           totalPairs: sql<number>`SUM(LEAST(${users.personalLeftCount}, ${users.personalRightCount}))`,
         })
         .from(users)
-        .where(eq(users.hasCompletedActivation, true));
+        .where(eq(users.isActivated, true));
 
       // Matrix statistics
       const matrixPlacements = await db

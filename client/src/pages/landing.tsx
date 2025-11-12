@@ -2,11 +2,14 @@ import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Shield, Users, TrendingUp, Zap, GitBranch, Grid3x3, ArrowRight, Check } from 'lucide-react';
 import logoUrl from '@assets/generated_images/PAYBACK247_transparent_platform_logo_fa9e977f.png';
+import { useSystemConfig, formatINR } from '@/hooks/use-system-config';
 
 export default function Landing() {
   const [, setLocation] = useLocation();
+  const { config, isLoading } = useSystemConfig();
 
   const benefits = [
     {
@@ -31,24 +34,25 @@ export default function Landing() {
     }
   ];
 
+  // Income streams with dynamic amounts from config
   const incomeStreams = [
     {
       icon: Users,
       title: 'Direct Sponsor',
-      amount: '₹500',
+      amount: formatINR(config.sponsorPaymentAmount),
       description: 'Earn immediately when someone joins using your referral link'
     },
     {
       icon: GitBranch,
       title: 'Binary Match',
-      description: 'Get ₹500 when you\'re matched in the global binary pairing queue',
-      amount: '₹500'
+      description: `Get ${formatINR(config.binaryMatchPaymentAmount)} when you're matched in the global binary pairing queue`,
+      amount: formatINR(config.binaryMatchPaymentAmount)
     },
     {
       icon: Grid3x3,
       title: 'Matrix Levels (1-5)',
-      amount: '₹2,500',
-      description: 'Receive ₹500 from each of 5 matrix levels as your team grows'
+      amount: formatINR(config.matrixLevel1Amount * 5),
+      description: `Receive ${formatINR(config.matrixLevel1Amount)} from each of 5 matrix levels as your team grows`
     }
   ];
 
@@ -61,22 +65,23 @@ export default function Landing() {
     'Complete transparency'
   ];
 
+  // FAQs with dynamic amounts from config
   const faqs = [
     {
       question: 'How do I get started?',
-      answer: 'Sign up with your email, complete your profile with payment details (UPI ID, bank account), then activate your account by making 8 payments of ₹500 each to designated members.'
+      answer: `Sign up with your email, complete your profile with payment details (UPI ID, bank account), then activate your account by making 8 payments to designated members (${formatINR(config.paymentSlots.slot0Amount)} to sponsor, ${formatINR(config.paymentSlots.slot1Amount)} to binary match, ${formatINR(config.paymentSlots.slot2Amount)} creator fee, and ${formatINR(config.matrixLevel1Amount)} to each of 5 matrix levels).`
     },
     {
       question: 'What is the 2+5 non-working matrix?',
-      answer: 'You only need 2 direct referrals. After that, our system automatically places new members in your 5-level matrix (breadth-first), creating passive income without constant recruiting. Each matrix level can earn you ₹500 per member.'
+      answer: `You only need 2 direct referrals. After that, our system automatically places new members in your 5-level matrix (breadth-first), creating passive income without constant recruiting. Each matrix level can earn you ${formatINR(config.matrixLevel1Amount)} per member.`
     },
     {
       question: 'How do payments work?',
-      answer: 'All payments are direct peer-to-peer via UPI (Google Pay, Paytm, PhonePe). When you activate, you make 8 payments of ₹500 each: to your sponsor, binary match partner, creator fee (admin), and 5 matrix uplines. You confirm payments by submitting UTR/transaction ID and optional proof.'
+      answer: `All payments are direct peer-to-peer via UPI (Google Pay, Paytm, PhonePe). When you activate, you make 8 payments totaling ${formatINR(config.totalActivationCost)}: to your sponsor (${formatINR(config.sponsorPaymentAmount)}), binary match partner (${formatINR(config.binaryMatchPaymentAmount)}), creator fee (${formatINR(config.creatorFeeAmount)}), and 5 matrix uplines (${formatINR(config.matrixLevel1Amount)} each). You confirm payments by submitting UTR/transaction ID and optional proof.`
     },
     {
       question: 'What is binary income?',
-      answer: 'When you activate, you\'re placed in a global binary tree. When matched with another new activator, you both pay each other ₹500. This creates instant earnings and helps you recover your activation cost quickly.'
+      answer: `When you activate, you're placed in a global binary tree. When matched with another new activator, you both pay each other ${formatINR(config.binaryMatchPaymentAmount)}. This creates instant earnings and helps you recover your activation cost quickly.`
     },
     {
       question: 'Is my money safe?',
@@ -84,7 +89,7 @@ export default function Landing() {
     },
     {
       question: 'What is re-entry?',
-      answer: 'Once you complete your first activation cycle (all 8 payments confirmed), you can re-enter the system for ₹500 to create additional income streams. This allows unlimited earning potential as you can re-enter multiple times.'
+      answer: `Once you complete your first activation cycle (all 8 payments confirmed), you can re-enter the system for ${formatINR(config.totalActivationCost)} to create additional income streams. This allows unlimited earning potential as you can re-enter multiple times.`
     }
   ];
 
@@ -137,14 +142,29 @@ export default function Landing() {
                 <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
               </Button>
               <div className="text-sm text-muted-foreground">
-                <div className="flex items-center justify-center gap-2">
-                  <Check className="h-4 w-4 text-green-500" />
-                  <span>₹5,000 one-time activation</span>
-                </div>
-                <div className="flex items-center justify-center gap-2 mt-1">
-                  <Check className="h-4 w-4 text-green-500" />
-                  <span>8 payments of ₹500 each</span>
-                </div>
+                {isLoading ? (
+                  <>
+                    <div className="flex items-center justify-center gap-2">
+                      <Skeleton className="h-4 w-4 rounded-full" />
+                      <Skeleton className="h-4 w-40" />
+                    </div>
+                    <div className="flex items-center justify-center gap-2 mt-1">
+                      <Skeleton className="h-4 w-4 rounded-full" />
+                      <Skeleton className="h-4 w-36" />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-center gap-2">
+                      <Check className="h-4 w-4 text-green-500" />
+                      <span>{formatINR(config.totalActivationCost)} one-time activation</span>
+                    </div>
+                    <div className="flex items-center justify-center gap-2 mt-1">
+                      <Check className="h-4 w-4 text-green-500" />
+                      <span>8 payments of {formatINR(config.paymentSlots.slot3Amount)} each</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
