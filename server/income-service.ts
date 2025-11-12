@@ -1,7 +1,6 @@
 import { eq, and, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { incomeTransactions, userIncomeSummaries, type ActivationPayment, type InsertIncomeTransaction } from "@shared/schema";
-import { PAYMENT_AMOUNTS } from "@shared/constants";
 
 export class IncomeService {
   private db: NodePgDatabase<any>;
