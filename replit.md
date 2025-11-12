@@ -29,6 +29,20 @@ PAYBACK247 is a peer-to-peer income platform that facilitates network marketing 
   - Backend services (storage.ts, income-service.ts) already using config from database
   - Added cache invalidation to admin config mutation for both `/api/admin/config` and `/api/system-config`
   - All payment figures now controlled by admin via System Configuration page
+- **Delayed User ID Assignment (Complete - November 12, 2025):** Critical architectural change to prevent premature binary tree placement:
+  - Users no longer receive PB#### ID during registration (userId=null until activation)
+  - Binary leg assignment deferred until activation completion (binaryLeg=null until activation)
+  - Pre-activation state uses database UUID for payment tracking
+  - Schema extended: payerUserId varchar(20) → varchar(50) to accommodate UUIDs
+  - Activation completion (all 8 payments confirmed) triggers:
+    - PB#### ID generation (sequential: PB10000+)
+    - Binary leg assignment (auto-balanced or sponsor-specified)
+    - Payment record updates (UUID → PB#### ID conversion)
+    - Sponsor leg count increments (only after activation)
+    - Global matrix placement
+  - Binary tree queries filter for isActivated=true and userId IS NOT NULL
+  - Frontend components handle null userId gracefully (shows "Pending Activation" states)
+  - Maintains referral tracking through sponsorId during pre-activation period
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
