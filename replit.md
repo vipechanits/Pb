@@ -5,6 +5,13 @@ PAYBACK247 is a peer-to-peer income platform that facilitates network marketing 
 
 **Custom Domain:** https://payback247.com
 
+## Recent Changes (November 2025)
+- **Application Modernization:** Comprehensive cleanup removing unused files, consolidating components, and improving code organization
+- **Landing Page:** Redesigned with improved spacing, cleaner layout, better CTA sections, and professional appearance
+- **Navigation Consolidation:** Unified income reporting system at `/user/income/:type` with SPA-friendly redirects from legacy routes
+- **Dashboard Refactoring:** Modularized user dashboard into reusable components (DashboardHeader, DashboardSponsorInfo, DashboardIncomeCards) reducing main file from 731 to 585 lines
+- **Sidebar Update:** Streamlined navigation with dedicated Binary Tree and Global Matrix links, removed redundant income links
+
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
@@ -60,12 +67,15 @@ Preferred communication style: Simple, everyday language.
 ### Key Application Pages
 
 #### User Pages
+- **Dashboard (`/user`)**: Main user dashboard with income overview, activation status, and network statistics. Income cards link to detailed income pages.
 - **Activation Page (`/user/activation`)**: Guides users through the 8-payment process, displaying admin payment details and payment submission options.
 - **Confirmation Page (`/user/confirmation`)**: Displays payments pending user confirmation.
+- **Binary Tree Page (`/user/binary-tree`)**: Full visualization of user's binary tree structure with detailed statistics.
+- **Global Matrix Page (`/user/global-matrix`)**: Full visualization of user's position in the global 2x5 matrix system with interactive tree and matrix statistics.
 - **Profile Page (`/user/profile`)**: User profile management.
-- **Global Matrix Page (`/user/global-matrix`)**: Visualizes user's position in the global 2x5 matrix system with interactive tree visualization and matrix statistics.
-- **Income Dashboard (`/user/dashboard`)**: Provides an overview of total income, direct sponsor, binary match, and matrix income, with visual tree previews and clickable summaries leading to detailed income pages.
-- **Income Details Page (`/user/income/:type`)**: Displays full tree visualization (BinaryTreeView or MatrixTreeView), matrix level breakdown, and income statistics for specific income types.
+- **Re-entry Page (`/user/reentry`)**: Matrix re-entry management and history.
+- **Income Details Page (`/user/income/:type`)**: Unified income reporting for all income types (total, sponsor, binary, matrix, reentry) with full tree visualization and detailed breakdowns.
+  - Legacy routes (`/user/sponsoring`, `/user/binary`, `/user/matrix`) redirect to this unified system for backward compatibility.
 
 #### Admin Pages
 - **Admin Dashboard (`/admin`)**: Overview of system metrics and quick access to admin functions.

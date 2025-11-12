@@ -14,6 +14,10 @@ import { apiRequest, queryClient } from '@/lib/queryClient';
 import { format } from 'date-fns';
 import MiniBinaryTree from '@/components/MiniBinaryTree';
 import MiniMatrixTree from '@/components/MiniMatrixTree';
+import { DashboardHeader } from '@/components/dashboard/DashboardHeader';
+import { DashboardSponsorInfo } from '@/components/dashboard/DashboardSponsorInfo';
+import { DashboardIncomeCards } from '@/components/dashboard/DashboardIncomeCards';
+import { DashboardReferralLinks } from '@/components/dashboard/DashboardReferralLinks';
 
 interface IncomeSummary {
   totalEarnings: string;
@@ -159,49 +163,6 @@ export default function UserDashboard() {
       (parseFloat(incomeSummary.matrixLevel5Income || '0') || 0)
     : 0;
 
-  const incomeCards = [
-    {
-      title: 'Total Income',
-      value: `₹${totalEarnings.toLocaleString('en-IN')}`,
-      description: 'All time earnings',
-      icon: DollarSign,
-      link: '/user/income/total',
-      color: 'text-green-600',
-      bgColor: 'bg-green-50 dark:bg-green-950/20',
-      borderColor: 'border-green-200 dark:border-green-800',
-    },
-    {
-      title: 'Direct Sponsor Income',
-      value: `₹${sponsorIncome.toLocaleString('en-IN')}`,
-      description: 'From direct referrals',
-      icon: UserPlus,
-      link: '/user/income/sponsor',
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50 dark:bg-blue-950/20',
-      borderColor: 'border-blue-200 dark:border-blue-800',
-    },
-    {
-      title: 'Binary Match Income',
-      value: `₹${binaryIncome.toLocaleString('en-IN')}`,
-      description: 'From binary tree matching',
-      icon: GitMerge,
-      link: '/user/income/binary',
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-50 dark:bg-purple-950/20',
-      borderColor: 'border-purple-200 dark:border-purple-800',
-    },
-    {
-      title: 'Matrix Income',
-      value: `₹${matrixIncome.toLocaleString('en-IN')}`,
-      description: 'From matrix levels 1-5',
-      icon: Layers,
-      link: '/user/income/matrix',
-      color: 'text-amber-600',
-      bgColor: 'bg-amber-50 dark:bg-amber-950/20',
-      borderColor: 'border-amber-200 dark:border-amber-800',
-    },
-  ];
-
   const stats = [
     {
       title: 'Total Referrals',
@@ -232,104 +193,21 @@ export default function UserDashboard() {
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8 space-y-8" data-testid="user-dashboard">
       {/* Header Section */}
-      <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="space-y-1">
-            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
-              Welcome, {user?.name || user?.email}
-            </h1>
-            <p className="text-sm sm:text-base text-muted-foreground">
-              User ID: <span className="font-mono font-semibold text-foreground">{user?.userId || 'Not assigned'}</span>
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {isActivated ? (
-              <Badge variant="default" className="gap-1.5 px-3 py-1.5" data-testid="badge-activated">
-                <CheckCircle className="w-4 h-4" />
-                <span className="font-medium">Activated</span>
-              </Badge>
-            ) : (
-              <Badge variant="secondary" className="gap-1.5 px-3 py-1.5" data-testid="badge-not-activated">
-                <AlertTriangle className="w-4 h-4" />
-                <span className="font-medium">Not Activated</span>
-              </Badge>
-            )}
-            
-            {isActivated && reentryStatus?.isEligibleForReentry && (
-              <Badge variant="default" className="gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700" data-testid="badge-reentry-eligible">
-                <Trophy className="w-4 h-4" />
-                <span className="font-medium">Re-entry Eligible</span>
-              </Badge>
-            )}
-            
-            {isActivated && reentryStatus?.currentReentry?.status === 'in_progress' && (
-              <Badge variant="outline" className="gap-1.5 px-3 py-1.5 border-blue-500 text-blue-500" data-testid="badge-reentry-in-progress">
-                <RefreshCw className="w-4 h-4" />
-                <span className="font-medium">Re-entry In Progress</span>
-              </Badge>
-            )}
-          </div>
-        </div>
-      </div>
+      <DashboardHeader
+        userName={user?.name}
+        userEmail={user?.email}
+        userId={user?.userId}
+        isActivated={isActivated}
+        reentryStatus={reentryStatus}
+      />
 
       {/* Sponsorship & Placement Information */}
-      {user?.sponsorId && (
-        <Card className="border-accent/20 bg-accent/5" data-testid="card-sponsor-info">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <UserCheck className="w-5 h-5 text-accent" />
-              <div>
-                <CardTitle className="text-lg">Sponsorship & Placement</CardTitle>
-                <CardDescription>Your position in the binary tree</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Sponsor</p>
-                {sponsorLoading ? (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span className="text-sm text-muted-foreground">Loading...</span>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    <p className="text-lg font-semibold" data-testid="text-sponsor-name">
-                      {sponsorData?.name || 'Name not set'}
-                    </p>
-                    <p className="text-sm font-mono text-muted-foreground" data-testid="text-sponsor-id">
-                      {user.sponsorId}
-                    </p>
-                  </div>
-                )}
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Binary Leg</p>
-                <div className="flex items-center gap-2">
-                  {user.binaryLeg === 'left' ? (
-                    <>
-                      <ArrowLeft className="w-5 h-5 text-blue-500" />
-                      <Badge variant="outline" className="border-blue-500 text-blue-500" data-testid="badge-binary-leg">
-                        Left Leg
-                      </Badge>
-                    </>
-                  ) : user.binaryLeg === 'right' ? (
-                    <>
-                      <ArrowRight className="w-5 h-5 text-green-500" />
-                      <Badge variant="outline" className="border-green-500 text-green-500" data-testid="badge-binary-leg">
-                        Right Leg
-                      </Badge>
-                    </>
-                  ) : (
-                    <Badge variant="secondary" data-testid="badge-binary-leg">Not Assigned</Badge>
-                  )}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <DashboardSponsorInfo
+        sponsorId={user?.sponsorId}
+        sponsorData={sponsorData}
+        sponsorLoading={sponsorLoading}
+        binaryLeg={user?.binaryLeg}
+      />
 
       {/* Activation Status Alert */}
       {!isActivated && (
@@ -349,61 +227,14 @@ export default function UserDashboard() {
 
       {/* Referral Links - Only shown after activation */}
       {isActivated && (
-        <Card className="bg-primary/5 border-primary/20">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-lg">Your Referral Links</CardTitle>
-                <CardDescription>Share these links to build your binary team and start earning</CardDescription>
-              </div>
-              <Badge variant="default" className="gap-1">
-                <CheckCircle className="w-3 h-3" />
-                Active
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid gap-3 md:grid-cols-2">
-              {/* Left Leg Link */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <ArrowLeft className="w-4 h-4 text-blue-500" />
-                  Left Leg
-                </div>
-                <div className="flex gap-2">
-                  <Input value={leftLegLink} readOnly className="text-xs" />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => copyToClipboard(leftLegLink, 'left')}
-                    data-testid="button-copy-left-dashboard"
-                  >
-                    {copiedLeft ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Right Leg Link */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <ArrowRight className="w-4 h-4 text-green-500" />
-                  Right Leg
-                </div>
-                <div className="flex gap-2">
-                  <Input value={rightLegLink} readOnly className="text-xs" />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => copyToClipboard(rightLegLink, 'right')}
-                    data-testid="button-copy-right-dashboard"
-                  >
-                    {copiedRight ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <DashboardReferralLinks
+          leftLegLink={leftLegLink}
+          rightLegLink={rightLegLink}
+          copiedLeft={copiedLeft}
+          copiedRight={copiedRight}
+          onCopyLeft={() => copyToClipboard(leftLegLink, 'left')}
+          onCopyRight={() => copyToClipboard(rightLegLink, 'right')}
+        />
       )}
 
       {/* Re-entry System - Only shown after activation */}
@@ -545,35 +376,12 @@ export default function UserDashboard() {
 
       {/* Income Summary - Only shown after activation */}
       {isActivated && (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <h2 className="text-2xl font-bold">Income Summary</h2>
-            <p className="text-muted-foreground">Click on any card to view detailed breakdown and statistics</p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {incomeCards.map((card) => (
-              <Link key={card.title} href={card.link}>
-                <Card 
-                  className={`hover-elevate active-elevate-2 cursor-pointer transition-all ${card.bgColor} ${card.borderColor}`}
-                  data-testid={`card-income-${card.title.toLowerCase().replace(/\s+/g, '-')}`}
-                >
-                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">
-                      {card.title}
-                    </CardTitle>
-                    <card.icon className={`h-5 w-5 ${card.color}`} />
-                  </CardHeader>
-                  <CardContent>
-                    <div className={`text-2xl font-bold ${card.color}`}>{card.value}</div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {card.description}
-                    </p>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </div>
+        <DashboardIncomeCards
+          totalEarnings={totalEarnings}
+          sponsorIncome={sponsorIncome}
+          binaryIncome={binaryIncome}
+          matrixIncome={matrixIncome}
+        />
       )}
 
       {/* Team Tree Previews - Only shown after activation */}
