@@ -49,7 +49,9 @@ export default function AdminConfig() {
       return await apiRequest('PATCH', '/api/admin/config', data);
     },
     onSuccess: () => {
+      // Invalidate both admin and public config caches so frontend refetches
       queryClient.invalidateQueries({ queryKey: ['/api/admin/config'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/system-config'] });
       toast({
         title: 'Configuration Updated',
         description: 'System configuration has been saved successfully',
