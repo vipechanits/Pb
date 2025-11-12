@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { PaymentSubmissionDialog } from '@/components/payment-submission-dialog';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import type { ActivationPayment } from '@shared/schema';
+import { useSystemConfig, formatINR, getPaymentAmount } from '@/hooks/use-system-config';
 
 interface AdminPaymentDetails {
   userId: string;
@@ -25,6 +26,7 @@ interface AdminPaymentDetails {
 export default function UserActivationPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { config, isLoading: configLoading } = useSystemConfig();
   const [selectedPayment, setSelectedPayment] = useState<ActivationPayment | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -121,7 +123,7 @@ export default function UserActivationPage() {
   const confirmedCount = payments?.filter(p => p.status === 'confirmed').length || 0;
   const submittedCount = payments?.filter(p => p.status === 'submitted').length || 0;
   const rejectedCount = payments?.filter(p => p.status === 'rejected').length || 0;
-  const totalAmount = 5000; // ₹625 × 8 = ₹5000
+  const totalAmount = config.totalActivationCost;
 
   const handlePayClick = (payment: ActivationPayment) => {
     setSelectedPayment(payment);
@@ -155,17 +157,17 @@ export default function UserActivationPage() {
           <CardHeader>
             <CardTitle>Ready to Activate?</CardTitle>
             <CardDescription>
-              Complete the ₹5,000 activation fee through 8 peer-to-peer payments
+              Complete the {formatINR(config.totalActivationCost)} activation fee through 8 peer-to-peer payments
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <p className="text-sm font-medium">Activation Breakdown:</p>
               <ul className="text-sm space-y-1 text-muted-foreground ml-4">
-                <li>• Direct Sponsor: ₹1,000</li>
-                <li>• Binary Match: ₹1,000</li>
-                <li>• Admin Fee: ₹500</li>
-                <li>• Matrix Levels 1-5: ₹500 each (₹2,500 total)</li>
+                <li>• Direct Sponsor: {formatINR(config.sponsorPaymentAmount)}</li>
+                <li>• Binary Match: {formatINR(config.binaryMatchPaymentAmount)}</li>
+                <li>• Admin Fee: {formatINR(config.creatorFeeAmount)}</li>
+                <li>• Matrix Levels 1-5: {formatINR(config.matrixLevel1Amount)} each ({formatINR(config.matrixLevel1Amount * 5)} total)</li>
               </ul>
             </div>
             
@@ -206,7 +208,7 @@ export default function UserActivationPage() {
         <AlertDescription>
           <strong>Activation Fee: ₹{totalAmount.toLocaleString()}</strong>
           <br />
-          Pay ₹625 to each of the 8 slots below. All payments are direct peer-to-peer transfers using Google Pay, Paytm, or PhonePe.
+          Complete 8 payments to designated members below. Payment amounts vary by slot type. All payments are direct peer-to-peer transfers using Google Pay, Paytm, or PhonePe.
         </AlertDescription>
       </Alert>
 
@@ -514,7 +516,7 @@ export default function UserActivationPage() {
           </div>
           <div>
             <h4 className="font-semibold mb-1">2. Make Payment</h4>
-            <p className="text-muted-foreground">Transfer ₹625 to the receiver's UPI ID or bank account via Google Pay, Paytm, or PhonePe</p>
+            <p className="text-muted-foreground">Transfer the slot payment amount to the receiver's UPI ID or bank account via Google Pay, Paytm, or PhonePe</p>
           </div>
           <div>
             <h4 className="font-semibold mb-1">3. Submit Proof</h4>

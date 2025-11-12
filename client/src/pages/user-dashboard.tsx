@@ -20,6 +20,7 @@ import { DashboardIncomeCards } from '@/components/dashboard/DashboardIncomeCard
 import { DashboardReferralLinks } from '@/components/dashboard/DashboardReferralLinks';
 import { DashboardReentry } from '@/components/dashboard/DashboardReentry';
 import { DashboardTreePreviews } from '@/components/dashboard/DashboardTreePreviews';
+import { useSystemConfig } from '@/hooks/use-system-config';
 
 interface IncomeSummary {
   totalEarnings: string;
@@ -62,6 +63,7 @@ interface ReentryHistory {
 export default function UserDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { config, isLoading: configLoading } = useSystemConfig();
   const [copiedLeft, setCopiedLeft] = useState(false);
   const [copiedRight, setCopiedRight] = useState(false);
   const [showReentryDialog, setShowReentryDialog] = useState(false);
@@ -320,12 +322,12 @@ export default function UserDashboard() {
                 You are about to initiate a re-entry into the PAYBACK247 system. This will:
               </p>
               <ul className="list-disc list-inside space-y-1 text-sm">
-                <li>Create a new activation cycle requiring 8 payments of ₹500 each</li>
+                <li>Create a new activation cycle requiring 8 payments to designated members</li>
                 <li>Place you back in the global matrix system</li>
                 <li>Allow you to earn from all income streams again</li>
               </ul>
               <p className="font-semibold">
-                Total investment: ₹5,000 (8 × ₹500)
+                Total investment: ₹{config.totalActivationCost.toLocaleString('en-IN')}
               </p>
               <p className="text-xs text-muted-foreground">
                 You will need to complete all 8 peer-to-peer payments to activate this cycle.
