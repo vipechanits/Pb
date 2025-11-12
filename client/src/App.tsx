@@ -1,4 +1,4 @@
-import { Switch, Route } from 'wouter';
+import { Switch, Route, useLocation } from 'wouter';
 import { queryClient, fetchCsrfToken } from './lib/queryClient';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
@@ -17,9 +17,6 @@ import ForgotPasswordPage from '@/pages/auth/forgot-password';
 import ResetPasswordPage from '@/pages/auth/reset-password';
 import VerifyEmailPage from '@/pages/auth/verify-email';
 import UserDashboard from '@/pages/user-dashboard';
-import DirectSponsoring from '@/pages/direct-sponsoring';
-import BinaryMatching from '@/pages/binary-matching';
-import MatrixIncome from '@/pages/matrix-income';
 import Profile from '@/pages/profile';
 import UserActivationPage from '@/pages/user-activation';
 import UserConfirmationPage from '@/pages/user-confirmation';
@@ -95,34 +92,29 @@ function Router() {
         )}
       </Route>
       
+      {/* Legacy income page redirects - SPA-friendly */}
       <Route path="/user/sponsoring">
-        {() => (
-          <ProtectedRoute>
-            <DashboardLayout>
-              <DirectSponsoring />
-            </DashboardLayout>
-          </ProtectedRoute>
-        )}
+        {() => {
+          const [, setLocation] = useLocation();
+          setLocation('/user/income/sponsor');
+          return null;
+        }}
       </Route>
       
       <Route path="/user/binary">
-        {() => (
-          <ProtectedRoute>
-            <DashboardLayout>
-              <BinaryMatching />
-            </DashboardLayout>
-          </ProtectedRoute>
-        )}
+        {() => {
+          const [, setLocation] = useLocation();
+          setLocation('/user/income/binary');
+          return null;
+        }}
       </Route>
       
       <Route path="/user/matrix">
-        {() => (
-          <ProtectedRoute>
-            <DashboardLayout>
-              <MatrixIncome />
-            </DashboardLayout>
-          </ProtectedRoute>
-        )}
+        {() => {
+          const [, setLocation] = useLocation();
+          setLocation('/user/income/matrix');
+          return null;
+        }}
       </Route>
       
       <Route path="/user/profile">

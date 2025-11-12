@@ -230,39 +230,42 @@ export default function UserDashboard() {
   ];
 
   return (
-    <div className="container mx-auto p-6 space-y-6" data-testid="user-dashboard">
-      <div className="space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h1 className="text-3xl font-bold">Welcome, {user?.name || user?.email}</h1>
-            <p className="text-muted-foreground">
-              User ID: <span className="font-mono font-semibold">{user?.userId || 'Not assigned'}</span>
+    <div className="container mx-auto p-4 sm:p-6 lg:p-8 space-y-8" data-testid="user-dashboard">
+      {/* Header Section */}
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-1">
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
+              Welcome, {user?.name || user?.email}
+            </h1>
+            <p className="text-sm sm:text-base text-muted-foreground">
+              User ID: <span className="font-mono font-semibold text-foreground">{user?.userId || 'Not assigned'}</span>
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             {isActivated ? (
-              <Badge variant="default" className="gap-1" data-testid="badge-activated">
+              <Badge variant="default" className="gap-1.5 px-3 py-1.5" data-testid="badge-activated">
                 <CheckCircle className="w-4 h-4" />
-                Activated
+                <span className="font-medium">Activated</span>
               </Badge>
             ) : (
-              <Badge variant="secondary" className="gap-1" data-testid="badge-not-activated">
+              <Badge variant="secondary" className="gap-1.5 px-3 py-1.5" data-testid="badge-not-activated">
                 <AlertTriangle className="w-4 h-4" />
-                Not Activated
+                <span className="font-medium">Not Activated</span>
               </Badge>
             )}
             
             {isActivated && reentryStatus?.isEligibleForReentry && (
-              <Badge variant="default" className="gap-1 bg-amber-600 hover:bg-amber-700" data-testid="badge-reentry-eligible">
+              <Badge variant="default" className="gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700" data-testid="badge-reentry-eligible">
                 <Trophy className="w-4 h-4" />
-                Re-entry Eligible
+                <span className="font-medium">Re-entry Eligible</span>
               </Badge>
             )}
             
             {isActivated && reentryStatus?.currentReentry?.status === 'in_progress' && (
-              <Badge variant="outline" className="gap-1 border-blue-500 text-blue-500" data-testid="badge-reentry-in-progress">
+              <Badge variant="outline" className="gap-1.5 px-3 py-1.5 border-blue-500 text-blue-500" data-testid="badge-reentry-in-progress">
                 <RefreshCw className="w-4 h-4" />
-                Re-entry In Progress
+                <span className="font-medium">Re-entry In Progress</span>
               </Badge>
             )}
           </div>

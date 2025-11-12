@@ -308,12 +308,20 @@ export default function Landing() {
               <h3 className="font-semibold mb-4">Quick Links</h3>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li>
-                  <button onClick={() => setLocation('/auth/signup')} className="hover:text-foreground transition-colors">
+                  <button 
+                    onClick={() => setLocation('/auth/signup')} 
+                    className="hover:text-foreground transition-colors"
+                    data-testid="button-footer-signup"
+                  >
                     Join Now
                   </button>
                 </li>
                 <li>
-                  <button onClick={() => setLocation('/auth/login')} className="hover:text-foreground transition-colors">
+                  <button 
+                    onClick={() => setLocation('/auth/login')} 
+                    className="hover:text-foreground transition-colors"
+                    data-testid="button-footer-login"
+                  >
                     Login
                   </button>
                 </li>

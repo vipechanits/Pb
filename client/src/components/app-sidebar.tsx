@@ -66,18 +66,13 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       icon: CheckSquare,
     },
     {
-      title: 'Direct Sponsoring',
-      url: '/user/sponsoring',
-      icon: Users,
-    },
-    {
-      title: 'Binary Matching',
-      url: '/user/binary',
+      title: 'Binary Tree',
+      url: '/user/binary-tree',
       icon: GitBranch,
     },
     {
-      title: 'Matrix Income',
-      url: '/user/matrix',
+      title: 'Global Matrix',
+      url: '/user/global-matrix',
       icon: Grid3x3,
     },
     {
