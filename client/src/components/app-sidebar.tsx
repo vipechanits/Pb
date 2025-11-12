@@ -27,6 +27,7 @@ import {
   Wallet,
   CheckSquare,
   BarChart3,
+  Database,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth-context';
@@ -126,6 +127,11 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       title: 'User Management',
       url: '/admin/users',
       icon: UserCog,
+    },
+    {
+      title: 'Database Backup',
+      url: '/admin/database',
+      icon: Database,
     },
   ];
 
