@@ -25,6 +25,7 @@ import UserActivationPage from '@/pages/user-activation';
 import UserConfirmationPage from '@/pages/user-confirmation';
 import UserBinaryTreePage from '@/pages/user-binary-tree';
 import UserGlobalMatrixPage from '@/pages/user-global-matrix';
+import UserIncomeDetailsPage from '@/pages/user-income-details';
 import ReentryPage from '@/pages/reentry';
 import AdditionalReentryPage from '@/pages/additional-reentry';
 import AdminDashboard from '@/pages/admin-dashboard';
@@ -169,6 +170,16 @@ function Router() {
           <ProtectedRoute>
             <DashboardLayout>
               <UserGlobalMatrixPage />
+            </DashboardLayout>
+          </ProtectedRoute>
+        )}
+      </Route>
+      
+      <Route path="/user/income/:type">
+        {() => (
+          <ProtectedRoute>
+            <DashboardLayout>
+              <UserIncomeDetailsPage />
             </DashboardLayout>
           </ProtectedRoute>
         )}

@@ -7,11 +7,13 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/hooks/use-toast';
-import { Users, GitBranch, Grid3x3, TrendingUp, Copy, Check, ArrowLeft, ArrowRight, CheckCircle, AlertTriangle, Rocket, UserCheck, Loader2, RefreshCw, Trophy, Calendar } from 'lucide-react';
+import { Users, GitBranch, Grid3x3, TrendingUp, Copy, Check, ArrowLeft, ArrowRight, CheckCircle, AlertTriangle, Rocket, UserCheck, Loader2, RefreshCw, Trophy, Calendar, DollarSign, UserPlus, GitMerge, Layers } from 'lucide-react';
 import { Link } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { format } from 'date-fns';
+import MiniBinaryTree from '@/components/MiniBinaryTree';
+import MiniMatrixTree from '@/components/MiniMatrixTree';
 
 interface IncomeSummary {
   totalEarnings: string;
@@ -84,6 +86,18 @@ export default function UserDashboard() {
     enabled: isActivated,
   });
 
+  // Fetch binary tree data (3 levels for preview)
+  const { data: binaryTree } = useQuery<any>({
+    queryKey: ['/api/users', user?.userId, 'binary-tree'],
+    enabled: !!user?.userId,
+  });
+
+  // Fetch matrix tree data (3 levels for preview)
+  const { data: matrixTree } = useQuery<any>({
+    queryKey: ['/api/users', user?.userId, 'global-matrix'],
+    enabled: !!user?.userId && isActivated,
+  });
+
   // Initiate re-entry mutation
   const initiateReentryMutation = useMutation({
     mutationFn: async () => {
@@ -134,7 +148,59 @@ export default function UserDashboard() {
     }
   };
 
-  const totalEarnings = incomeSummary?.totalEarnings ? parseFloat(incomeSummary.totalEarnings) : 0;
+  const totalEarnings = incomeSummary?.totalEarnings ? parseFloat(incomeSummary.totalEarnings) || 0 : 0;
+  const sponsorIncome = incomeSummary?.directSponsorIncome ? parseFloat(incomeSummary.directSponsorIncome) || 0 : 0;
+  const binaryIncome = incomeSummary?.binaryMatchIncome ? parseFloat(incomeSummary.binaryMatchIncome) || 0 : 0;
+  const matrixIncome = incomeSummary 
+    ? (parseFloat(incomeSummary.matrixLevel1Income || '0') || 0) +
+      (parseFloat(incomeSummary.matrixLevel2Income || '0') || 0) +
+      (parseFloat(incomeSummary.matrixLevel3Income || '0') || 0) +
+      (parseFloat(incomeSummary.matrixLevel4Income || '0') || 0) +
+      (parseFloat(incomeSummary.matrixLevel5Income || '0') || 0)
+    : 0;
+
+  const incomeCards = [
+    {
+      title: 'Total Income',
+      value: `₹${totalEarnings.toLocaleString('en-IN')}`,
+      description: 'All time earnings',
+      icon: DollarSign,
+      link: '/user/income/total',
+      color: 'text-green-600',
+      bgColor: 'bg-green-50 dark:bg-green-950/20',
+      borderColor: 'border-green-200 dark:border-green-800',
+    },
+    {
+      title: 'Direct Sponsor Income',
+      value: `₹${sponsorIncome.toLocaleString('en-IN')}`,
+      description: 'From direct referrals',
+      icon: UserPlus,
+      link: '/user/income/sponsor',
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-50 dark:bg-blue-950/20',
+      borderColor: 'border-blue-200 dark:border-blue-800',
+    },
+    {
+      title: 'Binary Match Income',
+      value: `₹${binaryIncome.toLocaleString('en-IN')}`,
+      description: 'From binary tree matching',
+      icon: GitMerge,
+      link: '/user/income/binary',
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-50 dark:bg-purple-950/20',
+      borderColor: 'border-purple-200 dark:border-purple-800',
+    },
+    {
+      title: 'Matrix Income',
+      value: `₹${matrixIncome.toLocaleString('en-IN')}`,
+      description: 'From matrix levels 1-5',
+      icon: Layers,
+      link: '/user/income/matrix',
+      color: 'text-amber-600',
+      bgColor: 'bg-amber-50 dark:bg-amber-950/20',
+      borderColor: 'border-amber-200 dark:border-amber-800',
+    },
+  ];
 
   const stats = [
     {
@@ -474,10 +540,106 @@ export default function UserDashboard() {
         </Card>
       )}
 
+      {/* Income Summary - Only shown after activation */}
+      {isActivated && (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold">Income Summary</h2>
+            <p className="text-muted-foreground">Click on any card to view detailed breakdown and statistics</p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {incomeCards.map((card) => (
+              <Link key={card.title} href={card.link}>
+                <Card 
+                  className={`hover-elevate active-elevate-2 cursor-pointer transition-all ${card.bgColor} ${card.borderColor}`}
+                  data-testid={`card-income-${card.title.toLowerCase().replace(/\s+/g, '-')}`}
+                >
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      {card.title}
+                    </CardTitle>
+                    <card.icon className={`h-5 w-5 ${card.color}`} />
+                  </CardHeader>
+                  <CardContent>
+                    <div className={`text-2xl font-bold ${card.color}`}>{card.value}</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {card.description}
+                    </p>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Team Tree Previews - Only shown after activation */}
+      {isActivated && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {/* Binary Tree Preview */}
+          <Card data-testid="card-binary-tree-preview">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <GitBranch className="w-5 h-5 text-green-600" />
+                    Binary Tree Preview
+                  </CardTitle>
+                  <CardDescription>Your binary sponsorship tree (3 levels)</CardDescription>
+                </div>
+                <Link href="/user/binary-tree">
+                  <Button variant="outline" size="sm" data-testid="button-view-full-binary-tree">
+                    View Full Tree →
+                  </Button>
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {binaryTree ? (
+                <MiniBinaryTree root={binaryTree} maxDepth={3} />
+              ) : (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Matrix Tree Preview */}
+          <Card data-testid="card-matrix-tree-preview">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Grid3x3 className="w-5 h-5 text-purple-600" />
+                    Matrix Tree Preview
+                  </CardTitle>
+                  <CardDescription>Your global matrix placement (3 levels)</CardDescription>
+                </div>
+                <Link href="/user/global-matrix">
+                  <Button variant="outline" size="sm" data-testid="button-view-full-matrix-tree">
+                    View Full Tree →
+                  </Button>
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {matrixTree ? (
+                <MiniMatrixTree root={matrixTree} maxDepth={3} />
+              ) : (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
           <Card key={stat.title}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
                 {stat.title}
               </CardTitle>
