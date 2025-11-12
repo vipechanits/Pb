@@ -32,9 +32,11 @@ export default function UserActivationPage() {
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // Fetch user's activation payments
+  // Use userId (PB####) if available, otherwise use database UUID for pre-activation users
+  const payerIdentifier = user?.userId ?? user?.id;
   const { data: payments, isLoading, refetch } = useQuery<ActivationPayment[]>({
-    queryKey: ['/api/activation-payments/payer', user?.userId],
-    enabled: !!user?.userId,
+    queryKey: ['/api/activation-payments/payer', payerIdentifier],
+    enabled: !!user && !!payerIdentifier,
   });
 
   // Fetch admin payment details
@@ -67,7 +69,8 @@ export default function UserActivationPage() {
         title: 'Activation Requested',
         description: 'Your payment slots have been created. Start making payments!',
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/activation-payments'] });
+      // Invalidate with the same identifier pattern used in the query
+      queryClient.invalidateQueries({ queryKey: ['/api/activation-payments/payer', payerIdentifier] });
       refetch();
     },
     onError: (error: any) => {

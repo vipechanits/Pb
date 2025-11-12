@@ -295,9 +295,10 @@ Ensure these secrets are set in your deployment:
 ### First-Time Production Setup
 
 1. **Visit your production URL**: `https://payback247.com`
-2. **Create root admin account** (PB1):
-   - Register with your admin email
-   - This becomes the root admin with database access
+2. **Root admin account** (PB0):
+   - Auto-created on first server start
+   - Email: admin@payback247.com
+   - **Change default password immediately after first login**
 3. **Configure system settings** at `/admin/config`:
    - Payment amounts
    - Binary matching rules
@@ -367,7 +368,7 @@ Each activation requires 8 payments to different receivers:
 
 ## Database Management
 
-**Root Admin Only (PB1)**
+**Root Admin Access (PB0 and PB1)**
 
 ### Database Backup
 
@@ -397,7 +398,7 @@ Each activation requires 8 payments to different receivers:
 - Automatic pre-restore backups
 - Backup history tracking
 - Validation before restore
-- PB1-only access restriction
+- PB0 and PB1 admin access restriction
 - Pre-restore backup download to prevent data loss
 
 ### Backup History
@@ -506,7 +507,7 @@ PATCH  /api/admin/config                 # Update system configuration
 GET    /api/admin/analytics              # Get platform analytics
 ```
 
-### Root Admin Endpoints (PB1 Only)
+### Root Admin Endpoints (PB0 and PB1 Only)
 
 ```
 GET    /api/admin/database/backup        # Create database backup (download)
@@ -553,12 +554,12 @@ DELETE /api/admin/database/backups/:id   # Delete backup metadata
 1. Visit production URL (`https://payback247.com`)
 2. Log in as admin
 3. Use admin panel to view all data
-4. Use `/admin/database` for backup/restore (PB1 only)
+4. Use `/admin/database` for backup/restore (PB0 and PB1 only)
 
 ### User ID System
 
-- **Admin**: PB0 (reserved for main admin)
-- **Root Admin**: PB1 (database management access)
+- **Root Admin**: PB0 (primary admin, database management access)
+- **Secondary Admin**: PB1 (backup admin, database management access)
 - **Regular Users**: PB10000, PB10001, PB10002...
 
 **Delayed ID Assignment:**

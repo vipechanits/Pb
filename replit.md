@@ -29,20 +29,36 @@ PAYBACK247 is a peer-to-peer income platform that facilitates network marketing 
   - Backend services (storage.ts, income-service.ts) already using config from database
   - Added cache invalidation to admin config mutation for both `/api/admin/config` and `/api/system-config`
   - All payment figures now controlled by admin via System Configuration page
-- **Delayed User ID Assignment (Complete - November 12, 2025):** Critical architectural change to prevent premature binary tree placement:
-  - Users no longer receive PB#### ID during registration (userId=null until activation)
-  - Binary leg assignment deferred until activation completion (binaryLeg=null until activation)
-  - Pre-activation state uses database UUID for payment tracking
-  - Schema extended: payerUserId varchar(20) → varchar(50) to accommodate UUIDs
-  - Activation completion (all 8 payments confirmed) triggers:
-    - PB#### ID generation (sequential: PB10000+)
-    - Binary leg assignment (auto-balanced or sponsor-specified)
-    - Payment record updates (UUID → PB#### ID conversion)
-    - Sponsor leg count increments (only after activation)
-    - Global matrix placement
-  - Binary tree queries filter for isActivated=true and userId IS NOT NULL
-  - Frontend components handle null userId gracefully (shows "Pending Activation" states)
-  - Maintains referral tracking through sponsorId during pre-activation period
+- **Immediate PB#### Assignment with Deferred Tree Placement (Complete - November 12, 2025):** Architectural refinement for better UX and data integrity:
+  - Users receive PB#### ID IMMEDIATELY during registration via PostgreSQL sequence (pb_user_id_seq)
+  - Binary leg preference stored at signup (left/right/null) and honored during activation
+  - Schema changes: userId non-nullable varchar(20), binaryLeg nullable (assigned at activation)
+  - Signup flow:
+    - Validates sponsor exists before creating user
+    - Generates sequential PB#### ID atomically (transaction-safe: nextval + insert)
+    - Stores binary leg preference from referral link (left/right/null)
+    - Sets isActivated=false
+    - User immediately sees PB#### ID in sidebar and dashboard
+  - Activation flow (when all 8 payments confirmed):
+    - Honors stored binary leg preference OR auto-assigns to balanced leg
+    - Updates sponsor's left/right leg counts (only after activation)
+    - Places user in global matrix
+    - Sets isActivated=true
+  - Binary tree visibility:
+    - Queries filter by isActivated=true AND userId IS NOT NULL
+    - Pre-activation users have PB#### ID but don't appear in tree
+    - Post-activation users appear in tree with their PB#### ID
+  - Sequence management:
+    - pb_user_id_seq initialized at server startup
+    - Next ID calculated from MAX(userId) + 1 (excludes PB0, PB1)
+    - Falls back to PB10000 if no users exist
+    - Logged at startup for verification
+- **PB0 Designated as Root Admin (Complete - November 12, 2025):** Updated admin hierarchy to designate PB0 as the primary root administrator:
+  - PB0 (admin@payback247.com) - Root Administrator with full system access
+  - PB1 (payback2472000@gmail.com) - Secondary Administrator with full system access
+  - Both PB0 and PB1 have access to database backup/restore functionality at `/admin/database`
+  - Updated initialization code, documentation (README.md), and database records
+  - Admin hierarchy: PB0 (root) > PB1 (secondary) > Regular Admins
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -84,7 +100,8 @@ Preferred communication style: Simple, everyday language.
 - **Authentication**: Email/password authentication with bcrypt hashing.
 - **Session Management**: Express sessions with PostgreSQL store.
 - **Role Detection**: Admin/user roles stored in database.
-- **User IDs**: Auto-generated sequential IDs (PB10000+), admin is PB0.
+- **User IDs**: Auto-generated sequential IDs (PB10000+)
+- **Admin Hierarchy**: PB0 (Root Administrator) and PB1 (Secondary Administrator) with database management access
 - **Binary Leg Auto-Assignment**: Automatically assigns to the leg with fewer members for balanced tree growth if not specified.
 
 ### Payment Processing

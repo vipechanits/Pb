@@ -13,6 +13,9 @@ import "./types";
 // Configure WebSocket for Neon
 neonConfig.webSocketConstructor = ws;
 
+// Import database configuration
+import { dbConfig } from "./db";
+
 // Require SESSION_SECRET at boot - fail fast if missing
 if (!process.env.SESSION_SECRET) {
   console.error('FATAL: SESSION_SECRET environment variable is required');
@@ -20,10 +23,13 @@ if (!process.env.SESSION_SECRET) {
   process.exit(1);
 }
 
-// Verify database connection environment variables
-if (!process.env.DATABASE_URL) {
-  console.error('FATAL: DATABASE_URL environment variable is required');
-  console.error('Database connection is not configured');
+// Verify database connection - dbConfig.getDatabaseUrl() will throw if not configured
+try {
+  const dbUrl = dbConfig.getDatabaseUrl();
+  console.log('✓ Database connection configured');
+} catch (error) {
+  console.error('FATAL: Database connection not configured');
+  console.error(error instanceof Error ? error.message : 'Unknown error');
   process.exit(1);
 }
 
@@ -38,7 +44,7 @@ app.set('trust proxy', 1);
 
 // Setup PostgreSQL session store
 const PgSession = connectPgSimple(session);
-const sessionPool = new Pool({ connectionString: process.env.DATABASE_URL });
+const sessionPool = new Pool({ connectionString: dbConfig.getDatabaseUrl() });
 
 declare module 'http' {
   interface IncomingMessage {
@@ -138,9 +144,13 @@ app.use((req, res, next) => {
     // Initialize system configuration (ensure singleton row exists)
     await storage.initializeSystemConfig();
     
-    // Initialize admin users (PB0 and root admin)
+    // Initialize admin users (PB0 root admin and PB1 secondary admin)
     const { hashPassword } = await import('./auth');
     await storage.initializeAdminUsers(hashPassword);
+    
+    // Initialize PB#### ID sequence for transaction-safe signup
+    await storage.initializeUserIdSequence();
+    
     console.log('✓ Database initialized successfully');
 
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

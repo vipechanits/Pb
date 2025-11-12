@@ -73,8 +73,8 @@ export const users = pgTable("users", {
   emailVerificationToken: varchar("email_verification_token", { length: 255 }),
   emailVerificationExpiry: timestamp("email_verification_expiry"),
   
-  // User ID (PB1, PB2, etc.) - generated after activation
-  userId: varchar("user_id", { length: 20 }).unique(),
+  // User ID (PB1, PB2, etc.) - generated at registration
+  userId: varchar("user_id", { length: 20 }).notNull().unique(),
   
   // Profile information
   name: text("name"),

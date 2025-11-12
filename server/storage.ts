@@ -39,10 +39,11 @@ export interface IStorage {
   markEmailAsVerified(userId: string): Promise<void>;
   getUserByUserId(userId: string): Promise<User | undefined>;
   createUser(user: Partial<InsertUser>): Promise<User>;
+  createUserWithGeneratedId(user: Partial<InsertUser>): Promise<User>;
   updateUserProfile(id: string, profile: UpdateProfile): Promise<User | undefined>;
   getLastUser(): Promise<User | undefined>;
   determineBestLeg(sponsorUserId: string): Promise<'left' | 'right'>;
-  checkProfileComplete(userId: string): Promise<boolean>;
+  checkProfileComplete(identifier: string): Promise<boolean>;
   getUsersBySponsorAndLeg(sponsorUserId: string, leg: 'left' | 'right'): Promise<User[]>;
   
   // Global matrix methods
@@ -127,50 +128,89 @@ export class DbStorage implements IStorage {
     }
   }
   
-  // Initialize admin users (PB0 and root admin)
+  // Initialize admin users (PB0 root admin and PB1 secondary admin)
   async initializeAdminUsers(hashPassword: (password: string) => Promise<string>): Promise<void> {
     try {
-      // Check if PB0 admin exists
+      // Check if PB0 root admin exists
       const pb0Exists = await this.getUserByUserId('PB0');
       if (!pb0Exists) {
-        console.log('[INIT] Creating PB0 admin user...');
+        console.log('[INIT] Creating PB0 root admin user...');
         const hashedPassword = await hashPassword('Admin@1234'); // Default password
         await db.insert(users).values({
           email: 'admin@payback247.com',
           password: hashedPassword,
           role: 'admin',
           userId: 'PB0',
-          name: 'System Admin',
+          name: 'Root Administrator',
           mobile: '9999999999',
           isActivated: true,
           isProfileComplete: true,
           matrixLevel: 0, // Root of global matrix
           matrixPath: 'PB0', // Root path
         });
-        console.log('[INIT] PB0 admin user created successfully');
+        console.log('[INIT] PB0 root admin user created successfully');
+        console.log('[INIT] IMPORTANT: Please change the root admin password immediately after first login!');
       }
       
-      // Check if root admin exists
-      const rootAdminExists = await this.getUserByEmail('payback2472000@gmail.com');
-      if (!rootAdminExists) {
-        console.log('[INIT] Creating root admin user...');
+      // Check if PB1 secondary admin exists
+      const pb1AdminExists = await this.getUserByEmail('payback2472000@gmail.com');
+      if (!pb1AdminExists) {
+        console.log('[INIT] Creating PB1 secondary admin user...');
         const hashedPassword = await hashPassword('Admin@2000');
         await db.insert(users).values({
           email: 'payback2472000@gmail.com',
           password: hashedPassword,
           role: 'admin',
-          userId: 'PB1', // Root admin userId
-          name: 'Root Administrator',
+          userId: 'PB1',
+          name: 'Secondary Administrator',
           mobile: '9876543210',
           isActivated: true,
           isProfileComplete: true,
         });
-        console.log('[INIT] Root admin user created successfully');
-        console.log('[INIT] IMPORTANT: Please change the root admin password immediately after first login!');
+        console.log('[INIT] PB1 secondary admin user created successfully');
       }
     } catch (error) {
       console.error('[INIT] Error initializing admin users:', error);
       // Don't throw - allow server to start even if admin creation fails
+    }
+  }
+
+  /**
+   * Initialize PostgreSQL sequence for auto-generating PB#### user IDs.
+   * This ensures transaction-safe, sequential ID generation during signup.
+   * Sequence starts at the current MAX PB#### number + 1.
+   */
+  async initializeUserIdSequence(): Promise<void> {
+    try {
+      console.log('[INIT] Initializing pb_user_id_seq sequence...');
+      
+      // Create sequence if it doesn't exist (separate statement)
+      await db.execute(sql`CREATE SEQUENCE IF NOT EXISTS pb_user_id_seq START WITH 10000`);
+      
+      // Set sequence to MAX existing PB#### number (using is_called=true)
+      // This makes next nextval() return MAX+1, avoiding duplicates
+      // Exclude system admins PB0, PB1 from MAX calculation
+      // Fallback to 9999 so next ID is PB10000 (not PB15!)
+      await db.execute(sql`
+        SELECT setval('pb_user_id_seq', 
+          COALESCE((
+            SELECT MAX(CAST(SUBSTRING(user_id FROM 3) AS INTEGER))
+            FROM users
+            WHERE user_id LIKE 'PB%' 
+              AND user_id != 'PB0' 
+              AND user_id != 'PB1'
+          ), 9999),
+          true
+        )
+      `);
+      
+      // Verify current sequence value
+      const currentVal = await db.execute(sql`SELECT last_value FROM pb_user_id_seq`);
+      const lastValue = (currentVal.rows[0] as { last_value: number }).last_value;
+      console.log(`[INIT] pb_user_id_seq initialized - next ID will be: PB${lastValue + 1}`);
+    } catch (error) {
+      console.error('[INIT] Error initializing user ID sequence:', error);
+      // Don't throw - allow server to start even if sequence initialization fails
     }
   }
 
@@ -238,6 +278,32 @@ export class DbStorage implements IStorage {
   async createUser(insertUser: Partial<InsertUser>): Promise<User> {
     const result = await db.insert(users).values(insertUser as any).returning();
     return result[0];
+  }
+
+  async createUserWithGeneratedId(insertUser: Partial<InsertUser>): Promise<User> {
+    // Reject if caller provides userId - must be generated by sequence
+    if (insertUser.userId) {
+      throw new Error('userId must not be provided - it will be auto-generated');
+    }
+
+    return await db.transaction(async (tx) => {
+      // Get next PB#### ID from sequence (transaction-safe)
+      const nextIdResult = await tx.execute(sql`SELECT nextval('pb_user_id_seq') as next_id`);
+      const nextIdRow = nextIdResult.rows[0] as { next_id: number };
+      const userId = `PB${nextIdRow.next_id}`;
+
+      console.log(`[SIGNUP] Generated new userId: ${userId}`);
+
+      // Insert user with generated ID
+      const result = await tx.insert(users)
+        .values({
+          ...insertUser,
+          userId,
+        } as any)
+        .returning();
+
+      return result[0];
+    });
   }
 
   async updateUserProfile(id: string, profile: UpdateProfile): Promise<User | undefined> {
@@ -331,8 +397,17 @@ export class DbStorage implements IStorage {
     return sponsor.leftLegCount <= sponsor.rightLegCount ? 'left' : 'right';
   }
 
-  async checkProfileComplete(userId: string): Promise<boolean> {
-    const user = await this.getUserByUserId(userId);
+  async checkProfileComplete(identifier: string): Promise<boolean> {
+    // Handle both PB#### marketing IDs and database UUIDs
+    let user;
+    if (identifier.startsWith('PB')) {
+      // Marketing ID (e.g., "PB10001") - use getUserByUserId
+      user = await this.getUserByUserId(identifier);
+    } else {
+      // Database UUID (e.g., "7e53730c-5b72-4ecc-85ac-a4c4e33d...") - use getUserById
+      user = await this.getUserById(identifier);
+    }
+    
     if (!user) return false;
     
     // Use shared helper to ensure consistent evaluation
@@ -453,8 +528,27 @@ export class DbStorage implements IStorage {
 
   async getMatrixSubtree(userId: string, maxDepth: number): Promise<MatrixNode | null> {
     const rootUser = await this.getUserByUserId(userId);
+    console.log(`[MATRIX] getMatrixSubtree for ${userId}:`, {
+      exists: !!rootUser,
+      matrixLevel: rootUser?.matrixLevel,
+      matrixPath: rootUser?.matrixPath,
+      matrixPosition: rootUser?.matrixPosition
+    });
     if (!rootUser || rootUser.matrixLevel === null || rootUser.matrixLevel === undefined || !rootUser.matrixPath) {
+      console.log(`[MATRIX] User ${userId} not placed in matrix - returning null`);
       return null;
+    }
+
+    interface MatrixTreeRow {
+      user_id: string;
+      name: string | null;
+      email: string;
+      is_activated: boolean;
+      matrix_level: number;
+      matrix_position: number;
+      matrix_path: string;
+      matrix_parent_id: string | null;
+      depth: number;
     }
 
     const maxLevel = rootUser.matrixLevel + maxDepth;
@@ -481,8 +575,9 @@ export class DbStorage implements IStorage {
       return null;
     }
 
+    const typedRows = rows.rows as unknown as MatrixTreeRow[];
     const nodeMap = new Map<string, any>();
-    rows.rows.forEach((row: any) => {
+    typedRows.forEach((row) => {
       nodeMap.set(row.user_id, {
         userId: row.user_id,
         name: row.name,
@@ -497,7 +592,7 @@ export class DbStorage implements IStorage {
     });
 
     nodeMap.forEach((node, userId) => {
-      const row = rows.rows.find((r: any) => r.user_id === userId);
+      const row = typedRows.find((r) => r.user_id === userId);
       if (row && row.matrix_parent_id) {
         const parent = nodeMap.get(row.matrix_parent_id);
         if (parent) {
@@ -609,12 +704,19 @@ export class DbStorage implements IStorage {
           if (sponsorUserId) {
             receiverUserId = sponsorUserId;
             receiverType = 'user';
+          } else {
+            // No sponsor - default to admin
+            receiverUserId = 'PB0';
+            receiverType = 'admin';
           }
         } else if (paymentType === 'binary_match') {
+          receiverUserId = 'PB0';
           receiverType = 'admin';
         } else if (paymentType === 'creator_fee') {
+          receiverUserId = 'PB0';
           receiverType = 'admin';
         } else if (paymentType.startsWith('matrix_level_')) {
+          receiverUserId = 'PB0';
           receiverType = 'admin';
         }
         
@@ -768,6 +870,7 @@ export class DbStorage implements IStorage {
 
   async confirmActivationPayment(id: string, notes?: string): Promise<ActivationPayment | undefined> {
     return await db.transaction(async (tx) => {
+      console.log(`[STORAGE] Confirming payment ${id}`);
       const result = await tx.update(activationPayments)
         .set({ 
           status: 'confirmed',
@@ -779,20 +882,29 @@ export class DbStorage implements IStorage {
         .returning();
       
       const payment = result[0];
-      if (!payment) return undefined;
+      if (!payment) {
+        console.log(`[STORAGE] Payment ${id} not found`);
+        return undefined;
+      }
+      
+      console.log(`[STORAGE] Payment updated successfully, creating income for receiver: ${payment.receiverUserId}`);
 
       const { IncomeService } = await import('./income-service');
       const incomeService = new IncomeService(tx as any);
       
       try {
+        console.log(`[STORAGE] Creating income for payment type: ${payment.paymentType}`);
         await incomeService.createIncomesForPayment(payment);
+        console.log(`[STORAGE] Income created successfully`);
       } catch (error) {
-        console.error('Error creating income for payment:', error);
+        console.error('[STORAGE] Error creating income for payment:', error);
         throw error;
       }
 
+      console.log(`[STORAGE] Checking if all 8 payments are confirmed for activation ${payment.activationId}`);
       await this.checkAndCompleteActivation(payment.activationId, payment.payerUserId, tx);
       
+      console.log(`[STORAGE] Payment confirmation complete`);
       return payment;
     });
   }
@@ -813,47 +925,33 @@ export class DbStorage implements IStorage {
         if (allConfirmed) {
           console.log(`[ACTIVATION] All 8 payments confirmed for user. Activating...`);
           
-          // Load the user by database ID (since userId is null pre-activation)
-          // payerUserIdOrDbId is now the database UUID
+          // Load the user by PB#### ID (payerUserId now contains PB#### IDs after migration)
           const activatedUserRows = await tx.select()
             .from(users)
-            .where(eq(users.id, payerUserIdOrDbId))
+            .where(eq(users.userId, payerUserIdOrDbId))
             .limit(1);
           
           if (activatedUserRows.length === 0) {
-            throw new Error(`User with ID ${payerUserIdOrDbId} not found`);
+            throw new Error(`User with PB#### ID ${payerUserIdOrDbId} not found`);
           }
           
           const activatedUser = activatedUserRows[0];
-          const now = new Date();
           
-          // CRITICAL: Generate PB#### ID and assign binary placement NOW (before activation)
-          // This is the ONLY time userId is assigned
-          
-          // Step 1: Generate next PB#### userId
-          const lastUserWithId = await tx.select()
-            .from(users)
-            .where(sql`${users.userId} IS NOT NULL`)
-            .orderBy(desc(users.userId))
-            .limit(1);
-          
-          let nextUserNumber = 10000; // Start from PB10000
-          if (lastUserWithId.length > 0 && lastUserWithId[0].userId) {
-            const match = lastUserWithId[0].userId.match(/PB(\d+)/);
-            if (match) {
-              nextUserNumber = parseInt(match[1], 10) + 1;
-            }
+          // Verify user has PB#### ID (assigned at signup)
+          if (!activatedUser.userId) {
+            throw new Error(`User ${payerUserIdOrDbId} missing PB#### ID - signup may have failed`);
           }
           
-          const newUserId = `PB${nextUserNumber}`;
-          console.log(`[ACTIVATION] Assigning userId ${newUserId} to user`);
+          const now = new Date();
           
-          // Step 2: Determine binary leg placement
-          let assignedBinaryLeg = activatedUser.binaryLeg; // May be null or pre-specified
+          console.log(`[ACTIVATION] Activating user ${activatedUser.userId}...`);
+          
+          // Determine binary leg placement (tree placement happens at activation)
+          let assignedBinaryLeg = activatedUser.binaryLeg; // May be pre-specified from signup
           if (activatedUser.sponsorId && !assignedBinaryLeg) {
             // Auto-assign to the leg with fewer members
             assignedBinaryLeg = await this.determineBestLeg(activatedUser.sponsorId);
-            console.log(`[ACTIVATION] Auto-assigned ${newUserId} to ${assignedBinaryLeg} leg under sponsor ${activatedUser.sponsorId}`);
+            console.log(`[ACTIVATION] Auto-assigned ${activatedUser.userId} to ${assignedBinaryLeg} leg under sponsor ${activatedUser.sponsorId}`);
           }
           
           console.log(`[ACTIVATION] Binary placement: Sponsor=${activatedUser.sponsorId}, Leg=${assignedBinaryLeg}`);
@@ -876,66 +974,50 @@ export class DbStorage implements IStorage {
             return;
           }
           
-          // Step 3: Activate user and assign PB#### ID + binary placement
-          // This is THE critical step that assigns the permanent user ID
+          // Activate user with binary leg assignment
+          // userId already assigned at signup, only updating binary placement and activation status
           await tx.update(users)
             .set({ 
-              userId: newUserId, // ASSIGN PB#### ID
+              // userId NOT updated (already assigned at signup via sequence)
               binaryLeg: assignedBinaryLeg, // ASSIGN binary leg placement
               isActivated: true,
               activatedAt: now,
               requiresPostActivationProfileUpdate: true,
               updatedAt: now
             })
-            .where(eq(users.id, payerUserIdOrDbId));
+            .where(eq(users.userId, payerUserIdOrDbId));
           
-          console.log(`[ACTIVATION] User ${newUserId} activated with binary leg: ${assignedBinaryLeg}`);
-          
-          // CRITICAL: Update activation_payments to use new PB#### ID instead of database UUID
-          // This ensures all queries by userId work correctly after activation
-          await tx.update(activationPayments)
-            .set({ 
-              payerUserId: newUserId, // Replace UUID with PB#### ID
-              updatedAt: now
-            })
-            .where(eq(activationPayments.activationId, activationId));
-          
-          // Also update activations table to reflect new PB#### ID
-          await tx.update(activations)
-            .set({ 
-              payerWallet: newUserId, // Replace UUID with PB#### ID
-            })
-            .where(eq(activations.id, activationId));
-          
-          console.log(`[ACTIVATION] Updated activation records to use PB#### ID ${newUserId}`);
+          console.log(`[ACTIVATION] User ${activatedUser.userId} activated with binary leg: ${assignedBinaryLeg}`);
           
           // Assign user to next available global matrix slot
           // This happens atomically within the activation transaction
           // If matrix is full or placement fails, entire activation rolls back
-          console.log(`[MATRIX] Placing ${newUserId} in global matrix...`);
-          await this.findAndAssignMatrixSlot(newUserId, tx);
+          console.log(`[MATRIX] Placing ${activatedUser.userId} in global matrix...`);
+          await this.findAndAssignMatrixSlot(activatedUser.userId, tx);
           
           // Get matrix ancestors (up to 5 levels) for payment routing
-          const matrixAncestors = await this.getMatrixAncestors(newUserId, 5, tx);
-          console.log(`[MATRIX] Found ${matrixAncestors.length} matrix ancestors for ${newUserId}:`, matrixAncestors);
+          const matrixAncestors = await this.getMatrixAncestors(activatedUser.userId, 5, tx);
+          console.log(`[MATRIX] Found ${matrixAncestors.length} matrix ancestors for ${activatedUser.userId}:`, matrixAncestors);
           
           // Update matrix payment receivers (slots 3-7) with ancestors or admin fallback
+          // ONLY update if payment is NOT already confirmed (prevent income duplication)
           const matrixUplines: Record<string, string> = {};
           for (let level = 1; level <= 5; level++) {
             const ancestorIndex = level - 1;
             const receiverUserId = ancestorIndex < matrixAncestors.length ? matrixAncestors[ancestorIndex] : 'PB0';
             const slotIndex = level + 2; // Slot 3 = level 1, Slot 4 = level 2, etc.
             
-            // Update payment receiver for this matrix level
+            // Update payment receiver ONLY if not already confirmed
             await tx.update(activationPayments)
               .set({
                 receiverUserId,
-                receiverType: 'user',
+                receiverType: receiverUserId === 'PB0' ? 'admin' : 'user',
                 updatedAt: now
               })
               .where(and(
                 eq(activationPayments.activationId, activationId),
-                eq(activationPayments.slotIndex, slotIndex)
+                eq(activationPayments.slotIndex, slotIndex),
+                eq(activationPayments.status, 'pending') // Only update pending payments
               ));
             
             // Track for activation record update
@@ -975,7 +1057,7 @@ export class DbStorage implements IStorage {
             console.log(`[ACTIVATION] Updated sponsor ${sponsorId} stats: +1 total, +1 to ${assignedBinaryLeg} leg (global & personal)`);
           }
           
-          console.log(`[ACTIVATION] User ${newUserId} successfully activated and placed in binary tree!`);
+          console.log(`[ACTIVATION] User ${activatedUser.userId} successfully activated and placed in binary tree!`);
         }
       };
 

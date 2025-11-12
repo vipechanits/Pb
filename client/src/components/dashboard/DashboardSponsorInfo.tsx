@@ -73,7 +73,9 @@ export function DashboardSponsorInfo({
                   </Badge>
                 </>
               ) : (
-                <Badge variant="secondary" data-testid="badge-binary-leg">Not Assigned</Badge>
+                <Badge variant="secondary" data-testid="badge-binary-leg">
+                  <span className="text-muted-foreground">Pending Placement</span>
+                </Badge>
               )}
             </div>
           </div>

@@ -156,26 +156,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Hash password
       const hashedPassword = await hashPassword(password);
       
-      // DO NOT assign PB#### userId or binary placement during registration
-      // These will be assigned after full activation (all 8 payments confirmed)
-      // Store sponsor info and requested binary leg for later placement
+      // Validate sponsor exists if provided
+      if (sponsorId) {
+        const sponsor = await storage.getUserByUserId(sponsorId.toUpperCase());
+        if (!sponsor) {
+          return res.status(400).json({ error: "Invalid sponsor ID" });
+        }
+      }
       
-      // Create user with email auto-verified (verification disabled)
-      // userId and binaryLeg will be assigned after activation
-      const user = await storage.createUser({
+      // Create user with auto-generated PB#### ID (transaction-safe)
+      // Binary leg placement deferred to activation (stored as requested preference)
+      const user = await storage.createUserWithGeneratedId({
         email,
         password: hashedPassword,
         role: 'user',
-        userId: null, // Will be assigned after activation
-        sponsorId: sponsorId || null, // Store sponsor for later placement
-        binaryLeg: binaryLeg || null, // Store requested leg (or null for auto-assign)
+        // userId auto-generated from sequence (PB10000+)
+        sponsorId: sponsorId ? sponsorId.toUpperCase() : null, // Normalize to uppercase
+        binaryLeg: binaryLeg || null, // Store requested leg preference (honored at activation)
         isActivated: false,
         emailVerified: true, // Auto-verify email (no verification required)
         emailVerificationToken: null,
         emailVerificationExpiry: null,
       });
       
-      console.log(`[SIGNUP] Created user (${email}) - awaiting activation for PB#### ID assignment`);
+      console.log(`[SIGNUP] Created user ${user.userId} (${email}) - binary placement deferred to activation`);
       
       // Auto-login after signup
       req.session.userId = user.id;
@@ -615,7 +619,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "User not found" });
       }
       
+      console.log(`[GLOBAL-MATRIX] Fetching matrix for ${userId}`);
+      console.log(`[GLOBAL-MATRIX] Root user data:`, JSON.stringify({
+        userId: rootUser.userId,
+        matrixLevel: rootUser.matrixLevel,
+        matrixPath: rootUser.matrixPath,
+        matrixPosition: rootUser.matrixPosition
+      }, null, 2));
+      
       const tree = await storage.getMatrixSubtree(userId, 5);
+      
+      console.log(`[GLOBAL-MATRIX] Tree result:`, JSON.stringify(tree, null, 2));
+      
       res.json(tree);
     } catch (error) {
       console.error("Error fetching global matrix:", error);
@@ -874,31 +889,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "User not found" });
       }
       
-      if (!user.userId) {
-        return res.status(400).json({ error: "User ID not assigned" });
-      }
-      
       // Check profile completion before allowing activation
-      const isProfileComplete = await storage.checkProfileComplete(user.userId);
+      // Use database ID (user.id) for pre-activation users without PB#### ID
+      const isProfileComplete = await storage.checkProfileComplete(user.userId || user.id);
       if (!isProfileComplete) {
         return res.status(400).json({ 
           error: "Profile incomplete. Please update your profile with name, mobile, and UPI/bank details before requesting activation." 
         });
       }
       
+      // Check if user already has a pending activation
+      const existingActivations = await storage.getActivationsByPayer(user.id);
+      const pendingActivation = existingActivations.find(a => a.status === 'pending');
+      
+      if (pendingActivation) {
+        console.log(`[ACTIVATION] User ${user.userId || user.id} already has pending activation ${pendingActivation.id}, returning existing data`);
+        // Return existing activation and its payments with 200 status
+        const payments = await storage.getActivationPaymentsByActivationId(pendingActivation.id);
+        return res.status(200).json({
+          activation: pendingActivation,
+          payments,
+          isExisting: true
+        });
+      }
+      
       // Create activation record and payment slots transactionally
       // Database unique constraint on payerWallet prevents duplicates at DB level
       // Using crypto.randomUUID() for collision-safe ID generation
-      // Use database ID (user.id) since user.userId is not assigned until activation completion
+      // Note: Users now get PB#### IDs immediately at signup (userId is assigned)
       const activationId = `ACT-${user.id}-${crypto.randomUUID().substring(0, 8)}`;
       const result = await storage.createActivationWithPayments(
         {
           id: activationId,
-          payerWallet: user.id, // Store database ID (UUID) until activation assigns PB#### ID
+          payerWallet: user.id, // Store database ID (UUID) for activation lookup
           sponsorWallet: user.sponsorId || null, // Sponsor's PB#### ID (if they have one)
           status: 'pending',
         },
-        user.id, // Use database ID instead of userId (which is null pre-activation)
+        user.userId!, // Use PB#### ID for payment records (assigned at signup)
         user.sponsorId || null
       );
       
@@ -906,8 +933,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const { ReentryService } = await import('./reentry-service');
         const reentryService = new ReentryService(db as any);
-        // Use database ID since userId not yet assigned
-        await reentryService.linkReentryActivation(user.id, activationId);
+        // Use PB#### ID for re-entry linking
+        await reentryService.linkReentryActivation(user.userId!, activationId);
       } catch (error) {
         console.log('[ACTIVATION] No in-progress re-entry to link');
       }
@@ -916,8 +943,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error requesting activation:", error);
       
-      // Handle unique constraint violation
+      // Handle unique constraint violation (race condition fallback)
       if (error.code === '23505' || error.message?.includes('duplicate key') || error.message?.includes('unique constraint')) {
+        // Query and return existing activation
+        const user = await storage.getUserById(req.session.userId as string);
+        if (user) {
+          const existingActivations = await storage.getActivationsByPayer(user.id);
+          const pendingActivation = existingActivations.find(a => a.status === 'pending');
+          if (pendingActivation) {
+            const payments = await storage.getActivationPaymentsByActivationId(pendingActivation.id);
+            return res.status(200).json({
+              activation: pendingActivation,
+              payments,
+              isExisting: true
+            });
+          }
+        }
         return res.status(400).json({ 
           error: "Activation already requested for this user" 
         });
@@ -1141,10 +1182,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid receiver type" });
       }
       
+      console.log(`[CONFIRM-ROUTE] Attempting to confirm payment ${req.params.id}`);
       const payment = await storage.confirmActivationPayment(req.params.id, validationResult.data.notes);
       if (!payment) {
+        console.log('[CONFIRM-ROUTE] Payment not found after confirmation attempt');
         return res.status(404).json({ error: "Payment not found" });
       }
+      
+      console.log(`[CONFIRM-ROUTE] Payment confirmed successfully:`, payment.id);
 
       // Check if this completes all 8 payments and triggers re-entry completion
       try {
@@ -1167,9 +1212,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json(payment);
-    } catch (error) {
-      console.error("Error confirming payment:", error);
-      res.status(500).json({ error: "Failed to confirm payment" });
+    } catch (error: any) {
+      console.error("[CONFIRM-ROUTE] Error confirming payment:", error);
+      console.error("[CONFIRM-ROUTE] Error stack:", error?.stack);
+      console.error("[CONFIRM-ROUTE] Error message:", error?.message);
+      res.status(500).json({ error: "Failed to confirm payment", details: error?.message });
     }
   });
 
@@ -1638,34 +1685,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========================================
-  // Database Backup/Restore Routes (Root Admin Only - PB1)
+  // Database Backup/Restore Routes (Admin Only - PB0 or PB1)
   // ========================================
 
   // GET /api/admin/database/backup - Create and download database backup
   app.get("/api/admin/database/backup", requireAuth, async (req: any, res) => {
     try {
       const user = await storage.getUserById(req.session.userId as string);
-      if (!user || user.userId !== 'PB1') {
-        return res.status(403).json({ error: "Forbidden - Root admin access required (PB1 only)" });
+      if (!user || (user.userId !== 'PB1' && user.userId !== 'PB0')) {
+        return res.status(403).json({ error: "Forbidden - Admin access required (PB0 or PB1 only)" });
       }
+
+      console.log(`[DB_BACKUP] Starting database backup for ${user.userId} (${user.email})`);
 
       // Export database to JSON
       const backupJson = await storage.exportDatabaseToJSON();
       const filename = `payback247_backup_${new Date().toISOString().replace(/:/g, '-')}.json`;
       const fileSize = Buffer.byteLength(backupJson, 'utf8');
 
-      // Save backup metadata to database
-      await storage.createDatabaseBackup(filename, fileSize, user.userId!, req.body.notes);
+      console.log(`[DB_BACKUP] Backup created: ${filename} (${(fileSize / 1024).toFixed(2)} KB)`);
 
-      // Send file as download
-      res.setHeader('Content-Type', 'application/json');
+      // Save backup metadata to database
+      await storage.createDatabaseBackup(filename, fileSize, user.userId!);
+
+      // Send file as download with proper headers
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', fileSize.toString());
       res.send(backupJson);
 
-      console.log(`[DB_BACKUP] Database backed up by ${user.userId} (${user.email})`);
+      console.log(`[DB_BACKUP] Database backup completed successfully`);
     } catch (error) {
-      console.error("Error creating database backup:", error);
-      res.status(500).json({ error: "Failed to create database backup" });
+      console.error("[DB_BACKUP] Error creating database backup:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Failed to create database backup" });
+      }
     }
   });
 
@@ -1673,8 +1727,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/database/restore", requireAuth, async (req: any, res) => {
     try {
       const user = await storage.getUserById(req.session.userId as string);
-      if (!user || user.userId !== 'PB1') {
-        return res.status(403).json({ error: "Forbidden - Root admin access required (PB1 only)" });
+      if (!user || (user.userId !== 'PB1' && user.userId !== 'PB0')) {
+        return res.status(403).json({ error: "Forbidden - Admin access required (PB0 or PB1 only)" });
       }
 
       const { backupData, createPreBackup } = req.body;
@@ -1740,8 +1794,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/database/backups", requireAuth, async (req: any, res) => {
     try {
       const user = await storage.getUserById(req.session.userId as string);
-      if (!user || user.userId !== 'PB1') {
-        return res.status(403).json({ error: "Forbidden - Root admin access required (PB1 only)" });
+      if (!user || (user.userId !== 'PB1' && user.userId !== 'PB0')) {
+        return res.status(403).json({ error: "Forbidden - Admin access required (PB0 or PB1 only)" });
       }
 
       const limit = parseInt(req.query.limit as string) || 50;
@@ -1758,8 +1812,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/admin/database/backups/:id", requireAuth, async (req: any, res) => {
     try {
       const user = await storage.getUserById(req.session.userId as string);
-      if (!user || user.userId !== 'PB1') {
-        return res.status(403).json({ error: "Forbidden - Root admin access required (PB1 only)" });
+      if (!user || (user.userId !== 'PB1' && user.userId !== 'PB0')) {
+        return res.status(403).json({ error: "Forbidden - Admin access required (PB0 or PB1 only)" });
       }
 
       const backupId = req.params.id;

@@ -19,6 +19,13 @@ export class IncomeService {
     }
 
     const incomeType = this.getIncomeTypeFromPaymentType(payment.paymentType);
+    
+    // Skip income creation for system fees (creator_fee)
+    if (incomeType === null) {
+      console.log(`[INCOME] Skipping income creation for system fee: ${payment.paymentType}`);
+      return;
+    }
+    
     const amount = payment.amountInr;
 
     const incomeRecord: InsertIncomeTransaction = {
@@ -92,12 +99,15 @@ export class IncomeService {
       });
   }
 
-  private getIncomeTypeFromPaymentType(paymentType: ActivationPayment['paymentType']): InsertIncomeTransaction['incomeType'] {
+  private getIncomeTypeFromPaymentType(paymentType: ActivationPayment['paymentType']): InsertIncomeTransaction['incomeType'] | null {
     switch (paymentType) {
       case 'direct_sponsor':
         return 'direct_sponsor';
       case 'binary_match':
         return 'binary_match';
+      case 'creator_fee':
+        // Creator fee goes to admin but doesn't generate income record (it's a system fee)
+        return null;
       case 'matrix_level_1':
         return 'matrix_level_1';
       case 'matrix_level_2':

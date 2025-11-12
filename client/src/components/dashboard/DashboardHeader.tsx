@@ -11,7 +11,7 @@ interface ReentryStatus {
 interface DashboardHeaderProps {
   userName: string | null | undefined;
   userEmail: string | undefined;
-  userId: string | undefined;
+  userId: string | null | undefined;
   isActivated: boolean;
   reentryStatus?: ReentryStatus;
 }
@@ -19,7 +19,7 @@ interface DashboardHeaderProps {
 export function DashboardHeader({ 
   userName, 
   userEmail, 
-  userId, 
+  userId,
   isActivated, 
   reentryStatus 
 }: DashboardHeaderProps) {
@@ -31,7 +31,9 @@ export function DashboardHeader({
             Welcome, {userName || userEmail}
           </h1>
           <p className="text-sm sm:text-base text-muted-foreground">
-            User ID: <span className="font-mono font-semibold text-foreground">{userId || 'Not assigned'}</span>
+            User ID: <span className="font-mono font-semibold text-foreground" data-testid="text-user-id">
+              {userId || 'N/A'}
+            </span>
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
