@@ -26,6 +26,7 @@ export default function AdminPayments() {
   });
 
   const handleOpenDialog = (payment: ActivationPayment, actionType: 'confirm' | 'reject') => {
+    console.log('[ADMIN-PAYMENTS] Opening dialog:', { paymentId: payment.id, actionType, paymentType: payment.paymentType });
     setSelectedPayment(payment);
     setAction(actionType);
     setRejectionReason('');
@@ -33,13 +34,19 @@ export default function AdminPayments() {
   };
 
   const handleConfirm = async () => {
-    if (!selectedPayment) return;
+    console.log('[ADMIN-PAYMENTS] handleConfirm called, selectedPayment:', selectedPayment?.id);
+    if (!selectedPayment) {
+      console.log('[ADMIN-PAYMENTS] No selected payment, returning');
+      return;
+    }
 
     setProcessing(true);
+    console.log('[ADMIN-PAYMENTS] Starting confirmation request for payment:', selectedPayment.id);
     try {
-      await apiRequest('PATCH', `/api/activation-payments/${selectedPayment.id}/confirm`, {
+      const response = await apiRequest('PATCH', `/api/activation-payments/${selectedPayment.id}/confirm`, {
         notes: confirmNotes || undefined,
       });
+      console.log('[ADMIN-PAYMENTS] Confirmation successful:', response);
 
       // Play success sound for admin approval
       playSuccessSound();
@@ -54,14 +61,15 @@ export default function AdminPayments() {
       setSelectedPayment(null);
       setAction(null);
     } catch (error) {
-      console.error('Error confirming payment:', error);
+      console.error('[ADMIN-PAYMENTS] Error confirming payment:', error);
       toast({
         title: 'Error',
-        description: 'Failed to confirm payment',
+        description: error instanceof Error ? error.message : 'Failed to confirm payment',
         variant: 'destructive',
       });
     } finally {
       setProcessing(false);
+      console.log('[ADMIN-PAYMENTS] Confirmation process finished');
     }
   };
 

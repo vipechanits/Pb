@@ -15,11 +15,11 @@ export const PAYMENT_AMOUNTS = {
   MATRIX_L5: 500,          // Slot 7: Matrix Level 5
 } as const;
 
-// Total activation cost
+// Total activation cost (8 payments)
 export const TOTAL_ACTIVATION_COST = 
   PAYMENT_AMOUNTS.CREATOR_FEE +
   PAYMENT_AMOUNTS.SPONSOR +
-  PAYMENT_AMOUNTS.BINARY_MATCH +
+  PAYMENT_AMOUNTS.BINARY_MATCH +  // Now pays first person in queue (not admin)
   PAYMENT_AMOUNTS.MATRIX_L1 +
   PAYMENT_AMOUNTS.MATRIX_L2 +
   PAYMENT_AMOUNTS.MATRIX_L3 +
@@ -51,16 +51,17 @@ export const PAYMENT_TYPE_AMOUNTS: Record<string, number> = {
   matrix_level_5: PAYMENT_AMOUNTS.MATRIX_L5,
 };
 
-// Slot index to payment type mapping (defines the order of 8 payment slots)
+// Slot index to payment type mapping (8 payment slots)
+// Binary match (slot 1) now pays FIRST person in queue instead of admin
 export const SLOT_TO_PAYMENT_TYPE = [
-  'direct_sponsor',    // Slot 0
-  'binary_match',      // Slot 1
-  'creator_fee',       // Slot 2
-  'matrix_level_1',    // Slot 3
-  'matrix_level_2',    // Slot 4
-  'matrix_level_3',    // Slot 5
-  'matrix_level_4',    // Slot 6
-  'matrix_level_5',    // Slot 7
+  'direct_sponsor',    // Slot 0: Direct sponsor
+  'binary_match',      // Slot 1: FIRST person in binary match queue (fallback to admin if empty)
+  'creator_fee',       // Slot 2: Admin creator fee
+  'matrix_level_1',    // Slot 3: Matrix Level 1
+  'matrix_level_2',    // Slot 4: Matrix Level 2
+  'matrix_level_3',    // Slot 5: Matrix Level 3
+  'matrix_level_4',    // Slot 6: Matrix Level 4
+  'matrix_level_5',    // Slot 7: Matrix Level 5
 ] as const;
 
 // Matrix structure

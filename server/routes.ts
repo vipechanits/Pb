@@ -156,12 +156,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Hash password
       const hashedPassword = await hashPassword(password);
       
-      // Validate sponsor exists if provided
-      if (sponsorId) {
-        const sponsor = await storage.getUserByUserId(sponsorId.toUpperCase());
-        if (!sponsor) {
-          return res.status(400).json({ error: "Invalid sponsor ID" });
-        }
+      // Auto-assign PB1 as sponsor if no sponsor provided
+      let finalSponsorId = sponsorId ? sponsorId.toUpperCase() : 'PB1';
+      let finalBinaryLeg = binaryLeg;
+      
+      // Validate sponsor exists
+      const sponsor = await storage.getUserByUserId(finalSponsorId);
+      if (!sponsor) {
+        return res.status(400).json({ error: `Invalid sponsor ID: ${finalSponsorId}` });
+      }
+      
+      // Auto-select best leg if not provided
+      if (!finalBinaryLeg) {
+        finalBinaryLeg = await storage.determineBestLeg(finalSponsorId);
+        console.log(`[SIGNUP] Auto-assigned ${finalBinaryLeg} leg for sponsor ${finalSponsorId}`);
       }
       
       // Create user with auto-generated PB#### ID (transaction-safe)
@@ -171,8 +179,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         password: hashedPassword,
         role: 'user',
         // userId auto-generated from sequence (PB10000+)
-        sponsorId: sponsorId ? sponsorId.toUpperCase() : null, // Normalize to uppercase
-        binaryLeg: binaryLeg || null, // Store requested leg preference (honored at activation)
+        sponsorId: finalSponsorId, // Auto-assign PB1 if not provided
+        binaryLeg: finalBinaryLeg, // Auto-select best leg if not provided
         isActivated: false,
         emailVerified: true, // Auto-verify email (no verification required)
         emailVerificationToken: null,
@@ -1824,6 +1832,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting backup:", error);
       res.status(500).json({ error: "Failed to delete backup" });
+    }
+  });
+
+  // POST /api/admin/queue/cleanup - Release abandoned queue reservations
+  app.post("/api/admin/queue/cleanup", requireAdmin, async (req: any, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user) {
+        return res.status(403).json({ error: "Forbidden - Admin access required" });
+      }
+
+      // Get hours threshold from query param or use default (72 hours)
+      const hoursOld = parseInt(req.query.hoursOld as string) || 72;
+
+      if (hoursOld < 1 || hoursOld > 720) { // 1 hour to 30 days
+        return res.status(400).json({ error: "Invalid hours threshold (must be 1-720)" });
+      }
+
+      console.log(`[QUEUE_CLEANUP] Admin ${user.userId} initiating cleanup for entries older than ${hoursOld} hours`);
+
+      const releasedCount = await storage.releaseAbandonedQueueReservations(hoursOld);
+
+      res.json({ 
+        success: true, 
+        message: `Released ${releasedCount} abandoned queue reservation(s)`,
+        releasedCount,
+        thresholdHours: hoursOld
+      });
+
+      console.log(`[QUEUE_CLEANUP] Released ${releasedCount} entries by admin ${user.userId}`);
+    } catch (error) {
+      console.error("Error cleaning up queue:", error);
+      res.status(500).json({ error: "Failed to clean up queue" });
     }
   });
 

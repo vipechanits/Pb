@@ -23,10 +23,11 @@ import {
   reentries,
   notifications,
   passwordResetTokens,
-  databaseBackups
+  databaseBackups,
+  binaryMatchQueue
 } from "@shared/schema";
 import { SLOT_TO_PAYMENT_TYPE, PAYMENT_TYPE_AMOUNTS } from "@shared/constants";
-import { eq, and, or, ne, isNull, desc, sql, lt } from "drizzle-orm";
+import { eq, and, or, ne, isNull, desc, sql, lt, asc } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "./db";
 import crypto from "crypto";
@@ -45,6 +46,9 @@ export interface IStorage {
   determineBestLeg(sponsorUserId: string): Promise<'left' | 'right'>;
   checkProfileComplete(identifier: string): Promise<boolean>;
   getUsersBySponsorAndLeg(sponsorUserId: string, leg: 'left' | 'right'): Promise<User[]>;
+  
+  // Binary match queue methods
+  releaseAbandonedQueueReservations(hoursOld?: number): Promise<number>;
   
   // Global matrix methods
   findAndAssignMatrixSlot(userId: string): Promise<User | undefined>;
@@ -660,7 +664,7 @@ export class DbStorage implements IStorage {
       const activationResult = await tx.insert(activations).values(activation).returning();
       const createdActivation = activationResult[0];
       
-      // Generate all 8 payment slots with config-driven amounts
+      // Generate 8 payment slots (binary match slot 1 pays first person in queue)
       const paymentsToCreate: InsertActivationPayment[] = [];
       
       for (let slotIndex = 0; slotIndex < SLOT_TO_PAYMENT_TYPE.length; slotIndex++) {
@@ -673,7 +677,7 @@ export class DbStorage implements IStorage {
             amount = config.sponsorPaymentAmount;
             break;
           case 'binary_match':
-            amount = config.binaryMatchPaymentAmount;
+            amount = config.binaryMatchPaymentAmount; // ₹1000 to first person in queue
             break;
           case 'creator_fee':
             amount = config.creatorFeeAmount;
@@ -710,8 +714,37 @@ export class DbStorage implements IStorage {
             receiverType = 'admin';
           }
         } else if (paymentType === 'binary_match') {
-          receiverUserId = 'PB0';
-          receiverType = 'admin';
+          // Binary match pays FIRST person in queue (fallback to admin if empty)
+          // Use FOR UPDATE lock and exclude already-reserved entries to prevent race conditions
+          const firstInQueue = await tx.select()
+            .from(binaryMatchQueue)
+            .where(and(
+              eq(binaryMatchQueue.status, 'waiting'),
+              isNull(binaryMatchQueue.paidByActivationId) // MUST be unreserved
+            ))
+            .orderBy(asc(binaryMatchQueue.queuePosition))
+            .limit(1)
+            .for('update');
+          
+          if (firstInQueue[0]) {
+            receiverUserId = firstInQueue[0].userId;
+            receiverType = 'user';
+            console.log(`[ACTIVATION] Binary match payment will go to queue user ${receiverUserId} (position ${firstInQueue[0].queuePosition})`);
+            
+            // IMMEDIATELY mark as RESERVED (prevents concurrent activations from selecting same entry)
+            // When payment is confirmed, status will change from reserved → paid
+            await tx.update(binaryMatchQueue)
+              .set({ 
+                status: 'reserved', // Mark as reserved (no longer selectable)
+                paidByActivationId: createdActivation.id, // Reserve for this activation
+              })
+              .where(eq(binaryMatchQueue.id, firstInQueue[0].id));
+          } else {
+            // Queue empty - fallback to admin
+            receiverUserId = 'PB0';
+            receiverType = 'admin';
+            console.log(`[ACTIVATION] Binary match queue empty - payment goes to admin fallback`);
+          }
         } else if (paymentType === 'creator_fee') {
           receiverUserId = 'PB0';
           receiverType = 'admin';
@@ -901,6 +934,40 @@ export class DbStorage implements IStorage {
         throw error;
       }
 
+      // If this is a binary_match payment to a real user (not admin), mark queue entry as paid
+      // DEFENSIVE: Skip if receiver is PB0 (admin fallback) even if receiverType was incorrectly set to 'user'
+      if (payment.paymentType === 'binary_match' && payment.receiverType === 'user' && payment.receiverUserId !== 'PB0') {
+        console.log(`[STORAGE] Marking binary match queue entry as paid for user ${payment.receiverUserId}`);
+        
+        // Update queue entry from reserved → paid
+        // Match by activation ID to ensure we update the correct reserved entry
+        const queueUpdateResult = await tx.update(binaryMatchQueue)
+          .set({
+            status: 'paid',
+            paidAt: new Date(),
+          })
+          .where(and(
+            eq(binaryMatchQueue.userId, payment.receiverUserId!),
+            eq(binaryMatchQueue.paidByActivationId, payment.activationId),
+            eq(binaryMatchQueue.status, 'reserved') // MUST be reserved (not waiting or already paid)
+          ))
+          .returning();
+        
+        if (queueUpdateResult.length > 0) {
+          console.log(`[STORAGE] Queue entry marked as paid - user ${payment.receiverUserId} received ₹${payment.amountInr}`);
+        } else {
+          // This is a critical error - means the queue entry was not properly reserved
+          console.error(`[STORAGE] CRITICAL ERROR: No reserved queue entry found for user ${payment.receiverUserId} and activation ${payment.activationId}`);
+          throw new Error(`Queue entry not found for binary match payment confirmation`);
+        }
+      } else if (payment.paymentType === 'binary_match' && payment.receiverUserId === 'PB0') {
+        // Binary match payment to admin (queue was empty)
+        console.log(`[STORAGE] Binary match payment to admin (queue empty fallback) - no queue entry to mark`);
+        if (payment.receiverType === 'user') {
+          console.warn(`[STORAGE] WARNING: Binary match payment to PB0 has receiverType='user' - should be 'admin'`);
+        }
+      }
+
       console.log(`[STORAGE] Checking if all 8 payments are confirmed for activation ${payment.activationId}`);
       await this.checkAndCompleteActivation(payment.activationId, payment.payerUserId, tx);
       
@@ -1057,6 +1124,13 @@ export class DbStorage implements IStorage {
             console.log(`[ACTIVATION] Updated sponsor ${sponsorId} stats: +1 total, +1 to ${assignedBinaryLeg} leg (global & personal)`);
           }
           
+          // Process binary match queue for upline (check if upline users built 3:3 pairs)
+          const { BinaryMatchService } = await import('./binary-match-service');
+          const binaryMatchService = new BinaryMatchService(tx);
+          
+          console.log(`[ACTIVATION] Processing binary match queue for upline after user ${activatedUser.userId} activation`);
+          await binaryMatchService.processUplineForQueueEntry(activatedUser.userId);
+          
           console.log(`[ACTIVATION] User ${activatedUser.userId} successfully activated and placed in binary tree!`);
         }
       };
@@ -1074,16 +1148,91 @@ export class DbStorage implements IStorage {
   }
 
   async rejectActivationPayment(id: string, rejectionReason: string): Promise<ActivationPayment | undefined> {
-    const result = await db.update(activationPayments)
-      .set({ 
-        status: 'rejected',
-        rejectedAt: new Date(),
-        rejectionReason: rejectionReason,
-        updatedAt: new Date()
-      })
-      .where(eq(activationPayments.id, id))
-      .returning();
-    return result[0];
+    return await db.transaction(async (tx) => {
+      // Reject the payment
+      const result = await tx.update(activationPayments)
+        .set({ 
+          status: 'rejected',
+          rejectedAt: new Date(),
+          rejectionReason: rejectionReason,
+          updatedAt: new Date()
+        })
+        .where(eq(activationPayments.id, id))
+        .returning();
+      
+      const payment = result[0];
+      if (!payment) {
+        return undefined;
+      }
+      
+      // If this is a binary_match payment, release the queue entry
+      // Reset from 'reserved' back to 'waiting' so next activation can select it
+      if (payment.paymentType === 'binary_match' && payment.receiverType === 'user') {
+        console.log(`[STORAGE] Releasing reserved queue entry for user ${payment.receiverUserId} (payment rejected)`);
+        
+        const queueReleaseResult = await tx.update(binaryMatchQueue)
+          .set({
+            status: 'waiting', // Reset to waiting
+            paidByActivationId: null, // Clear reservation
+          })
+          .where(and(
+            eq(binaryMatchQueue.userId, payment.receiverUserId!),
+            eq(binaryMatchQueue.paidByActivationId, payment.activationId),
+            eq(binaryMatchQueue.status, 'reserved')
+          ))
+          .returning();
+        
+        if (queueReleaseResult.length > 0) {
+          console.log(`[STORAGE] Queue entry released - back to waiting status`);
+        } else {
+          console.log(`[STORAGE] WARNING: No reserved queue entry found to release`);
+        }
+      }
+      
+      return payment;
+    });
+  }
+
+  // Release abandoned queue reservations (for activations that were never completed/rejected)
+  // This is a safety mechanism to prevent queue deadlock from abandoned activations
+  async releaseAbandonedQueueReservations(hoursOld: number = 72): Promise<number> {
+    return await db.transaction(async (tx) => {
+      const cutoffDate = new Date();
+      cutoffDate.setHours(cutoffDate.getHours() - hoursOld);
+      
+      console.log(`[QUEUE CLEANUP] Searching for queue entries reserved before ${cutoffDate.toISOString()}`);
+      
+      // Find reserved entries that are older than threshold
+      // These are likely from abandoned activations (user never submitted payment, etc)
+      const abandonedEntries = await tx.select()
+        .from(binaryMatchQueue)
+        .where(and(
+          eq(binaryMatchQueue.status, 'reserved'),
+          lt(binaryMatchQueue.enteredAt, cutoffDate) // Older than threshold
+        ));
+      
+      if (abandonedEntries.length === 0) {
+        console.log(`[QUEUE CLEANUP] No abandoned reservations found`);
+        return 0;
+      }
+      
+      console.log(`[QUEUE CLEANUP] Found ${abandonedEntries.length} abandoned queue reservations - releasing...`);
+      
+      // Reset to waiting status
+      const released = await tx.update(binaryMatchQueue)
+        .set({
+          status: 'waiting',
+          paidByActivationId: null,
+        })
+        .where(and(
+          eq(binaryMatchQueue.status, 'reserved'),
+          lt(binaryMatchQueue.enteredAt, cutoffDate)
+        ))
+        .returning();
+      
+      console.log(`[QUEUE CLEANUP] Released ${released.length} abandoned queue entries back to waiting`);
+      return released.length;
+    });
   }
 
   async getUserIncomeSummary(userId: string): Promise<any> {

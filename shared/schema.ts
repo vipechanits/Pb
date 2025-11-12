@@ -101,6 +101,14 @@ export const users = pgTable("users", {
   personalRightCount: integer("personal_right_count").notNull().default(0), // Personal right leg count (directly sponsored)
   totalReferrals: integer("total_referrals").notNull().default(0),
   
+  // Binary match tracking (queue-based 3:3 matching system)
+  binaryQualified: boolean("binary_qualified").notNull().default(false), // True when user has 1 personal left + 1 personal right
+  binaryUnmatchedLeft: integer("binary_unmatched_left").notNull().default(0), // Unmatched left leg activations (carry forward)
+  binaryUnmatchedRight: integer("binary_unmatched_right").notNull().default(0), // Unmatched right leg activations (carry forward)
+  binaryMatchedPairs: integer("binary_matched_pairs").notNull().default(0), // Total 3:3 pairs matched (lifetime)
+  binaryLastMatchedLeftCount: integer("binary_last_matched_left_count").notNull().default(0), // Last leftLegCount when matching was calculated
+  binaryLastMatchedRightCount: integer("binary_last_matched_right_count").notNull().default(0), // Last rightLegCount when matching was calculated
+  
   // Global matrix position (separate from binary sponsorship tree)
   matrixParentId: varchar("matrix_parent_id", { length: 20 }), // Parent in global matrix (nullable - root has none)
   matrixPosition: integer("matrix_position"), // 0 = left, 1 = right (nullable until placed)
@@ -579,3 +587,26 @@ export const resetPasswordSchema = z.object({
 
 export type ForgotPasswordRequest = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordRequest = z.infer<typeof resetPasswordSchema>;
+
+// Binary Match Queue - FIFO queue for 3:3 matched pairs
+// When user builds 3:3 pair → enters queue
+// Each new activation pays FIRST person in queue (₹1000)
+// Person receives payment → exits queue → can re-enter with new 3:3 pair
+export const binaryMatchQueue = pgTable("binary_match_queue", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id", { length: 20 }).notNull(), // User in queue
+  queuePosition: integer("queue_position").notNull(), // Position in queue (1 = first)
+  enteredAt: timestamp("entered_at").notNull().defaultNow(), // When user entered queue
+  paidAt: timestamp("paid_at"), // When user received payment (null = still waiting)
+  paidByActivationId: varchar("paid_by_activation_id", { length: 100 }), // Activation that paid this user
+  amountInr: decimal("amount_inr", { precision: 10, scale: 2 }).notNull().default('1000'), // Always ₹1000 per pair
+  status: text("status").notNull().default('waiting'), // 'waiting' | 'paid'
+});
+
+export const insertBinaryMatchQueueSchema = createInsertSchema(binaryMatchQueue).omit({
+  id: true,
+  enteredAt: true,
+});
+
+export type InsertBinaryMatchQueue = z.infer<typeof insertBinaryMatchQueueSchema>;
+export type BinaryMatchQueue = typeof binaryMatchQueue.$inferSelect;
