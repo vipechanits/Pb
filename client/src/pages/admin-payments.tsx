@@ -8,11 +8,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { useNotificationSound } from '@/hooks/use-notification-sound';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import type { ActivationPayment } from '@shared/schema';
 
 export default function AdminPayments() {
   const { toast } = useToast();
+  const { playSuccessSound, playAlertSound } = useNotificationSound();
   const [selectedPayment, setSelectedPayment] = useState<ActivationPayment | null>(null);
   const [action, setAction] = useState<'confirm' | 'reject' | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -39,6 +41,9 @@ export default function AdminPayments() {
         notes: confirmNotes || undefined,
       });
 
+      // Play success sound for admin approval
+      playSuccessSound();
+      
       toast({
         title: 'Success',
         description: 'Payment confirmed successfully',
@@ -76,6 +81,9 @@ export default function AdminPayments() {
         rejectionReason,
       });
 
+      // Play alert sound for admin rejection
+      playAlertSound();
+      
       toast({
         title: 'Success',
         description: 'Payment rejected',

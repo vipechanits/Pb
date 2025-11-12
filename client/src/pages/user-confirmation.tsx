@@ -8,11 +8,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { CheckCircle, XCircle, RefreshCw, ExternalLink } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useNotificationSound } from '@/hooks/use-notification-sound';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import type { ActivationPayment } from '@shared/schema';
 
 export default function UserConfirmationPage() {
   const { toast } = useToast();
+  const { playSuccessSound, playAlertSound } = useNotificationSound();
   const [selectedPayment, setSelectedPayment] = useState<ActivationPayment | null>(null);
   const [action, setAction] = useState<'confirm' | 'reject' | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -44,6 +46,9 @@ export default function UserConfirmationPage() {
       const data = await response.json();
       console.log('[CONFIRM] Confirmation successful:', data);
 
+      // Play success sound for payment confirmation
+      playSuccessSound();
+      
       toast({
         title: 'Success',
         description: 'Payment confirmed successfully',
@@ -88,6 +93,9 @@ export default function UserConfirmationPage() {
       const data = await response.json();
       console.log('[REJECT] Rejection successful:', data);
 
+      // Play alert sound for payment rejection
+      playAlertSound();
+      
       toast({
         title: 'Payment Rejected',
         description: 'The sender can resubmit with correct details',

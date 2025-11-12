@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth-context';
-import logoUrl from '@assets/generated_images/PAYBACK247_transparent_platform_logo_fa9e977f.png';
+import logoUrl from '@assets/payback247-logo.png';
 
 interface AppSidebarProps {
   isAdmin?: boolean;

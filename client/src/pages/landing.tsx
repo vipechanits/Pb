@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Shield, Users, TrendingUp, Zap, GitBranch, Grid3x3, ArrowRight, Check } from 'lucide-react';
-import logoUrl from '@assets/generated_images/PAYBACK247_transparent_platform_logo_fa9e977f.png';
+import logoUrl from '@assets/payback247-logo.png';
 import { useSystemConfig, formatINR } from '@/hooks/use-system-config';
 
 export default function Landing() {
