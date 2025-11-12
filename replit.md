@@ -20,6 +20,15 @@ PAYBACK247 is a peer-to-peer income platform that facilitates network marketing 
   - ReentryHistory (54 LOC) - Re-entry cycle history
   - All components under 150 LOC, fully functional, architect-approved
 - **Sidebar Update (Complete):** Streamlined navigation with dedicated Binary Tree and Global Matrix links, removed redundant income links
+- **Config Centralization (Complete - November 12, 2025):** Centralized all hardcoded payment amounts into dynamic system configuration:
+  - Created `useSystemConfig` React Query hook with computed values and helpers
+  - Added public GET `/api/system-config` endpoint with normalized decimal values
+  - Updated landing page with dynamic config (hero, income streams, FAQs) with loading skeletons
+  - Updated user-dashboard.tsx re-entry dialog with dynamic activation cost
+  - Updated user-activation.tsx: removed all hardcoded amounts (₹5000, ₹1000, ₹500, ₹625), added loading guards, fixed Amount Paid calculation to sum actual payment amounts
+  - Backend services (storage.ts, income-service.ts) already using config from database
+  - Added cache invalidation to admin config mutation for both `/api/admin/config` and `/api/system-config`
+  - All payment figures now controlled by admin via System Configuration page
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
