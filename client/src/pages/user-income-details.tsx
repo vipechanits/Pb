@@ -9,6 +9,7 @@ import { ArrowLeft, DollarSign, UserPlus, GitMerge, Layers, TrendingUp, Loader2,
 import BinaryTreeView from '@/components/BinaryTreeView';
 import MatrixTreeView from '@/components/MatrixTreeView';
 import { format } from 'date-fns';
+import { useSystemConfig } from '@/hooks/use-system-config';
 
 interface IncomeSummary {
   totalEarnings: string;
@@ -25,6 +26,7 @@ export default function UserIncomeDetailsPage() {
   const { type } = useParams<{ type: string }>();
   const [, navigate] = useLocation();
   const { user } = useAuth();
+  const { config: systemConfig } = useSystemConfig();
 
   // Fetch income summary
   const { data: incomeSummary, isLoading: summaryLoading } = useQuery<IncomeSummary>({
@@ -236,9 +238,9 @@ export default function UserIncomeDetailsPage() {
               </p>
             </div>
             <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Estimated Payments</p>
-              <p className="text-2xl font-bold">{config.value > 0 ? Math.floor(config.value / 500) : 0}</p>
-              <p className="text-xs text-muted-foreground">Based on ₹500 per payment</p>
+              <p className="text-sm text-muted-foreground">Confirmed Payments</p>
+              <p className="text-2xl font-bold">{config.value > 0 ? Math.floor(config.value / (systemConfig.matrixLevel1Amount || 500)) : 0}</p>
+              <p className="text-xs text-muted-foreground">Approximate estimate</p>
             </div>
           </div>
         </CardContent>

@@ -3,8 +3,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RefreshCw, Info, XCircle } from 'lucide-react';
+import { useSystemConfig, formatINR } from '@/hooks/use-system-config';
 
 export default function ReentryPage() {
+  const { config } = useSystemConfig();
+  
   const reentryStats = [
     {
       title: 'Completed Cycles',
@@ -42,7 +45,7 @@ export default function ReentryPage() {
         <AlertTitle>What is Reentry?</AlertTitle>
         <AlertDescription>
           When you complete your 2+5 matrix cycle (62 positions filled), you can reenter the system 
-          to start a new cycle and continue earning ₹625 per position infinitely.
+          by paying {formatINR(config.totalActivationCost)} to start a new cycle and continue earning from matrix positions infinitely.
         </AlertDescription>
       </Alert>
 
@@ -103,11 +106,11 @@ export default function ReentryPage() {
         <CardContent className="space-y-3 text-sm">
           <div>
             <h4 className="font-semibold mb-1">1. Complete Your Cycle</h4>
-            <p className="text-muted-foreground">Earn from all 62 matrix positions (₹38,750 total income)</p>
+            <p className="text-muted-foreground">Earn from all 62 matrix positions ({formatINR(config.totalMatrixPotential)} total income)</p>
           </div>
           <div>
             <h4 className="font-semibold mb-1">2. Pay Reentry Fee</h4>
-            <p className="text-muted-foreground">₹7,000 to start a fresh 2+5 matrix cycle</p>
+            <p className="text-muted-foreground">{formatINR(config.totalActivationCost)} to start a fresh 2+5 matrix cycle</p>
           </div>
           <div>
             <h4 className="font-semibold mb-1">3. New Cycle Begins</h4>
@@ -115,7 +118,7 @@ export default function ReentryPage() {
           </div>
           <div>
             <h4 className="font-semibold mb-1">4. Compound Earnings</h4>
-            <p className="text-muted-foreground">Each cycle earns ₹31,000+ profit (₹38,750 - ₹7,000 reentry)</p>
+            <p className="text-muted-foreground">Each cycle earns {formatINR(config.totalMatrixPotential - config.totalActivationCost)}+ profit ({formatINR(config.totalMatrixPotential)} - {formatINR(config.totalActivationCost)} reentry)</p>
           </div>
         </CardContent>
       </Card>

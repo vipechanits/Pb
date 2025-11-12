@@ -204,7 +204,7 @@ export default function Landing() {
           <div className="text-center mb-12">
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">Multiple Income Streams</h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              Earn from 8 different payment slots totaling ₹4,000 per activation cycle
+              Earn from 8 different payment slots totaling {formatINR(config.totalActivationCost)} per activation cycle
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
@@ -248,9 +248,9 @@ export default function Landing() {
               <div className="space-y-4">
                 <Card className="bg-primary-foreground/10 border-primary-foreground/20 backdrop-blur">
                   <CardContent className="p-8 text-center">
-                    <div className="text-5xl font-bold mb-2">₹4,000</div>
-                    <p className="text-sm opacity-90">Total earnings per cycle</p>
-                    <p className="text-xs opacity-75 mt-2">From 8 payment slots</p>
+                    <div className="text-5xl font-bold mb-2">₹{config.totalMatrixPotential.toLocaleString('en-IN')}</div>
+                    <p className="text-sm opacity-90">Matrix earnings per cycle</p>
+                    <p className="text-xs opacity-75 mt-2">From 5 matrix levels (62 positions)</p>
                   </CardContent>
                 </Card>
                 <Card className="bg-primary-foreground/10 border-primary-foreground/20 backdrop-blur">
