@@ -14,8 +14,8 @@ interface TreeNode {
   rightLegCount?: number;
   personalLeftCount?: number;
   personalRightCount?: number;
-  leftChild?: TreeNode;
-  rightChild?: TreeNode;
+  leftChild: TreeNode | null;
+  rightChild: TreeNode | null;
 }
 
 interface MatrixNode {

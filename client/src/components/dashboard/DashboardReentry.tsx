@@ -2,9 +2,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { CheckCircle, Grid3x3, RefreshCw, Trophy, Calendar, Loader2 } from 'lucide-react';
+import { CheckCircle, Grid3x3, RefreshCw, Trophy, Loader2 } from 'lucide-react';
 import { Link } from 'wouter';
-import { format } from 'date-fns';
+import { ReentryHistory } from './ReentryHistory';
 
 interface ReentryStatus {
   currentReentry?: {
@@ -139,38 +139,7 @@ export function DashboardReentry({
         )}
 
         {/* Re-entry History */}
-        {reentryHistory && reentryHistory.length > 0 && (
-          <div className="space-y-2 pt-4 border-t">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Calendar className="w-4 h-4" />
-              Re-entry History
-            </div>
-            <div className="space-y-2">
-              {reentryHistory.slice(0, 5).map((cycle) => (
-                <div key={cycle.id} className="flex items-center justify-between text-sm p-2 rounded-md bg-card" data-testid={`reentry-cycle-${cycle.cycleNumber}`}>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-xs">
-                      Cycle #{cycle.cycleNumber}
-                    </Badge>
-                    <span className="text-muted-foreground">
-                      {cycle.status === 'completed' && cycle.completedAt
-                        ? format(new Date(cycle.completedAt), 'MMM dd, yyyy')
-                        : cycle.status === 'in_progress' && cycle.initiatedAt
-                        ? `Started ${format(new Date(cycle.initiatedAt), 'MMM dd, yyyy')}`
-                        : 'Pending'}
-                    </span>
-                  </div>
-                  <Badge 
-                    variant={cycle.status === 'completed' ? 'default' : 'secondary'}
-                    className={cycle.status === 'completed' ? 'bg-green-600' : ''}
-                  >
-                    {cycle.status === 'completed' ? 'Completed' : 'In Progress'}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {reentryHistory && <ReentryHistory reentryHistory={reentryHistory} />}
       </CardContent>
     </Card>
   );
