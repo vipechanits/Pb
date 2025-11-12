@@ -123,6 +123,12 @@ export default function UserActivationPage() {
   const confirmedCount = payments?.filter(p => p.status === 'confirmed').length || 0;
   const submittedCount = payments?.filter(p => p.status === 'submitted').length || 0;
   const rejectedCount = payments?.filter(p => p.status === 'rejected').length || 0;
+  
+  // Sum actual amounts from confirmed payments
+  const confirmedAmount = payments
+    ?.filter(p => p.status === 'confirmed')
+    .reduce((sum, p) => sum + Number(p.amountInr || 0), 0) || 0;
+  
   const totalAmount = config.totalActivationCost;
 
   const handlePayClick = (payment: ActivationPayment) => {
@@ -132,7 +138,7 @@ export default function UserActivationPage() {
 
   const hasPayments = payments && payments.length > 0;
 
-  if (isLoading) {
+  if (isLoading || configLoading) {
     return (
       <div className="container mx-auto p-6">
         <div className="flex items-center justify-center py-12">
@@ -435,7 +441,7 @@ export default function UserActivationPage() {
             <CardTitle className="text-sm font-medium">Amount Paid</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₹{(confirmedCount * 625).toLocaleString()}</div>
+            <div className="text-2xl font-bold">₹{confirmedAmount.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">of ₹{totalAmount.toLocaleString()}</p>
           </CardContent>
         </Card>
