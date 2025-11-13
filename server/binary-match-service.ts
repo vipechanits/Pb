@@ -135,82 +135,9 @@ export class BinaryMatchService {
   }
 
   /**
-   * Process queue payment after activation completes (pay first person in queue)
-   * @param activationId Activation ID that triggers payment
-   * @param payerUserId User ID who is activating (source of payment)
-   */
-  async processQueueAfterActivation(activationId: string, payerUserId: string): Promise<void> {
-    console.log(`[BINARY-MATCH-QUEUE] Processing queue payment for activation ${activationId} by ${payerUserId}`);
-
-    // Get first person in queue (oldest waiting entry)
-    const firstInQueue = await this.db
-      .select()
-      .from(binaryMatchQueue)
-      .where(eq(binaryMatchQueue.status, 'waiting'))
-      .orderBy(asc(binaryMatchQueue.queuePosition))
-      .limit(1);
-
-    if (!firstInQueue[0]) {
-      console.log(`[BINARY-MATCH-QUEUE] Queue is empty - no payment to process`);
-      // TODO: Consider logging this in an audit table or notification
-      return;
-    }
-
-    const queueEntry = firstInQueue[0];
-    const receiverUserId = queueEntry.userId;
-    const amount = parseFloat(queueEntry.amountInr);
-
-    console.log(`[BINARY-MATCH-QUEUE] Paying ${receiverUserId} ₹${amount} from queue (position ${queueEntry.queuePosition})`);
-
-    // Create income transaction for the receiver
-    await this.db.insert(incomeTransactions).values({
-      userId: receiverUserId,
-      activationId: activationId,
-      activationPaymentId: null, // Not tied to specific payment slot
-      incomeType: 'binary_match',
-      amountInr: amount.toString(),
-      status: 'confirmed',
-      sourceUserId: payerUserId, // The newly activated user
-      triggeredBy: 'activation',
-      confirmedAt: new Date(),
-    });
-
-    // Update user income summary
-    await this.db.insert(userIncomeSummaries)
-      .values({
-        userId: receiverUserId,
-        totalEarnings: amount.toString(),
-        binaryMatchIncome: amount.toString(),
-        directSponsorIncome: '0',
-        matrixLevel1Income: '0',
-        matrixLevel2Income: '0',
-        matrixLevel3Income: '0',
-        matrixLevel4Income: '0',
-        matrixLevel5Income: '0',
-      })
-      .onConflictDoUpdate({
-        target: userIncomeSummaries.userId,
-        set: {
-          totalEarnings: sql`CAST(${userIncomeSummaries.totalEarnings} AS NUMERIC) + ${amount}`,
-          binaryMatchIncome: sql`CAST(${userIncomeSummaries.binaryMatchIncome} AS NUMERIC) + ${amount}`,
-          updatedAt: new Date(),
-        },
-      });
-
-    // Mark queue entry as paid
-    await this.db.update(binaryMatchQueue)
-      .set({
-        status: 'paid',
-        paidAt: new Date(),
-        paidByActivationId: activationId,
-      })
-      .where(eq(binaryMatchQueue.id, queueEntry.id));
-
-    console.log(`[BINARY-MATCH-QUEUE] Successfully paid ${receiverUserId} ₹${amount} from queue!`);
-  }
-
-  /**
    * Process upline after a new activation - check all sponsors for queue eligibility
+   * NOTE: Queue payments are handled during activation creation in storage.ts:createActivationWithPayments
+   * This function only updates leg volume and checks for new queue entries
    * @param activatedUserId User who just activated
    */
   async processUplineForQueueEntry(activatedUserId: string): Promise<void> {

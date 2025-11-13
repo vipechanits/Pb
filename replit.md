@@ -1,78 +1,7 @@
 # PAYBACK247 - P2P Income Platform
 
 ## Overview
-PAYBACK247 is a peer-to-peer income platform that facilitates network marketing operations, including binary pairing income, multi-level matrix rewards, and a robust manual payment tracking system with administrator approval. The platform enables users to activate accounts, build referral networks, monitor earnings, and manage profiles. Administrators have comprehensive control over system configuration, payment approvals, and access to analytics, ensuring efficient operation and financial transparency.
-
-**Custom Domain:** https://payback247.com
-
-## Recent Changes (November 2025)
-- **Security Audit & Critical Fixes (Complete - November 13, 2025):** Comprehensive security hardening addressing 7 critical/high-severity vulnerabilities:
-  - **CRITICAL - Admin Credentials:** Replaced hard-coded passwords with strict environment-driven secrets. Production deployments now FAIL if ADMIN_DEFAULT_PASSWORD not set. Only allows fallback when NODE_ENV is EXPLICITLY "development" (undefined/staging/test/production all treated as production).
-  - **HIGH - Payment Idempotency:** Added SELECT FOR UPDATE row-level locking to payment confirmation to prevent race conditions and duplicate income creation. Works with IncomeService onConflictDoNothing for full protection.
-  - **HIGH - Matrix Placement Validation:** Added validation to ensure matrix placement succeeds before completing activation. Throws error if placement fails, triggering transaction rollback to prevent incomplete activation states.
-  - **MEDIUM - Rate Limiting:** Added rate limiting to authentication endpoints (signup: 5/hour per IP, login: 10/15min per IP) to prevent brute-force attacks and spam account creation.
-  - **DATA FIX:** Repaired PB10004 data inconsistency - manually completed matrix placement (placed under PB10001 at level 2, path PB0.R.L) and credited PB10001 missing ₹500 matrix income.
-  - **VERIFIED:** Binary match queue already uses SELECT FOR UPDATE in createActivationWithPayments (no additional changes needed).
-- **Income Transaction History Pages (Complete - November 12, 2025):** Added three comprehensive history pages with detailed transaction tracking:
-  - Binary Match Queue History: View all queue entries with status timeline (waiting/reserved/paid), timestamps, payer information, and position tracking
-  - Binary Pair Matching History: Track 3:3 pair qualifications with summary statistics (total pairs built, pairs paid, total earned)
-  - Matrix Income History: Complete matrix income transactions across all 5 levels with income breakdown by level and source user details
-  - All pages include loading states, empty states, informational cards explaining the systems, and comprehensive test IDs
-  - New "Income History" section added to user sidebar navigation with dedicated icons for each history type
-- **Binary Match Admin Payment Fix (Complete - November 12, 2025):** Fixed critical bug where confirming binary match payments to admin (PB0) threw queue update errors. Added defensive guard to skip queue operations when receiver is PB0.
-- **Application Modernization (Complete):** Comprehensive cleanup removing unused files (examples folder, blockchain components), consolidating duplicate pages, and improving code organization
-- **Landing Page Redesign (Complete):** Modern design with improved spacing, cleaner layout, professional CTA sections, better footer, and enhanced user experience
-- **Navigation Consolidation (Complete):** Unified income reporting system at `/user/income/:type` with SPA-friendly redirects from legacy routes (`/user/sponsoring`, `/user/binary`, `/user/matrix`) for backward compatibility
-- **Dashboard Refactoring (Complete):** Successfully modularized user dashboard from 731-line monolith into 7 focused components:
-  - Main dashboard reduced to 357 lines (51% smaller)
-  - DashboardHeader (67 LOC) - User welcome, badges, status
-  - DashboardSponsorInfo (84 LOC) - Sponsor info with binary leg badges
-  - DashboardIncomeCards (110 LOC) - 4 clickable income summary cards
-  - DashboardReferralLinks (81 LOC) - Binary leg referral links
-  - DashboardReentry (146 LOC) - Complete re-entry system
-  - DashboardTreePreviews (100 LOC) - Binary/matrix tree previews
-  - ReentryHistory (54 LOC) - Re-entry cycle history
-  - All components under 150 LOC, fully functional, architect-approved
-- **Sidebar Update (Complete):** Streamlined navigation with dedicated Binary Tree and Global Matrix links, removed redundant income links
-- **Config Centralization (Complete - November 12, 2025):** Centralized all hardcoded payment amounts into dynamic system configuration:
-  - Created `useSystemConfig` React Query hook with computed values and helpers
-  - Added public GET `/api/system-config` endpoint with normalized decimal values
-  - Updated landing page with dynamic config (hero, income streams, FAQs) with loading skeletons
-  - Updated user-dashboard.tsx re-entry dialog with dynamic activation cost
-  - Updated user-activation.tsx: removed all hardcoded amounts (₹5000, ₹1000, ₹500, ₹625), added loading guards, fixed Amount Paid calculation to sum actual payment amounts
-  - Backend services (storage.ts, income-service.ts) already using config from database
-  - Added cache invalidation to admin config mutation for both `/api/admin/config` and `/api/system-config`
-  - All payment figures now controlled by admin via System Configuration page
-- **Immediate PB#### Assignment with Deferred Tree Placement (Complete - November 12, 2025):** Architectural refinement for better UX and data integrity:
-  - Users receive PB#### ID IMMEDIATELY during registration via PostgreSQL sequence (pb_user_id_seq)
-  - Binary leg preference stored at signup (left/right/null) and honored during activation
-  - Schema changes: userId non-nullable varchar(20), binaryLeg nullable (assigned at activation)
-  - Signup flow:
-    - Validates sponsor exists before creating user
-    - Generates sequential PB#### ID atomically (transaction-safe: nextval + insert)
-    - Stores binary leg preference from referral link (left/right/null)
-    - Sets isActivated=false
-    - User immediately sees PB#### ID in sidebar and dashboard
-  - Activation flow (when all 8 payments confirmed):
-    - Honors stored binary leg preference OR auto-assigns to balanced leg
-    - Updates sponsor's left/right leg counts (only after activation)
-    - Places user in global matrix
-    - Sets isActivated=true
-  - Binary tree visibility:
-    - Queries filter by isActivated=true AND userId IS NOT NULL
-    - Pre-activation users have PB#### ID but don't appear in tree
-    - Post-activation users appear in tree with their PB#### ID
-  - Sequence management:
-    - pb_user_id_seq initialized at server startup
-    - Next ID calculated from MAX(userId) + 1 (excludes PB0, PB1)
-    - Falls back to PB10000 if no users exist
-    - Logged at startup for verification
-- **PB0 Designated as Root Admin (Complete - November 12, 2025):** Updated admin hierarchy to designate PB0 as the primary root administrator:
-  - PB0 (admin@payback247.com) - Root Administrator with full system access
-  - PB1 (payback2472000@gmail.com) - Secondary Administrator with full system access
-  - Both PB0 and PB1 have access to database backup/restore functionality at `/admin/database`
-  - Updated initialization code, documentation (README.md), and database records
-  - Admin hierarchy: PB0 (root) > PB1 (secondary) > Regular Admins
+PAYBACK247 is a peer-to-peer income platform designed for network marketing, featuring binary pairing income, multi-level matrix rewards, and a manual payment tracking system with administrator approval. It enables users to activate accounts, build referral networks, monitor earnings, and manage profiles. Administrators can control system configurations, approve payments, and access analytics for efficient operation and financial transparency.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -95,14 +24,10 @@ Preferred communication style: Simple, everyday language.
 ### Data Storage
 - **Database**: PostgreSQL (Neon serverless).
 - **ORM**: Drizzle ORM for type-safe operations.
-- **Schema**:
-    - `users`: Authentication, profile data, binary and matrix positions.
-    - `activations`: Activation lifecycle, matrix uplines tracking.
-    - `activation_payments`: Tracking 8 payment slots per activation.
-    - `system_config`: Dynamic system configuration.
+- **Schema**: Users, activations, activation payments, and system configuration.
 - **Migrations**: Drizzle Kit.
 - **Validation**: Zod schemas for payment operations.
-- **Transaction Guarantees**: Atomic creation of activations and payments.
+- **Transaction Guarantees**: Atomic creation of activations and payments with row-level locking for idempotency and concurrency control.
 
 ### Object Storage
 - **Provider**: Replit Object Storage (Google Cloud Storage-backed).
@@ -114,41 +39,22 @@ Preferred communication style: Simple, everyday language.
 - **Authentication**: Email/password authentication with bcrypt hashing.
 - **Session Management**: Express sessions with PostgreSQL store.
 - **Role Detection**: Admin/user roles stored in database.
-- **User IDs**: Auto-generated sequential IDs (PB10000+)
-- **Admin Hierarchy**: PB0 (Root Administrator) and PB1 (Secondary Administrator) with database management access
-- **Binary Leg Auto-Assignment**: Automatically assigns to the leg with fewer members for balanced tree growth if not specified.
+- **User IDs**: Auto-generated sequential IDs (PB10000+).
+- **Admin Hierarchy**: PB0 (Root Administrator) and PB1 (Secondary Administrator) with database management access. Admin credentials are environment-driven secrets.
+- **Binary Leg Auto-Assignment**: Automatically assigns to the leg with fewer members for balanced tree growth if not specified during signup.
 
 ### Payment Processing
 - **8-Payment Activation System**: Each user activation requires 8 payments: Direct Sponsor (Slot 0), Binary Match (Slot 1), Creator Fee (Slot 2), Matrix Levels 1-5 (Slots 3-7).
-- **Dynamic Configuration**: Payment amounts, binary matching rules, and matching ratio are admin-configurable.
-- **Admin Fallback**: Payments automatically route to admin if eligible receiver is unavailable.
+- **Dynamic Configuration**: Payment amounts, binary matching rules, and matching ratio are admin-configurable via a centralized system configuration.
+- **Admin Fallback**: Payments automatically route to admin (PB0/PB1) if an eligible receiver is unavailable.
 - **Payment Mode**: Manual INR payments via UPI with UTR/Transaction ID and optional proof upload.
 - **Payment Flow**: User submits UTR/proof, receiver confirms/rejects (with reason), user can resubmit.
 - **Payment Status Tracking**: Pending, Submitted, Confirmed, Rejected.
 - **Profile Completion Enforcement**: Users must complete profile details before requesting activation.
 
 ### Key Application Pages
-
-#### User Pages
-- **Dashboard (`/user`)**: Main user dashboard with income overview, activation status, and network statistics. Income cards link to detailed income pages.
-- **Activation Page (`/user/activation`)**: Guides users through the 8-payment process, displaying admin payment details and payment submission options.
-- **Confirmation Page (`/user/confirmation`)**: Displays payments pending user confirmation.
-- **Binary Tree Page (`/user/binary-tree`)**: Full visualization of user's binary tree structure with detailed statistics.
-- **Global Matrix Page (`/user/global-matrix`)**: Full visualization of user's position in the global 2x5 matrix system with interactive tree and matrix statistics.
-- **Profile Page (`/user/profile`)**: User profile management.
-- **Re-entry Page (`/user/reentry`)**: Matrix re-entry management and history.
-- **Income Details Page (`/user/income/:type`)**: Unified income reporting for all income types (total, sponsor, binary, matrix, reentry) with full tree visualization and detailed breakdowns.
-  - Legacy routes (`/user/sponsoring`, `/user/binary`, `/user/matrix`) redirect to this unified system for backward compatibility.
-- **Binary Match Queue History (`/user/binary-match-queue-history`)**: Complete queue entry history with status timeline, payer information, and payment timestamps.
-- **Binary Pair Matching History (`/user/binary-pair-matching-history`)**: Track 3:3 pair qualifications with summary statistics and detailed qualification timeline.
-- **Matrix Income History (`/user/matrix-income-history`)**: Comprehensive matrix income transaction history with level-wise breakdowns and source user details.
-
-#### Admin Pages
-- **Admin Dashboard (`/admin`)**: Overview of system metrics and quick access to admin functions.
-- **Payment Confirmations (`/admin/payments`)**: Admin approval queue for offline payment proofs.
-- **Payments Report (`/admin/payments-report`)**: Comprehensive confirmed payments report with summaries and detailed tables.
-- **System Configuration (`/admin/config`)**: Dynamic configuration for payment amounts, binary matching rules, and admin UPI details.
-- **User Management (`/admin/users`)**: User administration and management.
+- **User Pages**: Dashboard, Activation, Confirmation, Binary Tree, Global Matrix, Profile, Re-entry, Unified Income Details, Binary Match Queue History, Binary Pair Matching History, Matrix Income History.
+- **Admin Pages**: Admin Dashboard, Payment Confirmations, Payments Report, System Configuration, User Management, Database Backup/Restore.
 
 ## External Dependencies
 
@@ -175,9 +81,64 @@ Preferred communication style: Simple, everyday language.
 ### Styling
 - **Tailwind CSS**: Utility-first CSS framework.
 - **PostCSS**: CSS processor.
-- **class-variance-authority**: Type-safe component variants.
-- **clsx & tailwind-merge**: Class name utilities.
 
 ### Third-Party Integrations
 - **Google Fonts**: Inter, JetBrains Mono.
 - **Date-fns**: Date manipulation and formatting.
+
+## Future Enhancements
+
+### Activation State Machine Refactor (Priority: HIGH, Estimated: 5-9 hours)
+
+**Current Limitation:**  
+The activation system creates income immediately upon payment confirmation. If activation later fails (e.g., matrix placement error), payments are confirmed and income is created, but the activation is marked as 'failed'. This creates a temporary inconsistency requiring manual investigation.
+
+**Proposed Solution:**  
+Implement a proper state machine for activation lifecycle with atomic income creation:
+
+**New Activation States:**
+- `awaiting_payments` → Initial state, waiting for all 8 payments
+- `payments_verified` → All 8 payments receiver-confirmed, ready to activate  
+- `activation_in_progress` → Currently processing (matrix placement, income creation)
+- `active` → Successfully activated (all income created atomically)
+- `failed` → Activation failed (no income created, payments stay 'verified' for retry)
+
+**New Payment States:**
+- `pending_submission` → User hasn't submitted proof yet
+- `awaiting_verification` → Submitted, waiting for receiver confirmation
+- `verified` → Receiver confirmed, waiting for activation to complete
+- `applied_to_activation` → Income successfully created during activation
+- `blocked` → Blocked due to activation failure (retriable)
+- `rejected` → Receiver rejected the payment
+
+**Key Changes Required:**
+1. **Schema Migration:** Safe two-stage PostgreSQL enum migration (create v2 enums, backfill, swap columns, drop old enums)
+2. **Payment Confirmation:** Change to mark payments as 'verified' instead of immediately creating income
+3. **Activation Processing:** Create ALL 8 income records atomically in single transaction during activation
+4. **Retry Mechanism:** Add admin interface to retry failed activations (reprocess matrix placement + income creation)
+5. **Failure Tracking:** Add `failure_reason`, `retry_count`, `last_transition_at` fields for audit trail
+
+**Benefits:**
+- Atomic income creation (all-or-nothing)
+- Clean rollback on failure (no orphaned income)
+- Clear audit trail of activation lifecycle
+- Admin retry capability for failed activations
+- Prevents "confirmed but unpaid" states
+
+**Migration Strategy:**
+1. Create migration SQL script with new enum types
+2. Backfill existing data with deterministic mappings (pending→awaiting_payments, completed→active, etc.)
+3. Update Zod schemas and validation
+4. Refactor confirmActivationPayment to use 'verified' status
+5. Refactor checkAndCompleteActivation to create income atomically
+6. Add admin retry interface
+7. Comprehensive testing
+
+**Defensive Mitigations (Current):**
+- ✅ Income verification check added (Bug #2 fix) - validates income exists before completing activation
+- ✅ Activation marked as 'failed' if income missing for manual investigation
+- ✅ SELECT FOR UPDATE locking prevents race conditions
+- ✅ 8-payment enforcement validates all slots exist
+
+**Decision Rationale:**
+Deferred to future sprint in favor of pragmatic targeted fixes (Bugs #2-#5). Current defensive checks provide adequate protection for production deployment while comprehensive state machine refactor requires dedicated 5-9 hour implementation window.

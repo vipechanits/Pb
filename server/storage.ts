@@ -24,7 +24,8 @@ import {
   notifications,
   passwordResetTokens,
   databaseBackups,
-  binaryMatchQueue
+  binaryMatchQueue,
+  incomeTransactions
 } from "@shared/schema";
 import { SLOT_TO_PAYMENT_TYPE, PAYMENT_TYPE_AMOUNTS } from "@shared/constants";
 import { eq, and, or, ne, isNull, desc, sql, lt, asc } from "drizzle-orm";
@@ -1001,19 +1002,36 @@ export class DbStorage implements IStorage {
         return undefined;
       }
       
-      // Step 2: Idempotency check - if already confirmed, return existing payment without creating duplicate income
-      if (existingPayment[0].status === 'confirmed') {
-        console.log(`[STORAGE] Payment ${id} already confirmed, skipping duplicate confirmation`);
-        return existingPayment[0];
+      const payment = existingPayment[0];
+      
+      // Step 2: Idempotency check - if already confirmed, verify income exists and return
+      if (payment.status === 'confirmed') {
+        console.log(`[STORAGE] Payment ${id} already confirmed, verifying income exists`);
+        
+        // DEFENSIVE: Check if income was actually created for this payment
+        // This handles edge case where status was updated but income creation failed
+        const existingIncome = await tx.select()
+          .from(incomeTransactions)
+          .where(eq(incomeTransactions.activationPaymentId, id))
+          .limit(1);
+        
+        if (existingIncome.length === 0 && payment.paymentType !== 'creator_fee' && payment.receiverUserId && payment.receiverUserId !== 'PB0') {
+          console.warn(`[STORAGE] WARNING: Payment ${id} is confirmed but no income exists - recreating income`);
+          const { IncomeService } = await import('./income-service');
+          const incomeService = new IncomeService(tx as any);
+          await incomeService.createIncomesForPayment(payment);
+        }
+        
+        return payment;
       }
       
       // Step 3: Ensure payment is in 'submitted' status before confirming
-      if (existingPayment[0].status !== 'submitted') {
-        throw new Error(`Cannot confirm payment in status '${existingPayment[0].status}' - must be 'submitted'`);
+      if (payment.status !== 'submitted') {
+        throw new Error(`Cannot confirm payment in status '${payment.status}' - must be 'submitted'`);
       }
       
       // Step 4: Update payment status to confirmed
-      const result = await tx.update(activationPayments)
+      const updateResult = await tx.update(activationPayments)
         .set({ 
           status: 'confirmed',
           confirmedAt: new Date(),
@@ -1023,20 +1041,20 @@ export class DbStorage implements IStorage {
         .where(eq(activationPayments.id, id))
         .returning();
       
-      const payment = result[0];
-      if (!payment) {
+      const confirmedPayment = updateResult[0];
+      if (!confirmedPayment) {
         console.log(`[STORAGE] Payment ${id} update failed`);
         return undefined;
       }
       
-      console.log(`[STORAGE] Payment updated successfully, creating income for receiver: ${payment.receiverUserId}`);
+      console.log(`[STORAGE] Payment updated successfully, creating income for receiver: ${confirmedPayment.receiverUserId}`);
 
       const { IncomeService } = await import('./income-service');
       const incomeService = new IncomeService(tx as any);
       
       try {
-        console.log(`[STORAGE] Creating income for payment type: ${payment.paymentType}`);
-        await incomeService.createIncomesForPayment(payment);
+        console.log(`[STORAGE] Creating income for payment type: ${confirmedPayment.paymentType}`);
+        await incomeService.createIncomesForPayment(confirmedPayment);
         console.log(`[STORAGE] Income created successfully`);
       } catch (error) {
         console.error('[STORAGE] Error creating income for payment:', error);
@@ -1045,8 +1063,8 @@ export class DbStorage implements IStorage {
 
       // If this is a binary_match payment to a real user (not admin), mark queue entry as paid
       // DEFENSIVE: Skip if receiver is PB0 (admin fallback) even if receiverType was incorrectly set to 'user'
-      if (payment.paymentType === 'binary_match' && payment.receiverType === 'user' && payment.receiverUserId !== 'PB0') {
-        console.log(`[STORAGE] Marking binary match queue entry as paid for user ${payment.receiverUserId}`);
+      if (confirmedPayment.paymentType === 'binary_match' && confirmedPayment.receiverType === 'user' && confirmedPayment.receiverUserId !== 'PB0') {
+        console.log(`[STORAGE] Marking binary match queue entry as paid for user ${confirmedPayment.receiverUserId}`);
         
         // Update queue entry from reserved → paid
         // Match by activation ID to ensure we update the correct reserved entry
@@ -1056,32 +1074,32 @@ export class DbStorage implements IStorage {
             paidAt: new Date(),
           })
           .where(and(
-            eq(binaryMatchQueue.userId, payment.receiverUserId!),
-            eq(binaryMatchQueue.paidByActivationId, payment.activationId),
+            eq(binaryMatchQueue.userId, confirmedPayment.receiverUserId!),
+            eq(binaryMatchQueue.paidByActivationId, confirmedPayment.activationId),
             eq(binaryMatchQueue.status, 'reserved') // MUST be reserved (not waiting or already paid)
           ))
           .returning();
         
         if (queueUpdateResult.length > 0) {
-          console.log(`[STORAGE] Queue entry marked as paid - user ${payment.receiverUserId} received ₹${payment.amountInr}`);
+          console.log(`[STORAGE] Queue entry marked as paid - user ${confirmedPayment.receiverUserId} received ₹${confirmedPayment.amountInr}`);
         } else {
           // This is a critical error - means the queue entry was not properly reserved
-          console.error(`[STORAGE] CRITICAL ERROR: No reserved queue entry found for user ${payment.receiverUserId} and activation ${payment.activationId}`);
+          console.error(`[STORAGE] CRITICAL ERROR: No reserved queue entry found for user ${confirmedPayment.receiverUserId} and activation ${confirmedPayment.activationId}`);
           throw new Error(`Queue entry not found for binary match payment confirmation`);
         }
-      } else if (payment.paymentType === 'binary_match' && payment.receiverUserId === 'PB0') {
+      } else if (confirmedPayment.paymentType === 'binary_match' && confirmedPayment.receiverUserId === 'PB0') {
         // Binary match payment to admin (queue was empty)
         console.log(`[STORAGE] Binary match payment to admin (queue empty fallback) - no queue entry to mark`);
-        if (payment.receiverType === 'user') {
+        if (confirmedPayment.receiverType === 'user') {
           console.warn(`[STORAGE] WARNING: Binary match payment to PB0 has receiverType='user' - should be 'admin'`);
         }
       }
 
-      console.log(`[STORAGE] Checking if all 8 payments are confirmed for activation ${payment.activationId}`);
-      await this.checkAndCompleteActivation(payment.activationId, payment.payerUserId, tx);
+      console.log(`[STORAGE] Checking if all 8 payments are confirmed for activation ${confirmedPayment.activationId}`);
+      await this.checkAndCompleteActivation(confirmedPayment.activationId, confirmedPayment.payerUserId, tx);
       
       console.log(`[STORAGE] Payment confirmation complete`);
-      return payment;
+      return confirmedPayment;
     });
   }
 
@@ -1095,11 +1113,55 @@ export class DbStorage implements IStorage {
           .where(eq(activationPayments.activationId, activationId))
           .for('update');
         
-        // Verify exactly 8 payments exist and all are confirmed
-        const allConfirmed = payments.length === 8 && payments.every((p: any) => p.status === 'confirmed');
+        // BUG #5 FIX: Strict 8-payment enforcement - verify exactly 8 payments exist
+        if (payments.length !== 8) {
+          console.error(`[ACTIVATION ERROR] Expected 8 payments, found ${payments.length} for activation ${activationId}`);
+          throw new Error(`8-payment enforcement failed: Expected 8 payments, found ${payments.length}`);
+        }
+        
+        // Verify all payments are confirmed
+        const allConfirmed = payments.every((p: any) => p.status === 'confirmed');
+        
+        if (!allConfirmed) {
+          const pendingCount = payments.filter((p: any) => p.status !== 'confirmed').length;
+          console.log(`[ACTIVATION] Waiting for ${pendingCount} more payments to be confirmed`);
+          return; // Exit gracefully - not ready yet
+        }
+        
+        console.log(`[ACTIVATION] All 8 payments confirmed. Verifying income creation...`);
+        
+        // BUG #2 FIX: Defensive income verification - ensure income was created for all confirmed payments
+        // This prevents "confirmed but unpaid" states if income creation failed
+        // CRITICAL: Only count slot-linked income (activationPaymentId NOT NULL) to exclude queue payouts
+        const expectedIncomeCount = 8; // One income per payment slot (0-7)
+        const actualIncome = await tx.select()
+          .from(incomeTransactions)
+          .where(and(
+            eq(incomeTransactions.activationId, activationId),
+            eq(incomeTransactions.status, 'confirmed'),
+            sql`${incomeTransactions.activationPaymentId} IS NOT NULL` // Exclude queue payouts (they have NULL activationPaymentId)
+          ));
+        
+        if (actualIncome.length !== expectedIncomeCount) {
+          // CRITICAL: Payments confirmed but income missing - this is a data integrity issue
+          console.error(`[ACTIVATION ERROR] Income mismatch for ${activationId}: Expected ${expectedIncomeCount}, Found ${actualIncome.length}`);
+          console.error(`[ACTIVATION ERROR] Confirmed payments: ${payments.length}, Income created: ${actualIncome.length}`);
+          
+          // Mark activation as failed for manual investigation
+          await tx.update(activations)
+            .set({ 
+              status: 'failed',
+              completedAt: new Date()
+            })
+            .where(eq(activations.id, activationId));
+          
+          throw new Error(`Income verification failed: Expected ${expectedIncomeCount} income records, found ${actualIncome.length}. Activation marked as FAILED for manual investigation.`);
+        }
+        
+        console.log(`[ACTIVATION] ✓ Income verification passed: ${actualIncome.length} income records confirmed`);
         
         if (allConfirmed) {
-          console.log(`[ACTIVATION] All 8 payments confirmed for user. Activating...`);
+          console.log(`[ACTIVATION] All validations passed. Proceeding with activation...`);
           
           // Load the user by PB#### ID (payerUserId now contains PB#### IDs after migration)
           const activatedUserRows = await tx.select()
@@ -1173,7 +1235,21 @@ export class DbStorage implements IStorage {
           
           // CRITICAL: Verify matrix placement succeeded before continuing
           if (!placedUser || !placedUser.matrixParentId || !placedUser.matrixLevel || !placedUser.matrixPath) {
-            throw new Error(`Matrix placement failed for user ${activatedUser.userId} - transaction will roll back`);
+            // Matrix placement failed - mark activation as failed before rolling back
+            // This allows us to track and potentially retry failed activations
+            await tx.update(activations)
+              .set({ 
+                status: 'failed',
+                completedAt: now,
+                notes: 'Matrix placement failed - matrix may be saturated or placement logic error'
+              })
+              .where(eq(activations.id, activationId));
+            
+            // Log critical error for manual investigation
+            console.error(`[ACTIVATION] CRITICAL: Matrix placement failed for ${activatedUser.userId} - activation marked as FAILED`);
+            console.error(`[ACTIVATION] Admin must investigate: ${activationId}`);
+            
+            throw new Error(`Matrix placement failed for user ${activatedUser.userId} - activation marked as FAILED for manual investigation`);
           }
           
           console.log(`[MATRIX] ✓ User ${activatedUser.userId} successfully placed in matrix at ${placedUser.matrixPath} (Level ${placedUser.matrixLevel})`);
