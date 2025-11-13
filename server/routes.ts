@@ -818,6 +818,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/users/:userId/direct-referrals", requireAuth, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const requestingUser = await storage.getUserById(req.session.userId!);
+      
+      if (requestingUser?.userId !== userId && requestingUser?.role !== 'admin') {
+        return res.status(403).json({ error: "Forbidden - You can only view your own direct referrals" });
+      }
+      
+      const referrals = await storage.getDirectReferrals(userId);
+      
+      const referralData = referrals.map(ref => ({
+        userId: ref.userId,
+        name: ref.name,
+        email: ref.email,
+        mobile: ref.mobile,
+        isActivated: ref.isActivated,
+        binaryLeg: ref.binaryLeg,
+        createdAt: ref.createdAt,
+        activatedAt: ref.activatedAt,
+      }));
+      
+      res.json(referralData);
+    } catch (error) {
+      console.error("Error fetching direct referrals:", error);
+      res.status(500).json({ error: "Failed to fetch direct referrals" });
+    }
+  });
+
+  app.get("/api/global-matrix/stats", requireAuth, async (req, res) => {
+    try {
+      const stats = await db.execute(sql`
+        WITH level_stats AS (
+          SELECT 
+            COALESCE(matrix_level, -1) as level,
+            COUNT(*) as count
+          FROM users
+          WHERE matrix_level IS NOT NULL
+            AND matrix_path IS NOT NULL
+            AND is_activated = true
+          GROUP BY matrix_level
+        ),
+        total_activated AS (
+          SELECT COUNT(*) as count
+          FROM users
+          WHERE is_activated = true
+            AND matrix_level IS NOT NULL
+        )
+        SELECT 
+          json_build_object(
+            'totalCapacity', (2 + 4 + 8 + 16 + 32),
+            'totalFilled', (SELECT count FROM total_activated),
+            'levelBreakdown', (
+              SELECT json_agg(
+                json_build_object('level', level, 'filled', count)
+                ORDER BY level
+              )
+              FROM level_stats
+            )
+          ) as stats
+      `);
+
+      const result = stats.rows[0] as { stats: any };
+      const matrixStats = result.stats || {
+        totalCapacity: 62,
+        totalFilled: 0,
+        levelBreakdown: []
+      };
+
+      const levelCapacities = [2, 4, 8, 16, 32];
+      const levelBreakdown = levelCapacities.map((capacity, index) => {
+        const level = index + 1;
+        const existing = matrixStats.levelBreakdown?.find((l: any) => l.level === level);
+        return {
+          level,
+          capacity,
+          filled: existing?.filled || 0,
+          available: capacity - (existing?.filled || 0)
+        };
+      });
+
+      res.json({
+        totalCapacity: matrixStats.totalCapacity,
+        totalFilled: matrixStats.totalFilled || 0,
+        percentageFilled: matrixStats.totalFilled 
+          ? Math.round((matrixStats.totalFilled / matrixStats.totalCapacity) * 100) 
+          : 0,
+        levelBreakdown
+      });
+    } catch (error) {
+      console.error("Error fetching global matrix stats:", error);
+      res.status(500).json({ error: "Failed to fetch global matrix statistics" });
+    }
+  });
+
   app.get("/api/users/:userId/global-matrix", requireAuth, async (req, res) => {
     try {
       const { userId } = req.params;

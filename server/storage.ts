@@ -47,6 +47,7 @@ export interface IStorage {
   determineBestLeg(sponsorUserId: string): Promise<'left' | 'right'>;
   checkProfileComplete(identifier: string): Promise<boolean>;
   getUsersBySponsorAndLeg(sponsorUserId: string, leg: 'left' | 'right'): Promise<User[]>;
+  getDirectReferrals(sponsorUserId: string): Promise<User[]>;
   
   // Binary match queue methods
   releaseAbandonedQueueReservations(hoursOld?: number): Promise<number>;
@@ -490,6 +491,18 @@ export class DbStorage implements IStorage {
         sql`${users.userId} IS NOT NULL` // Ensure user has PB#### ID assigned
       ))
       .orderBy(users.createdAt);
+    return result;
+  }
+
+  async getDirectReferrals(sponsorUserId: string): Promise<User[]> {
+    const result = await db
+      .select()
+      .from(users)
+      .where(and(
+        eq(users.sponsorId, sponsorUserId),
+        sql`${users.userId} IS NOT NULL`
+      ))
+      .orderBy(desc(users.createdAt));
     return result;
   }
 

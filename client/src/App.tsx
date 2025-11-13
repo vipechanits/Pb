@@ -23,6 +23,7 @@ import UserConfirmationPage from '@/pages/user-confirmation';
 import UserBinaryTreePage from '@/pages/user-binary-tree';
 import UserGlobalMatrixPage from '@/pages/user-global-matrix';
 import UserIncomeDetailsPage from '@/pages/user-income-details';
+import DirectSponsoringPage from '@/pages/user/direct-sponsoring';
 import BinaryMatchQueueHistory from '@/pages/user/binary-match-queue-history';
 import BinaryPairMatchingHistory from '@/pages/user/binary-pair-matching-history';
 import MatrixIncomeHistory from '@/pages/user/matrix-income-history';
@@ -165,6 +166,16 @@ function Router() {
           <ProtectedRoute>
             <DashboardLayout>
               <UserGlobalMatrixPage />
+            </DashboardLayout>
+          </ProtectedRoute>
+        )}
+      </Route>
+      
+      <Route path="/user/direct-sponsoring">
+        {() => (
+          <ProtectedRoute>
+            <DashboardLayout>
+              <DirectSponsoringPage />
             </DashboardLayout>
           </ProtectedRoute>
         )}

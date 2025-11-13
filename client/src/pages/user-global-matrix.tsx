@@ -2,8 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
 import { useAuth } from '@/lib/auth-context';
-import { Network, CheckCircle, XCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Network, CheckCircle, XCircle, AlertCircle, Loader2, TrendingUp, Users, Layers } from 'lucide-react';
 
 interface MatrixNode {
   userId: string;
@@ -15,6 +16,18 @@ interface MatrixNode {
   matrixPath: string | null;
   leftChild: MatrixNode | null;
   rightChild: MatrixNode | null;
+}
+
+interface MatrixStats {
+  totalCapacity: number;
+  totalFilled: number;
+  percentageFilled: number;
+  levelBreakdown: Array<{
+    level: number;
+    capacity: number;
+    filled: number;
+    available: number;
+  }>;
 }
 
 interface MatrixNodeProps {
@@ -71,6 +84,107 @@ function MatrixNodeComponent({ node, position, depth }: MatrixNodeProps) {
         </div>
       )}
     </div>
+  );
+}
+
+function MatrixFillingStatus() {
+  const { data: stats, isLoading } = useQuery<MatrixStats>({
+    queryKey: ['/api/global-matrix/stats'],
+  });
+
+  if (isLoading || !stats) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="flex items-center justify-center">
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="border-purple-500/30 bg-gradient-to-br from-purple-50/50 to-pink-50/50 dark:from-purple-950/20 dark:to-pink-950/20">
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <Layers className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+          <CardTitle>Global Matrix Filling Status</CardTitle>
+        </div>
+        <CardDescription>Real-time overview of the 2×5 global matrix capacity</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Users className="w-4 h-4" />
+              <span>Total Capacity</span>
+            </div>
+            <div className="text-2xl font-bold" data-testid="stat-total-capacity">
+              {stats.totalCapacity}
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <CheckCircle className="w-4 h-4" />
+              <span>Filled Positions</span>
+            </div>
+            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400" data-testid="stat-filled">
+              {stats.totalFilled}
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <TrendingUp className="w-4 h-4" />
+              <span>Fill Percentage</span>
+            </div>
+            <div className="text-2xl font-bold text-pink-600 dark:text-pink-400" data-testid="stat-percentage">
+              {stats.percentageFilled}%
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Overall Progress</span>
+            <span className="font-medium">{stats.totalFilled} / {stats.totalCapacity}</span>
+          </div>
+          <Progress value={stats.percentageFilled} className="h-2" data-testid="progress-bar" />
+        </div>
+
+        <div className="space-y-3 pt-2">
+          <h4 className="text-sm font-semibold">Level-wise Breakdown</h4>
+          <div className="space-y-2">
+            {stats.levelBreakdown.map((level) => (
+              <div key={level.level} className="flex items-center gap-3">
+                <Badge variant="outline" className="min-w-16 justify-center">
+                  Level {level.level}
+                </Badge>
+                <div className="flex-1">
+                  <Progress 
+                    value={(level.filled / level.capacity) * 100} 
+                    className="h-1.5"
+                    data-testid={`progress-level-${level.level}`}
+                  />
+                </div>
+                <span className="text-xs text-muted-foreground min-w-20 text-right" data-testid={`stat-level-${level.level}`}>
+                  {level.filled} / {level.capacity}
+                </span>
+                <Badge 
+                  variant={level.available > 0 ? "default" : "secondary"} 
+                  className="min-w-16 justify-center text-xs"
+                  data-testid={`badge-available-${level.level}`}
+                >
+                  {level.available} left
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -145,6 +259,8 @@ export default function UserGlobalMatrixPage() {
           View your position in the global 2x5 matrix system
         </p>
       </div>
+
+      <MatrixFillingStatus />
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>

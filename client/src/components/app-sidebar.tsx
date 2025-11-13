@@ -31,6 +31,7 @@ import {
   Clock,
   Trophy,
   TrendingUp,
+  UserPlus,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth-context';
@@ -78,6 +79,11 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       title: 'Global Matrix',
       url: '/user/global-matrix',
       icon: Grid3x3,
+    },
+    {
+      title: 'Direct Sponsoring',
+      url: '/user/direct-sponsoring',
+      icon: UserPlus,
     },
     {
       title: 'Re-entry Cycles',
