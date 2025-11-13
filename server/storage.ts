@@ -1198,24 +1198,30 @@ export class DbStorage implements IStorage {
           return; // Exit gracefully - not ready yet
         }
         
-        console.log(`[ACTIVATION] All 8 payments confirmed. Verifying income creation...`);
+        console.log(`[ACTIVATION] All 8 payments confirmed. Verifying non-matrix income creation...`);
         
-        // BUG #2 FIX: Defensive income verification - ensure income was created for all confirmed payments
-        // This prevents "confirmed but unpaid" states if income creation failed
+        // BUG #2 FIX: Defensive income verification - ensure income was created for non-matrix confirmed payments
+        // Matrix payments have deferred income creation (happens after matrix placement)
+        // At this point, we only verify direct_sponsor, binary_match, creator_fee (slots 0-2)
         // CRITICAL: Only count slot-linked income (activationPaymentId NOT NULL) to exclude queue payouts
-        const expectedIncomeCount = 8; // One income per payment slot (0-7)
-        const actualIncome = await tx.select()
+        const expectedNonMatrixIncomeCount = 3; // Slots 0-2 (direct_sponsor, binary_match, creator_fee)
+        const actualNonMatrixIncome = await tx.select()
           .from(incomeTransactions)
           .where(and(
             eq(incomeTransactions.activationId, activationId),
             eq(incomeTransactions.status, 'confirmed'),
-            sql`${incomeTransactions.activationPaymentId} IS NOT NULL` // Exclude queue payouts (they have NULL activationPaymentId)
+            sql`${incomeTransactions.activationPaymentId} IS NOT NULL`, // Exclude queue payouts (they have NULL activationPaymentId)
+            sql`${incomeTransactions.activationPaymentId} IN (
+              SELECT id FROM ${activationPayments} 
+              WHERE ${activationPayments.activationId} = ${activationId} 
+              AND ${activationPayments.paymentType} NOT LIKE 'matrix_level_%'
+            )`
           ));
         
-        if (actualIncome.length !== expectedIncomeCount) {
-          // CRITICAL: Payments confirmed but income missing - this is a data integrity issue
-          console.error(`[ACTIVATION ERROR] Income mismatch for ${activationId}: Expected ${expectedIncomeCount}, Found ${actualIncome.length}`);
-          console.error(`[ACTIVATION ERROR] Confirmed payments: ${payments.length}, Income created: ${actualIncome.length}`);
+        if (actualNonMatrixIncome.length !== expectedNonMatrixIncomeCount) {
+          // CRITICAL: Non-matrix payments confirmed but income missing - this is a data integrity issue
+          console.error(`[ACTIVATION ERROR] Non-matrix income mismatch for ${activationId}: Expected ${expectedNonMatrixIncomeCount}, Found ${actualNonMatrixIncome.length}`);
+          console.error(`[ACTIVATION ERROR] Confirmed payments: ${payments.length}, Non-matrix income created: ${actualNonMatrixIncome.length}`);
           
           // Mark activation as failed for manual investigation
           await tx.update(activations)
@@ -1225,10 +1231,10 @@ export class DbStorage implements IStorage {
             })
             .where(eq(activations.id, activationId));
           
-          throw new Error(`Income verification failed: Expected ${expectedIncomeCount} income records, found ${actualIncome.length}. Activation marked as FAILED for manual investigation.`);
+          throw new Error(`Income verification failed: Expected ${expectedNonMatrixIncomeCount} non-matrix income records, found ${actualNonMatrixIncome.length}. Activation marked as FAILED for manual investigation.`);
         }
         
-        console.log(`[ACTIVATION] ✓ Income verification passed: ${actualIncome.length} income records confirmed`);
+        console.log(`[ACTIVATION] ✓ Non-matrix income verification passed: ${actualNonMatrixIncome.length} income records confirmed`);
         
         if (allConfirmed) {
           console.log(`[ACTIVATION] All validations passed. Proceeding with activation...`);
@@ -1392,6 +1398,32 @@ export class DbStorage implements IStorage {
           }
           
           console.log(`[MATRIX] ✓ Deferred income creation completed for all matrix payments`);
+          
+          // Final verification: Ensure all 8 income records now exist (3 non-matrix + 5 matrix)
+          const allIncome = await tx.select()
+            .from(incomeTransactions)
+            .where(and(
+              eq(incomeTransactions.activationId, activationId),
+              eq(incomeTransactions.status, 'confirmed'),
+              sql`${incomeTransactions.activationPaymentId} IS NOT NULL`
+            ));
+          
+          if (allIncome.length !== 8) {
+            console.error(`[ACTIVATION ERROR] Final income verification failed: Expected 8, Found ${allIncome.length}`);
+            
+            // Mark activation as failed
+            await tx.update(activations)
+              .set({ 
+                status: 'failed',
+                completedAt: new Date(),
+                notes: 'Final income verification failed after deferred income creation'
+              })
+              .where(eq(activations.id, activationId));
+            
+            throw new Error(`Final income verification failed: Expected 8 income records, found ${allIncome.length}. Activation marked as FAILED.`);
+          }
+          
+          console.log(`[ACTIVATION] ✓ Final income verification passed: All 8 income records confirmed`);
           
           // Step 4: Update sponsor's network statistics NOW (only after activation)
           // This is when the user becomes visible in the binary tree
