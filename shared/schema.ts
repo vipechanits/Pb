@@ -34,6 +34,7 @@ export const incomeTypeEnum = pgEnum("income_type", [
   "matrix_level_3",
   "matrix_level_4",
   "matrix_level_5",
+  "system_fee", // For creator fees and other admin system payments
 ]);
 
 export const incomeStatusEnum = pgEnum("income_status", ["pending", "confirmed", "failed", "reversed"]);

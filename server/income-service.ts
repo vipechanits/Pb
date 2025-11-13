@@ -10,29 +10,36 @@ export class IncomeService {
   }
 
   async createIncomesForPayment(payment: ActivationPayment): Promise<void> {
-    if (payment.receiverUserId === null && payment.receiverType === 'admin') {
-      return;
-    }
-
-    if (!payment.receiverUserId) {
-      throw new Error('Payment must have a receiver to create income');
-    }
-
     const incomeType = this.getIncomeTypeFromPaymentType(payment.paymentType);
     
-    // Skip income creation for system fees (creator_fee)
-    if (incomeType === null) {
-      console.log(`[INCOME] Skipping income creation for system fee: ${payment.paymentType}`);
-      return;
+    if (!incomeType) {
+      throw new Error(`No income type mapped for payment type: ${payment.paymentType}`);
+    }
+    
+    // Determine final receiver ID with strict validation
+    // ONLY creator_fee can have null receiverUserId (defaults to PB0)
+    // ALL other payments (including future admin payment types) MUST have receiverUserId
+    let finalReceiverId: string;
+    if (payment.paymentType === 'creator_fee' && !payment.receiverUserId) {
+      // creator_fee is the only payment type that can have null receiverUserId
+      // This is a known system fee that goes to admin (PB0)
+      finalReceiverId = 'PB0';
+      console.log(`[INCOME] creator_fee has null receiverUserId, defaulting to PB0`);
+    } else if (!payment.receiverUserId) {
+      // ALL other payments MUST have receiverUserId populated
+      // This includes: direct_sponsor, binary_match, matrix_level_*, and any future admin payments
+      throw new Error(`Payment ${payment.id} (type: ${payment.paymentType}) has null receiverUserId. Only creator_fee can have null receiver. This indicates a data integrity issue that must be fixed upstream.`);
+    } else {
+      finalReceiverId = payment.receiverUserId;
     }
     
     const amount = payment.amountInr;
 
     const incomeRecord: InsertIncomeTransaction = {
-      userId: payment.receiverUserId,
+      userId: finalReceiverId,
       activationId: payment.activationId,
       activationPaymentId: payment.id,
-      incomeType,
+      incomeType: incomeType,
       amountInr: amount,
       status: 'confirmed',
       sourceUserId: payment.payerUserId,
@@ -49,7 +56,15 @@ export class IncomeService {
         .returning();
 
       if (result.length > 0) {
-        await this.updateUserIncomeSummary(payment.receiverUserId, incomeType, amount);
+        // Only update user summary for non-system-fee income types
+        // System fees (creator_fee) go to admin but don't count as MLM earnings
+        // Admin (PB0/PB1) also doesn't need summary updates
+        const isAdmin = finalReceiverId === 'PB0' || finalReceiverId === 'PB1';
+        if (incomeType !== 'system_fee' && !isAdmin) {
+          await this.updateUserIncomeSummary(finalReceiverId, incomeType, amount);
+        } else {
+          console.log(`[INCOME] Created ${incomeType} income record for ${payment.paymentType} (receiver: ${finalReceiverId}) without updating user summary`);
+        }
       }
     } catch (error) {
       console.error('Error creating income transaction:', error);
@@ -58,6 +73,11 @@ export class IncomeService {
   }
 
   private async updateUserIncomeSummary(userId: string, incomeType: InsertIncomeTransaction['incomeType'], amount: string): Promise<void> {
+    // System fees should never reach this method - they're filtered out in createIncomesForPayment
+    if (incomeType === 'system_fee') {
+      throw new Error('system_fee income should not update user summaries');
+    }
+
     const fieldMap: Record<InsertIncomeTransaction['incomeType'], keyof typeof userIncomeSummaries> = {
       direct_sponsor: 'directSponsorIncome',
       binary_match: 'binaryMatchIncome',
@@ -66,6 +86,7 @@ export class IncomeService {
       matrix_level_3: 'matrixLevel3Income',
       matrix_level_4: 'matrixLevel4Income',
       matrix_level_5: 'matrixLevel5Income',
+      system_fee: 'userId', // Placeholder - should never be accessed due to guard above
     };
 
     const field = fieldMap[incomeType];
@@ -106,8 +127,9 @@ export class IncomeService {
       case 'binary_match':
         return 'binary_match';
       case 'creator_fee':
-        // Creator fee goes to admin but doesn't generate income record (it's a system fee)
-        return null;
+        // Creator fee is tracked as system_fee income type for data integrity
+        // Counted in Bug #2 validation but excluded from user MLM summaries
+        return 'system_fee';
       case 'matrix_level_1':
         return 'matrix_level_1';
       case 'matrix_level_2':
