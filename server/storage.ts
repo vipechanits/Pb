@@ -1078,16 +1078,28 @@ export class DbStorage implements IStorage {
       
       console.log(`[STORAGE] Payment updated successfully, creating income for receiver: ${confirmedPayment.receiverUserId}`);
 
-      const { IncomeService } = await import('./income-service');
-      const incomeService = new IncomeService(tx as any);
+      // IMPORTANT: Skip income creation for matrix payments (slots 3-7)
+      // Matrix payments need deferred income creation because:
+      // 1. Matrix placement only happens AFTER all 8 payments are confirmed
+      // 2. At confirmation time, receiver_user_id is still PB0 (placeholder)
+      // 3. Real matrix uplines are discovered during checkAndCompleteActivation
+      // 4. Income will be created there with correct receivers
+      const isMatrixPayment = confirmedPayment.paymentType.startsWith('matrix_level_');
       
-      try {
-        console.log(`[STORAGE] Creating income for payment type: ${confirmedPayment.paymentType}`);
-        await incomeService.createIncomesForPayment(confirmedPayment);
-        console.log(`[STORAGE] Income created successfully`);
-      } catch (error) {
-        console.error('[STORAGE] Error creating income for payment:', error);
-        throw error;
+      if (isMatrixPayment) {
+        console.log(`[STORAGE] Skipping income creation for ${confirmedPayment.paymentType} - will be created after matrix placement`);
+      } else {
+        const { IncomeService } = await import('./income-service');
+        const incomeService = new IncomeService(tx as any);
+        
+        try {
+          console.log(`[STORAGE] Creating income for payment type: ${confirmedPayment.paymentType}`);
+          await incomeService.createIncomesForPayment(confirmedPayment);
+          console.log(`[STORAGE] Income created successfully`);
+        } catch (error) {
+          console.error('[STORAGE] Error creating income for payment:', error);
+          throw error;
+        }
       }
 
       // If this is a binary_match payment to a real user (not admin), mark queue entry as paid
@@ -1354,6 +1366,32 @@ export class DbStorage implements IStorage {
           await tx.update(activations)
             .set(matrixUplines)
             .where(eq(activations.id, activationId));
+          
+          // Create deferred income for matrix payments now that receivers are assigned correctly
+          // This completes the deferred income creation that was skipped in confirmActivationPayment
+          console.log(`[MATRIX] Creating deferred income for matrix payments with correct receivers...`);
+          const { IncomeService } = await import('./income-service');
+          const incomeService = new IncomeService(tx as any);
+          
+          // Fetch all confirmed matrix payments for this activation
+          const matrixPayments = await tx.select()
+            .from(activationPayments)
+            .where(and(
+              eq(activationPayments.activationId, activationId),
+              sql`${activationPayments.paymentType} LIKE 'matrix_level_%'`,
+              eq(activationPayments.status, 'confirmed')
+            ));
+          
+          console.log(`[MATRIX] Found ${matrixPayments.length} confirmed matrix payments to create income for`);
+          
+          for (const payment of matrixPayments) {
+            // Create income for all matrix payments, including admin fallback (PB0)
+            // Income records are needed for reconciliation even when payments go to admin
+            console.log(`[MATRIX] Creating income for ${payment.paymentType} → ${payment.receiverUserId} (₹${payment.amountInr})`);
+            await incomeService.createIncomesForPayment(payment);
+          }
+          
+          console.log(`[MATRIX] ✓ Deferred income creation completed for all matrix payments`);
           
           // Step 4: Update sponsor's network statistics NOW (only after activation)
           // This is when the user becomes visible in the binary tree

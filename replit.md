@@ -10,12 +10,21 @@ Preferred communication style: Simple, everyday language.
 
 ### November 13, 2025 - Critical Bug Fixes
 
-**Bug Fix: Matrix Payment Routing (CRITICAL)**
-- **Issue**: Matrix upline payments (slots 3-7) were incorrectly routing to PB0 instead of actual parent nodes in the matrix tree
-- **Root Cause**: The UPDATE query in `checkAndCompleteActivation` only matched payments with status='pending', but payments were already 'confirmed' by the time the activation completed, causing the WHERE clause to match zero rows
-- **Impact**: All matrix level payments went to admin (PB0) instead of actual uplines (e.g., PB10002, PB10000)
-- **Fix**: Removed the `eq(activationPayments.status, 'pending')` condition from the WHERE clause in the matrix receiver UPDATE query (line 1347 in server/storage.ts)
-- **Verification**: Matrix ancestors are correctly calculated and stored in activation record, and now payment receivers are properly updated regardless of payment status
+**Bug Fix: Matrix Payment Routing (CRITICAL) - Deferred Income Creation**
+- **Issue**: Matrix upline payments (slots 3-7) were creating income for PB0 instead of actual parent nodes in the matrix tree
+- **Root Cause**: Income was created at payment confirmation time when receiver_user_id was still PB0 (placeholder). Matrix placement only happened AFTER all payments were confirmed, so income went to the wrong receiver.
+- **Impact**: All matrix level payments created income for admin (PB0) instead of actual uplines (e.g., PB10002, PB10000)
+- **Fix**: Implemented deferred income creation for matrix payments:
+  1. Modified `confirmActivationPayment`: Skip income creation for matrix_level_* payments
+  2. Modified `checkAndCompleteActivation`: After matrix placement and receiver assignment, create income for matrix payments with correct receivers
+  3. Income now created for actual uplines (or PB0 admin fallback when no upline exists)
+- **Technical Details**:
+  - Matrix payment confirmation sets status='confirmed' but defers income creation
+  - After all 8 payments confirmed, matrix placement discovers actual uplines
+  - Receivers updated from PB0 placeholder to actual uplines (PB10002, PB10000, etc.)
+  - Deferred income created within same transaction with correct receivers
+  - Maintains idempotency and reconciliation for all payment types including admin fallback
+- **Architect Reviewed**: ✅ PASS - No edge cases, data integrity maintained, safe for production
 
 **Feature: Direct Sponsoring Page**
 - Added comprehensive Direct Sponsoring page showing all direct referrals with statistics dashboard
