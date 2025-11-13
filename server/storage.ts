@@ -1115,6 +1115,35 @@ export class DbStorage implements IStorage {
     try {
       // Execute the logic within the provided transaction or create a new one
       const executeLogic = async (tx: any) => {
+        // CRITICAL FIX: Lock activation record FIRST to prevent race conditions
+        // This serializes access so only one transaction can complete activation
+        console.log(`[ACTIVATION] Acquiring lock on activation ${activationId}...`);
+        const activationLock = await tx.select()
+          .from(activations)
+          .where(eq(activations.id, activationId))
+          .for('update')
+          .limit(1);
+        
+        if (activationLock.length === 0) {
+          console.error(`[ACTIVATION] Activation ${activationId} not found`);
+          return;
+        }
+        
+        const lockedActivation = activationLock[0];
+        
+        // Idempotency check: If already completed/failed, skip
+        if (lockedActivation.status === 'completed') {
+          console.log(`[ACTIVATION] Activation ${activationId} already completed, skipping`);
+          return;
+        }
+        
+        if (lockedActivation.status === 'failed') {
+          console.log(`[ACTIVATION] Activation ${activationId} marked as failed, skipping`);
+          return;
+        }
+        
+        console.log(`[ACTIVATION] Lock acquired, activation status: ${lockedActivation.status}`);
+        
         // Get all 8 payments for this activation with FOR UPDATE lock to prevent concurrent runs
         const payments = await tx.select()
           .from(activationPayments)
@@ -1186,6 +1215,12 @@ export class DbStorage implements IStorage {
           // Verify user has PB#### ID (assigned at signup)
           if (!activatedUser.userId) {
             throw new Error(`User ${payerUserIdOrDbId} missing PB#### ID - signup may have failed`);
+          }
+          
+          // DEFENSIVE: Check if user already has matrix placement (race condition guard)
+          if (activatedUser.matrixParentId && activatedUser.matrixPath) {
+            console.log(`[ACTIVATION] User ${activatedUser.userId} already placed in matrix at ${activatedUser.matrixPath} - activation already completed by another transaction`);
+            return; // Exit gracefully - another transaction already completed this
           }
           
           const now = new Date();
