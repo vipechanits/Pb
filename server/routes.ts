@@ -155,8 +155,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/signup", 
     applyRateLimit({
       keyFn: (req) => getClientIp(req),
-      limit: 5,
-      windowMs: 60 * 60 * 1000, // 5 signups per hour per IP
+      limit: 20,
+      windowMs: 60 * 60 * 1000, // 20 signups per hour per IP (increased for testing)
       name: 'Signup'
     }),
     async (req, res) => {
@@ -229,8 +229,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
           user: serializeUser(user)
         });
       });
-    } catch (error) {
-      console.error("Error during signup:", error);
+    } catch (error: any) {
+      // Enhanced error logging for debugging
+      console.error("========================================");
+      console.error("ERROR DURING SIGNUP:");
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+      
+      // Log Postgres-specific errors
+      if (error.code) {
+        console.error("Postgres error code:", error.code);
+        console.error("Postgres error detail:", error.detail);
+        console.error("Postgres error constraint:", error.constraint);
+      }
+      
+      // Provide specific error messages for known issues
+      if (error.code === '23505') { // Unique constraint violation
+        console.error("UNIQUE CONSTRAINT VIOLATION:", error.constraint);
+        return res.status(400).json({ 
+          error: "This email is already registered or account creation conflict occurred" 
+        });
+      }
+      
+      if (error.message?.includes('sequence')) {
+        console.error("SEQUENCE ERROR - pb_user_id_seq may not be initialized");
+        return res.status(500).json({ 
+          error: "System configuration error. Please contact support." 
+        });
+      }
+      
+      console.error("========================================");
       res.status(500).json({ error: "Failed to create account" });
     }
   });
@@ -670,7 +698,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Invalidate all password reset tokens for this user (security measure)
         await db.update(users)
-          .set({ passwordResetToken: null, passwordResetExpires: null })
+          .set({ passwordResetToken: null, passwordResetExpiry: null })
           .where(eq(users.id, req.session.userId!));
         
         // SECURITY: Invalidate all other sessions for this user (prevent session hijacking)
