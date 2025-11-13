@@ -157,11 +157,59 @@ export default function UserBinaryTreePage() {
         </Card>
       </div>
 
-      <Alert>
+      {/* Binary Matching Qualification Status */}
+      {tree && (
+        <Alert 
+          className={tree.personalLeftCount >= 1 && tree.personalRightCount >= 1 ? "border-green-500/50 bg-green-50/50 dark:bg-green-950/20" : "border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20"}
+          data-testid="alert-binary-qualification"
+        >
+          <Users className="h-4 w-4" />
+          <AlertDescription className="space-y-2">
+            <div className="font-semibold">
+              {tree.personalLeftCount >= 1 && tree.personalRightCount >= 1 ? (
+                <span className="text-green-600 dark:text-green-400" data-testid="text-qualification-qualified">✓ Binary Match Qualified!</span>
+              ) : (
+                <span className="text-amber-600 dark:text-amber-400" data-testid="text-qualification-pending">Binary Match Prerequisite</span>
+              )}
+            </div>
+            <p className="text-sm" data-testid="text-prerequisite-requirement">
+              <strong>Qualification Requirement:</strong> You must have <strong>1 direct left</strong> + <strong>1 direct right</strong> personal referral (one-time). After qualification, your 3:3 matching counts include your entire team (personal + spillover).
+            </p>
+            <div className="flex items-center gap-4 text-sm">
+              <span 
+                className={tree.personalLeftCount >= 1 ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}
+                data-testid="text-left-progress"
+              >
+                Left: {tree.personalLeftCount}/1 {tree.personalLeftCount >= 1 && "✓"}
+              </span>
+              <span 
+                className={tree.personalRightCount >= 1 ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}
+                data-testid="text-right-progress"
+              >
+                Right: {tree.personalRightCount}/1 {tree.personalRightCount >= 1 && "✓"}
+              </span>
+            </div>
+            {tree.personalLeftCount >= 1 && tree.personalRightCount >= 1 && (
+              <p className="text-sm text-green-600 dark:text-green-400" data-testid="text-qualification-success">
+                You can now earn ₹1,000 per 3:3 matched pair through the binary matching queue!
+              </p>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <Alert data-testid="alert-binary-structure">
         <Users className="h-4 w-4" />
         <AlertDescription>
-          <strong>Binary Tree Structure:</strong> Each member can have up to 2 direct referrals (left and right legs).
-          Your team grows as your downline recruits more members into their left and right positions.
+          <p data-testid="text-binary-structure-info">
+            <strong>Binary Tree Structure:</strong> Each member can have up to 2 direct referrals (left and right legs).
+            Your team grows as your downline recruits more members into their left and right positions.
+          </p>
+          <br />
+          <p data-testid="text-personal-count-note">
+            <strong>Important:</strong> "Personal" counts = Your direct referrals only (for 1L+1R qualification). 
+            "Total" leg counts = Your entire team including spillover from upline (used for 3:3 binary matching).
+          </p>
         </AlertDescription>
       </Alert>
 

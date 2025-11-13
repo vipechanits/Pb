@@ -157,11 +157,12 @@ export default function BinaryPairMatchingHistory() {
           <CardTitle data-testid="heading-how-pairing-works">How 3:3 Pair Matching Works</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
-          <p>• <strong>Qualification:</strong> Build 3 activations on your left leg AND 3 activations on your right leg</p>
-          <p>• <strong>Queue Entry:</strong> Once qualified, you automatically enter the binary match queue</p>
-          <p>• <strong>Payment:</strong> You receive ₹1,000 when the next activation pays you from the queue (FIFO)</p>
-          <p>• <strong>Carry Forward:</strong> Extra activations beyond the 3:3 pair carry forward to your next qualification</p>
-          <p>• <strong>Unlimited:</strong> You can build multiple 3:3 pairs and enter the queue multiple times</p>
+          <p data-testid="text-prerequisite-unlock"><strong>PREREQUISITE (One-Time):</strong> You must first have <strong>1 direct left + 1 direct right</strong> personal referral. This unlocks binary matching forever.</p>
+          <p data-testid="text-build-pairs-explanation">• <strong>Build Pairs:</strong> After prerequisite is met, build 3 activations on your left leg AND 3 activations on your right leg (counts include your entire team: personal + spillover)</p>
+          <p data-testid="text-queue-entry">• <strong>Queue Entry:</strong> Once you build a 3:3 pair, you automatically enter the binary match queue</p>
+          <p data-testid="text-payment-fifo">• <strong>Payment:</strong> You receive ₹1,000 when the next activation pays you from the queue (FIFO)</p>
+          <p data-testid="text-carry-forward-info">• <strong>Carry Forward:</strong> Extra activations beyond the 3:3 pair carry forward to your next qualification</p>
+          <p data-testid="text-unlimited-pairs">• <strong>Unlimited:</strong> You can build multiple 3:3 pairs and enter the queue multiple times</p>
         </CardContent>
       </Card>
     </div>

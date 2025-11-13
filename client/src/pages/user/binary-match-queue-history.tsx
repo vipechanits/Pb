@@ -149,11 +149,12 @@ export default function BinaryMatchQueueHistory() {
           <CardTitle data-testid="heading-how-it-works">How Binary Match Queue Works</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
-          <p>• Build a 3:3 matched pair (3 left + 3 right activations) to qualify and enter the queue</p>
-          <p>• Queue operates on FIFO (First In, First Out) principle</p>
-          <p>• Each new activation pays ₹1,000 to the first person in the queue</p>
-          <p>• Unmatched legs carry forward to your next pair qualification</p>
-          <p>• You can enter the queue multiple times by building additional 3:3 pairs</p>
+          <p data-testid="text-prerequisite-explanation"><strong>Prerequisite (One-Time):</strong> You must have <strong>1 direct left + 1 direct right</strong> personal referral to qualify. This is a one-time requirement.</p>
+          <p data-testid="text-build-pairs">• <strong>Build Pairs:</strong> After qualification, build 3:3 matched pairs (3 left + 3 right activations from your entire team including spillover) to enter the queue</p>
+          <p data-testid="text-fifo-queue">• <strong>FIFO Queue:</strong> Queue operates on First In, First Out principle</p>
+          <p data-testid="text-payment-info">• <strong>Payment:</strong> Each new activation pays ₹1,000 to the first person in the queue</p>
+          <p data-testid="text-carry-forward">• <strong>Carry Forward:</strong> Unmatched legs carry forward to your next pair qualification</p>
+          <p data-testid="text-unlimited">• <strong>Unlimited:</strong> You can enter the queue multiple times by building additional 3:3 pairs</p>
         </CardContent>
       </Card>
     </div>
