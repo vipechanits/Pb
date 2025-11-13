@@ -10,7 +10,7 @@ Preferred communication style: Simple, everyday language.
 
 ### November 13, 2025 - Critical Bug Fixes
 
-**Bug Fix: Matrix Payment Routing (CRITICAL) - Deferred Income Creation**
+**Bug Fix #1: Matrix Payment Routing (CRITICAL) - Deferred Income Creation**
 - **Issue**: Matrix upline payments (slots 3-7) were creating income for PB0 instead of actual parent nodes in the matrix tree
 - **Root Cause**: Income was created at payment confirmation time when receiver_user_id was still PB0 (placeholder). Matrix placement only happened AFTER all payments were confirmed, so income went to the wrong receiver.
 - **Impact**: All matrix level payments created income for admin (PB0) instead of actual uplines (e.g., PB10002, PB10000)
@@ -25,6 +25,21 @@ Preferred communication style: Simple, everyday language.
   - Deferred income created within same transaction with correct receivers
   - Maintains idempotency and reconciliation for all payment types including admin fallback
 - **Architect Reviewed**: ✅ PASS - No edge cases, data integrity maintained, safe for production
+
+**Bug Fix #2: Income Verification Timing (CRITICAL) - Two-Phase Verification**
+- **Issue**: Income verification was checking for all 8 income records BEFORE deferred matrix income was created, causing false failures
+- **Root Cause**: Verification ran before matrix placement and deferred income creation, finding only 3 records (direct_sponsor, binary_match, creator_fee) instead of expected 8
+- **Impact**: All activations failed with "Income verification failed: Expected 8, found 3" error
+- **Fix**: Implemented two-phase income verification:
+  1. Early verification (before matrix placement): Verify only 3 non-matrix income records exist
+  2. Final verification (after deferred income): Verify all 8 income records exist
+  3. Uses explicit IN-list for payment types to avoid SQL wildcard collisions
+- **Technical Details**:
+  - Early verification: `paymentType IN ('direct_sponsor', 'binary_match', 'creator_fee')` expects 3 records
+  - Final verification: After matrix income creation, expects all 8 records
+  - SQL query uses explicit payment type constants instead of LIKE patterns
+  - Prevents wildcard collisions (underscore is SQL single-char wildcard)
+- **Architect Reviewed**: ✅ PASS - Corrected SQL filter, two-phase verification sound, safe for production
 
 **Feature: Direct Sponsoring Page**
 - Added comprehensive Direct Sponsoring page showing all direct referrals with statistics dashboard

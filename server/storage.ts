@@ -1214,7 +1214,7 @@ export class DbStorage implements IStorage {
             sql`${incomeTransactions.activationPaymentId} IN (
               SELECT id FROM ${activationPayments} 
               WHERE ${activationPayments.activationId} = ${activationId} 
-              AND ${activationPayments.paymentType} NOT LIKE 'matrix_level_%'
+              AND ${activationPayments.paymentType} IN ('direct_sponsor', 'binary_match', 'creator_fee')
             )`
           ));
         
