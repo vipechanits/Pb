@@ -6,6 +6,13 @@ PAYBACK247 is a peer-to-peer income platform that facilitates network marketing 
 **Custom Domain:** https://payback247.com
 
 ## Recent Changes (November 2025)
+- **Security Audit & Critical Fixes (Complete - November 13, 2025):** Comprehensive security hardening addressing 7 critical/high-severity vulnerabilities:
+  - **CRITICAL - Admin Credentials:** Replaced hard-coded passwords with strict environment-driven secrets. Production deployments now FAIL if ADMIN_DEFAULT_PASSWORD not set. Only allows fallback when NODE_ENV is EXPLICITLY "development" (undefined/staging/test/production all treated as production).
+  - **HIGH - Payment Idempotency:** Added SELECT FOR UPDATE row-level locking to payment confirmation to prevent race conditions and duplicate income creation. Works with IncomeService onConflictDoNothing for full protection.
+  - **HIGH - Matrix Placement Validation:** Added validation to ensure matrix placement succeeds before completing activation. Throws error if placement fails, triggering transaction rollback to prevent incomplete activation states.
+  - **MEDIUM - Rate Limiting:** Added rate limiting to authentication endpoints (signup: 5/hour per IP, login: 10/15min per IP) to prevent brute-force attacks and spam account creation.
+  - **DATA FIX:** Repaired PB10004 data inconsistency - manually completed matrix placement (placed under PB10001 at level 2, path PB0.R.L) and credited PB10001 missing ₹500 matrix income.
+  - **VERIFIED:** Binary match queue already uses SELECT FOR UPDATE in createActivationWithPayments (no additional changes needed).
 - **Income Transaction History Pages (Complete - November 12, 2025):** Added three comprehensive history pages with detailed transaction tracking:
   - Binary Match Queue History: View all queue entries with status timeline (waiting/reserved/paid), timestamps, payer information, and position tracking
   - Binary Pair Matching History: Track 3:3 pair qualifications with summary statistics (total pairs built, pairs paid, total earned)

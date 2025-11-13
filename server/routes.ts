@@ -133,8 +133,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Authentication routes
   
-  // Signup
-  app.post("/api/auth/signup", async (req, res) => {
+  // Signup - Rate limited to prevent spam account creation
+  app.post("/api/auth/signup", 
+    applyRateLimit({
+      keyFn: (req) => getClientIp(req),
+      limit: 5,
+      windowMs: 60 * 60 * 1000, // 5 signups per hour per IP
+      name: 'Signup'
+    }),
+    async (req, res) => {
     try {
       const { email, password, sponsorId, binaryLeg } = req.body;
       
@@ -210,8 +217,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Login
-  app.post("/api/auth/login", async (req, res) => {
+  // Login - Rate limited to prevent brute-force attacks
+  app.post("/api/auth/login", 
+    applyRateLimit({
+      keyFn: (req) => getClientIp(req),
+      limit: 10,
+      windowMs: 15 * 60 * 1000, // 10 attempts per 15 minutes per IP
+      name: 'Login'
+    }),
+    async (req, res) => {
     try {
       const { email, password } = req.body;
       

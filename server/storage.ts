@@ -135,11 +135,54 @@ export class DbStorage implements IStorage {
   // Initialize admin users (PB0 root admin and PB1 secondary admin)
   async initializeAdminUsers(hashPassword: (password: string) => Promise<string>): Promise<void> {
     try {
+      // Get admin password from environment - REQUIRED unless explicitly in development
+      const adminPassword = process.env.ADMIN_DEFAULT_PASSWORD;
+      const nodeEnv = process.env.NODE_ENV;
+      
+      // CRITICAL SECURITY: Only allow fallback if NODE_ENV is EXPLICITLY "development"
+      // Treat undefined, "production", "staging", "test", or ANY other value as production
+      const isExplicitlyDevelopment = nodeEnv === 'development';
+      
+      // CRITICAL SECURITY: Require ADMIN_DEFAULT_PASSWORD unless in explicit development mode
+      if (!adminPassword && !isExplicitlyDevelopment) {
+        console.error('');
+        console.error('═══════════════════════════════════════════════════════════════════');
+        console.error('  ❌ FATAL ERROR: ADMIN_DEFAULT_PASSWORD NOT SET');
+        console.error('═══════════════════════════════════════════════════════════════════');
+        console.error(`  Current NODE_ENV: ${nodeEnv || '(undefined)'}`);
+        console.error('  Fallback admin passwords are ONLY allowed when NODE_ENV="development"');
+        console.error('');
+        console.error('  Set ADMIN_DEFAULT_PASSWORD in deployment secrets:');
+        console.error('  - Minimum 12 characters');
+        console.error('  - Mix of uppercase, lowercase, numbers, and symbols');
+        console.error('  - NOT a dictionary word or common password');
+        console.error('');
+        console.error('  Server startup aborted for security.');
+        console.error('═══════════════════════════════════════════════════════════════════');
+        console.error('');
+        throw new Error('ADMIN_DEFAULT_PASSWORD is required in production environments');
+      }
+      
+      // Development fallback - ONLY allowed when NODE_ENV is explicitly "development"
+      if (!adminPassword && isExplicitlyDevelopment) {
+        console.error('');
+        console.error('═══════════════════════════════════════════════════════════════════');
+        console.error('  ⚠️  WARNING: Using fallback admin passwords in DEVELOPMENT');
+        console.error('═══════════════════════════════════════════════════════════════════');
+        console.error('  This is ONLY allowed in development.');
+        console.error('  Production deployments will fail without ADMIN_DEFAULT_PASSWORD.');
+        console.error('═══════════════════════════════════════════════════════════════════');
+        console.error('');
+      }
+      
+      const pb0Password = adminPassword || 'Admin@1234'; // Fallback ONLY in development
+      const pb1Password = adminPassword || 'Admin@2000'; // Fallback ONLY in development
+      
       // Check if PB0 root admin exists
       const pb0Exists = await this.getUserByUserId('PB0');
       if (!pb0Exists) {
         console.log('[INIT] Creating PB0 root admin user...');
-        const hashedPassword = await hashPassword('Admin@1234'); // Default password
+        const hashedPassword = await hashPassword(pb0Password);
         await db.insert(users).values({
           email: 'admin@payback247.com',
           password: hashedPassword,
@@ -151,16 +194,17 @@ export class DbStorage implements IStorage {
           isProfileComplete: true,
           matrixLevel: 0, // Root of global matrix
           matrixPath: 'PB0', // Root path
+          requiresPostActivationProfileUpdate: true, // Force password change on first login
         });
-        console.log('[INIT] PB0 root admin user created successfully');
-        console.log('[INIT] IMPORTANT: Please change the root admin password immediately after first login!');
+        console.log('[INIT] ✓ PB0 root admin user created');
+        console.log('[INIT] ⚠️  IMPORTANT: Change root admin password immediately after first login!');
       }
       
       // Check if PB1 secondary admin exists
       const pb1AdminExists = await this.getUserByEmail('payback2472000@gmail.com');
       if (!pb1AdminExists) {
         console.log('[INIT] Creating PB1 secondary admin user...');
-        const hashedPassword = await hashPassword('Admin@2000');
+        const hashedPassword = await hashPassword(pb1Password);
         await db.insert(users).values({
           email: 'payback2472000@gmail.com',
           password: hashedPassword,
@@ -170,12 +214,19 @@ export class DbStorage implements IStorage {
           mobile: '9876543210',
           isActivated: true,
           isProfileComplete: true,
+          requiresPostActivationProfileUpdate: true, // Force password change on first login
         });
-        console.log('[INIT] PB1 secondary admin user created successfully');
+        console.log('[INIT] ✓ PB1 secondary admin user created');
       }
     } catch (error) {
+      // CRITICAL: Rethrow production security errors to halt server startup
+      if (error instanceof Error && error.message.includes('ADMIN_DEFAULT_PASSWORD is required')) {
+        throw error; // Fatal error - server must not start
+      }
+      
+      // Log and suppress other non-critical admin initialization errors
       console.error('[INIT] Error initializing admin users:', error);
-      // Don't throw - allow server to start even if admin creation fails
+      // Don't throw - allow server to start even if admin creation fails for other reasons
     }
   }
 
@@ -937,6 +988,31 @@ export class DbStorage implements IStorage {
   async confirmActivationPayment(id: string, notes?: string): Promise<ActivationPayment | undefined> {
     return await db.transaction(async (tx) => {
       console.log(`[STORAGE] Confirming payment ${id}`);
+      
+      // Step 1: Lock payment row with SELECT FOR UPDATE to prevent concurrent confirmations
+      const existingPayment = await tx.select()
+        .from(activationPayments)
+        .where(eq(activationPayments.id, id))
+        .for('update')
+        .limit(1);
+      
+      if (existingPayment.length === 0) {
+        console.log(`[STORAGE] Payment ${id} not found`);
+        return undefined;
+      }
+      
+      // Step 2: Idempotency check - if already confirmed, return existing payment without creating duplicate income
+      if (existingPayment[0].status === 'confirmed') {
+        console.log(`[STORAGE] Payment ${id} already confirmed, skipping duplicate confirmation`);
+        return existingPayment[0];
+      }
+      
+      // Step 3: Ensure payment is in 'submitted' status before confirming
+      if (existingPayment[0].status !== 'submitted') {
+        throw new Error(`Cannot confirm payment in status '${existingPayment[0].status}' - must be 'submitted'`);
+      }
+      
+      // Step 4: Update payment status to confirmed
       const result = await tx.update(activationPayments)
         .set({ 
           status: 'confirmed',
@@ -949,7 +1025,7 @@ export class DbStorage implements IStorage {
       
       const payment = result[0];
       if (!payment) {
-        console.log(`[STORAGE] Payment ${id} not found`);
+        console.log(`[STORAGE] Payment ${id} update failed`);
         return undefined;
       }
       
@@ -1093,7 +1169,14 @@ export class DbStorage implements IStorage {
           // This happens atomically within the activation transaction
           // If matrix is full or placement fails, entire activation rolls back
           console.log(`[MATRIX] Placing ${activatedUser.userId} in global matrix...`);
-          await this.findAndAssignMatrixSlot(activatedUser.userId, tx);
+          const placedUser = await this.findAndAssignMatrixSlot(activatedUser.userId, tx);
+          
+          // CRITICAL: Verify matrix placement succeeded before continuing
+          if (!placedUser || !placedUser.matrixParentId || !placedUser.matrixLevel || !placedUser.matrixPath) {
+            throw new Error(`Matrix placement failed for user ${activatedUser.userId} - transaction will roll back`);
+          }
+          
+          console.log(`[MATRIX] ✓ User ${activatedUser.userId} successfully placed in matrix at ${placedUser.matrixPath} (Level ${placedUser.matrixLevel})`);
           
           // Get matrix ancestors (up to 5 levels) for payment routing
           const matrixAncestors = await this.getMatrixAncestors(activatedUser.userId, 5, tx);
