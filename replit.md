@@ -6,6 +6,23 @@ PAYBACK247 is a peer-to-peer income platform designed for network marketing, fea
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+
+### November 13, 2025 - Critical Bug Fixes
+
+**Bug Fix: Matrix Payment Routing (CRITICAL)**
+- **Issue**: Matrix upline payments (slots 3-7) were incorrectly routing to PB0 instead of actual parent nodes in the matrix tree
+- **Root Cause**: The UPDATE query in `checkAndCompleteActivation` only matched payments with status='pending', but payments were already 'confirmed' by the time the activation completed, causing the WHERE clause to match zero rows
+- **Impact**: All matrix level payments went to admin (PB0) instead of actual uplines (e.g., PB10002, PB10000)
+- **Fix**: Removed the `eq(activationPayments.status, 'pending')` condition from the WHERE clause in the matrix receiver UPDATE query (line 1347 in server/storage.ts)
+- **Verification**: Matrix ancestors are correctly calculated and stored in activation record, and now payment receivers are properly updated regardless of payment status
+
+**Feature: Direct Sponsoring Page**
+- Added comprehensive Direct Sponsoring page showing all direct referrals with statistics dashboard
+- Displays total referrals, activation rate, binary leg distribution, and detailed referral list
+- Backend API endpoint: `/api/users/:userId/direct-referrals`
+- Route: `/user/direct-sponsoring` with sidebar navigation
+
 ## System Architecture
 
 ### Frontend

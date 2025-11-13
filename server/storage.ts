@@ -1323,14 +1323,16 @@ export class DbStorage implements IStorage {
           console.log(`[MATRIX] Found ${matrixAncestors.length} matrix ancestors for ${activatedUser.userId}:`, matrixAncestors);
           
           // Update matrix payment receivers (slots 3-7) with ancestors or admin fallback
-          // ONLY update if payment is NOT already confirmed (prevent income duplication)
+          // This runs during activation completion, BEFORE income creation
+          // Updates receiver_user_id from placeholder (PB0) to actual matrix uplines
           const matrixUplines: Record<string, string> = {};
           for (let level = 1; level <= 5; level++) {
             const ancestorIndex = level - 1;
             const receiverUserId = ancestorIndex < matrixAncestors.length ? matrixAncestors[ancestorIndex] : 'PB0';
             const slotIndex = level + 2; // Slot 3 = level 1, Slot 4 = level 2, etc.
             
-            // Update payment receiver ONLY if not already confirmed
+            // Update payment receiver regardless of status (pending, submitted, or confirmed)
+            // Income hasn't been created yet at this point - that happens in confirmActivationPayment
             await tx.update(activationPayments)
               .set({
                 receiverUserId,
@@ -1339,8 +1341,7 @@ export class DbStorage implements IStorage {
               })
               .where(and(
                 eq(activationPayments.activationId, activationId),
-                eq(activationPayments.slotIndex, slotIndex),
-                eq(activationPayments.status, 'pending') // Only update pending payments
+                eq(activationPayments.slotIndex, slotIndex)
               ));
             
             // Track for activation record update
