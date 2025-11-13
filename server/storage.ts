@@ -549,13 +549,13 @@ export class DbStorage implements IStorage {
           eq(users.isActivated, true)
         ))
         .orderBy(sql`matrix_level ASC, matrix_path ASC`)
-        .for('update', { skipLocked: true });
+        .for('update');
       
       for (const parentCandidate of frontier) {
         const children = await txn.select()
           .from(users)
           .where(eq(users.matrixParentId, parentCandidate.userId!))
-          .for('update', { skipLocked: true });
+          .for('update');
         
         if (children.length < 2) {
           const position = children.length === 0 ? 0 : 1;
@@ -573,10 +573,18 @@ export class DbStorage implements IStorage {
               matrixPath: newPath,
               updatedAt: new Date()
             })
-            .where(eq(users.userId, userId))
+            .where(and(
+              eq(users.userId, userId),
+              sql`matrix_parent_id IS NULL`
+            ))
             .returning();
           
-          return result[0];
+          if (result.length > 0) {
+            return result[0];
+          } else {
+            console.log(`[MATRIX] User ${userId} was already placed by another transaction - retrying next parent`);
+            continue;
+          }
         }
       }
       
