@@ -6,6 +6,13 @@ PAYBACK247 is a peer-to-peer income platform that facilitates network marketing 
 **Custom Domain:** https://payback247.com
 
 ## Recent Changes (November 2025)
+- **Income Transaction History Pages (Complete - November 12, 2025):** Added three comprehensive history pages with detailed transaction tracking:
+  - Binary Match Queue History: View all queue entries with status timeline (waiting/reserved/paid), timestamps, payer information, and position tracking
+  - Binary Pair Matching History: Track 3:3 pair qualifications with summary statistics (total pairs built, pairs paid, total earned)
+  - Matrix Income History: Complete matrix income transactions across all 5 levels with income breakdown by level and source user details
+  - All pages include loading states, empty states, informational cards explaining the systems, and comprehensive test IDs
+  - New "Income History" section added to user sidebar navigation with dedicated icons for each history type
+- **Binary Match Admin Payment Fix (Complete - November 12, 2025):** Fixed critical bug where confirming binary match payments to admin (PB0) threw queue update errors. Added defensive guard to skip queue operations when receiver is PB0.
 - **Application Modernization (Complete):** Comprehensive cleanup removing unused files (examples folder, blockchain components), consolidating duplicate pages, and improving code organization
 - **Landing Page Redesign (Complete):** Modern design with improved spacing, cleaner layout, professional CTA sections, better footer, and enhanced user experience
 - **Navigation Consolidation (Complete):** Unified income reporting system at `/user/income/:type` with SPA-friendly redirects from legacy routes (`/user/sponsoring`, `/user/binary`, `/user/matrix`) for backward compatibility
@@ -125,6 +132,9 @@ Preferred communication style: Simple, everyday language.
 - **Re-entry Page (`/user/reentry`)**: Matrix re-entry management and history.
 - **Income Details Page (`/user/income/:type`)**: Unified income reporting for all income types (total, sponsor, binary, matrix, reentry) with full tree visualization and detailed breakdowns.
   - Legacy routes (`/user/sponsoring`, `/user/binary`, `/user/matrix`) redirect to this unified system for backward compatibility.
+- **Binary Match Queue History (`/user/binary-match-queue-history`)**: Complete queue entry history with status timeline, payer information, and payment timestamps.
+- **Binary Pair Matching History (`/user/binary-pair-matching-history`)**: Track 3:3 pair qualifications with summary statistics and detailed qualification timeline.
+- **Matrix Income History (`/user/matrix-income-history`)**: Comprehensive matrix income transaction history with level-wise breakdowns and source user details.
 
 #### Admin Pages
 - **Admin Dashboard (`/admin`)**: Overview of system metrics and quick access to admin functions.

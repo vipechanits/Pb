@@ -28,6 +28,9 @@ import {
   CheckSquare,
   BarChart3,
   Database,
+  Clock,
+  Trophy,
+  TrendingUp,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth-context';
@@ -85,6 +88,28 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       title: 'Profile',
       url: '/user/profile',
       icon: UserCircle,
+    },
+  ];
+
+  const incomeHistoryItems: Array<{
+    title: string;
+    url: string;
+    icon: typeof Clock;
+  }> = [
+    {
+      title: 'Binary Match Queue',
+      url: '/user/binary-match-queue-history',
+      icon: Clock,
+    },
+    {
+      title: 'Binary Pair Matching',
+      url: '/user/binary-pair-matching-history',
+      icon: Trophy,
+    },
+    {
+      title: 'Matrix Income',
+      url: '/user/matrix-income-history',
+      icon: TrendingUp,
     },
   ];
 
@@ -172,6 +197,26 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        
+        {!isAdmin && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Income History</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {incomeHistoryItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={location === item.url}>
+                      <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                        <item.icon className="w-4 h-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
       <SidebarFooter className="p-4 border-t border-sidebar-border">
         <SidebarMenu>

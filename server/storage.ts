@@ -749,8 +749,41 @@ export class DbStorage implements IStorage {
           receiverUserId = 'PB0';
           receiverType = 'admin';
         } else if (paymentType.startsWith('matrix_level_')) {
-          receiverUserId = 'PB0';
-          receiverType = 'admin';
+          // Matrix income goes to upline users based on level
+          // Extract level number from payment type (matrix_level_1 → 1, matrix_level_2 → 2, etc.)
+          const level = parseInt(paymentType.split('_')[2]);
+          
+          // Get the appropriate upline from activation record
+          let uplineId: string | null = null;
+          switch (level) {
+            case 1:
+              uplineId = createdActivation.matrixUpline1;
+              break;
+            case 2:
+              uplineId = createdActivation.matrixUpline2;
+              break;
+            case 3:
+              uplineId = createdActivation.matrixUpline3;
+              break;
+            case 4:
+              uplineId = createdActivation.matrixUpline4;
+              break;
+            case 5:
+              uplineId = createdActivation.matrixUpline5;
+              break;
+          }
+          
+          // If upline exists and is not admin, route to that user
+          if (uplineId && uplineId !== 'PB0') {
+            receiverUserId = uplineId;
+            receiverType = 'user';
+            console.log(`[ACTIVATION] Matrix Level ${level} payment will go to upline user ${uplineId}`);
+          } else {
+            // Upline is null or is admin - fallback to admin
+            receiverUserId = 'PB0';
+            receiverType = 'admin';
+            console.log(`[ACTIVATION] Matrix Level ${level} upline is admin/null - payment goes to admin`);
+          }
         }
         
         paymentsToCreate.push({

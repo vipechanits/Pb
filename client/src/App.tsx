@@ -23,6 +23,9 @@ import UserConfirmationPage from '@/pages/user-confirmation';
 import UserBinaryTreePage from '@/pages/user-binary-tree';
 import UserGlobalMatrixPage from '@/pages/user-global-matrix';
 import UserIncomeDetailsPage from '@/pages/user-income-details';
+import BinaryMatchQueueHistory from '@/pages/user/binary-match-queue-history';
+import BinaryPairMatchingHistory from '@/pages/user/binary-pair-matching-history';
+import MatrixIncomeHistory from '@/pages/user/matrix-income-history';
 import ReentryPage from '@/pages/reentry';
 import AdditionalReentryPage from '@/pages/additional-reentry';
 import AdminDashboard from '@/pages/admin-dashboard';
@@ -172,6 +175,36 @@ function Router() {
           <ProtectedRoute>
             <DashboardLayout>
               <UserIncomeDetailsPage />
+            </DashboardLayout>
+          </ProtectedRoute>
+        )}
+      </Route>
+      
+      <Route path="/user/binary-match-queue-history">
+        {() => (
+          <ProtectedRoute>
+            <DashboardLayout>
+              <BinaryMatchQueueHistory />
+            </DashboardLayout>
+          </ProtectedRoute>
+        )}
+      </Route>
+      
+      <Route path="/user/binary-pair-matching-history">
+        {() => (
+          <ProtectedRoute>
+            <DashboardLayout>
+              <BinaryPairMatchingHistory />
+            </DashboardLayout>
+          </ProtectedRoute>
+        )}
+      </Route>
+      
+      <Route path="/user/matrix-income-history">
+        {() => (
+          <ProtectedRoute>
+            <DashboardLayout>
+              <MatrixIncomeHistory />
             </DashboardLayout>
           </ProtectedRoute>
         )}

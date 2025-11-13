@@ -1868,6 +1868,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ========================================
+  // User Income & Transaction History APIs
+  // ========================================
+
+  // Get binary match queue history for logged in user
+  app.get("/api/user/binary-match-queue-history", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user || !user.userId) {
+        return res.status(404).json({ error: "User not found or not activated" });
+      }
+
+      // Get all queue entries for this user with payer information
+      const queueHistory = await db
+        .select({
+          id: sql`binary_match_queue.id`.as('id'),
+          queuePosition: sql`binary_match_queue.queue_position`.as('queue_position'),
+          enteredAt: sql`binary_match_queue.entered_at`.as('entered_at'),
+          paidAt: sql`binary_match_queue.paid_at`.as('paid_at'),
+          status: sql`binary_match_queue.status`.as('status'),
+          amountInr: sql`binary_match_queue.amount_inr`.as('amount_inr'),
+          paidByActivationId: sql`binary_match_queue.paid_by_activation_id`.as('paid_by_activation_id'),
+          payerUserId: sql`ap.payer_user_id`.as('payer_user_id'),
+          payerName: sql`u.name`.as('payer_name'),
+        })
+        .from(sql`binary_match_queue`)
+        .leftJoin(sql`activation_payments ap`, sql`binary_match_queue.paid_by_activation_id = ap.activation_id AND ap.payment_type = 'binary_match'`)
+        .leftJoin(sql`users u`, sql`ap.payer_user_id = u.user_id`)
+        .where(sql`binary_match_queue.user_id = ${user.userId}`)
+        .orderBy(sql`binary_match_queue.entered_at DESC`);
+
+      res.json(queueHistory);
+    } catch (error) {
+      console.error("Error fetching binary match queue history:", error);
+      res.status(500).json({ error: "Failed to fetch binary match queue history" });
+    }
+  });
+
+  // Get binary pair matching history (when user built 3:3 pairs and entered queue)
+  app.get("/api/user/binary-pair-matching-history", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user || !user.userId) {
+        return res.status(404).json({ error: "User not found or not activated" });
+      }
+
+      // Get queue entries to show when user qualified and entered queue
+      const pairHistory = await db
+        .select({
+          id: sql`binary_match_queue.id`.as('id'),
+          enteredAt: sql`binary_match_queue.entered_at`.as('entered_at'),
+          queuePosition: sql`binary_match_queue.queue_position`.as('queue_position'),
+          status: sql`binary_match_queue.status`.as('status'),
+          paidAt: sql`binary_match_queue.paid_at`.as('paid_at'),
+          amountInr: sql`binary_match_queue.amount_inr`.as('amount_inr'),
+        })
+        .from(sql`binary_match_queue`)
+        .where(sql`binary_match_queue.user_id = ${user.userId}`)
+        .orderBy(sql`binary_match_queue.entered_at DESC`);
+
+      res.json(pairHistory);
+    } catch (error) {
+      console.error("Error fetching binary pair matching history:", error);
+      res.status(500).json({ error: "Failed to fetch binary pair matching history" });
+    }
+  });
+
+  // Get global matrix income transaction history
+  app.get("/api/user/matrix-income-history", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user || !user.userId) {
+        return res.status(404).json({ error: "User not found or not activated" });
+      }
+
+      // Get all matrix income transactions for this user
+      const matrixIncomeHistory = await db
+        .select({
+          id: sql`income_transactions.id`.as('id'),
+          incomeType: sql`income_transactions.income_type`.as('income_type'),
+          amountInr: sql`income_transactions.amount_inr`.as('amount_inr'),
+          status: sql`income_transactions.income_status`.as('status'),
+          sourceUserId: sql`income_transactions.source_user_id`.as('source_user_id'),
+          sourceName: sql`u.name`.as('source_name'),
+          confirmedAt: sql`income_transactions.confirmed_at`.as('confirmed_at'),
+          createdAt: sql`income_transactions.created_at`.as('created_at'),
+          notes: sql`income_transactions.notes`.as('notes'),
+        })
+        .from(sql`income_transactions`)
+        .leftJoin(sql`users u`, sql`income_transactions.source_user_id = u.user_id`)
+        .where(sql`income_transactions.user_id = ${user.userId} AND income_transactions.income_type LIKE 'matrix_%'`)
+        .orderBy(sql`income_transactions.created_at DESC`);
+
+      res.json(matrixIncomeHistory);
+    } catch (error) {
+      console.error("Error fetching matrix income history:", error);
+      res.status(500).json({ error: "Failed to fetch matrix income history" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
