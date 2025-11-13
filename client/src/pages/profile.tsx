@@ -2,15 +2,15 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { updateProfileSchema } from '@shared/schema';
-import type { UpdateProfile } from '@shared/schema';
+import { updateProfileSchema, updateEmailSchema, updatePasswordSchema } from '@shared/schema';
+import type { UpdateProfile, UpdateEmailRequest, UpdatePasswordRequest } from '@shared/schema';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { CheckCircle, QrCode, X, Upload, AlertTriangle } from 'lucide-react';
+import { CheckCircle, QrCode, X, Upload, AlertTriangle, Mail, Lock, Shield } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { ReferralLinks } from '@/components/referral-links';
@@ -223,9 +223,10 @@ export default function Profile() {
       )}
 
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="profile" data-testid="tab-profile">Profile Details</TabsTrigger>
           <TabsTrigger value="referrals" data-testid="tab-referrals">Referral Links</TabsTrigger>
+          <TabsTrigger value="security" data-testid="tab-security">Security</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile" className="space-y-6 mt-6">
@@ -435,7 +436,256 @@ export default function Profile() {
         <TabsContent value="referrals" className="mt-6">
           <ReferralLinks />
         </TabsContent>
+
+        <TabsContent value="security" className="space-y-6 mt-6">
+          <SecuritySettings />
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function SecuritySettings() {
+  const { user, refreshUser } = useAuth();
+  const { toast } = useToast();
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+
+  const emailForm = useForm<UpdateEmailRequest>({
+    resolver: zodResolver(updateEmailSchema),
+    defaultValues: {
+      newEmail: '',
+      securityCode: '',
+    },
+  });
+
+  const passwordForm = useForm<UpdatePasswordRequest>({
+    resolver: zodResolver(updatePasswordSchema),
+    defaultValues: {
+      newPassword: '',
+      securityCode: '',
+    },
+  });
+
+  const onEmailSubmit = async (data: UpdateEmailRequest) => {
+    setEmailLoading(true);
+    try {
+      await apiRequest('PATCH', '/api/profile/email', data);
+      await refreshUser();
+      emailForm.reset();
+      toast({
+        title: 'Email updated',
+        description: 'Your email address has been successfully updated.',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to update email. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  const onPasswordSubmit = async (data: UpdatePasswordRequest) => {
+    setPasswordLoading(true);
+    try {
+      await apiRequest('PATCH', '/api/profile/password', data);
+      passwordForm.reset();
+      toast({
+        title: 'Password updated',
+        description: 'Your password has been successfully updated. A confirmation email has been sent.',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to update password. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {!user?.securityCode && (
+        <Alert variant="destructive" data-testid="alert-no-security-code">
+          <Shield className="h-4 w-4" />
+          <AlertTitle>Security Code Required</AlertTitle>
+          <AlertDescription>
+            You need to set up your 6-digit security code in your profile before you can update your email or password.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Mail className="h-5 w-5" />
+            Update Email Address
+          </CardTitle>
+          <CardDescription>
+            Change your email address. You'll need your 6-digit security code to confirm this change.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Form {...emailForm}>
+            <form onSubmit={emailForm.handleSubmit(onEmailSubmit)} className="space-y-4">
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p>Current email: <span className="font-medium text-foreground">{user?.email}</span></p>
+              </div>
+
+              <FormField
+                control={emailForm.control}
+                name="newEmail"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>New Email Address</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="email"
+                        placeholder="newemail@example.com"
+                        disabled={emailLoading || !user?.securityCode}
+                        data-testid="input-new-email"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={emailForm.control}
+                name="securityCode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>6-Digit Security Code</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="text"
+                        placeholder="123456"
+                        maxLength={6}
+                        disabled={emailLoading || !user?.securityCode}
+                        data-testid="input-email-security-code"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Enter your 6-digit security code to confirm this change
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <Button
+                type="submit"
+                disabled={emailLoading || !user?.securityCode}
+                data-testid="button-update-email"
+              >
+                {emailLoading ? 'Updating...' : 'Update Email'}
+              </Button>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Lock className="h-5 w-5" />
+            Update Password
+          </CardTitle>
+          <CardDescription>
+            Change your password. You'll need your 6-digit security code instead of your old password.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Form {...passwordForm}>
+            <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="space-y-4">
+              <FormField
+                control={passwordForm.control}
+                name="newPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>New Password</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="password"
+                        placeholder="Enter new password"
+                        disabled={passwordLoading || !user?.securityCode}
+                        data-testid="input-new-password"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Must be at least 8 characters with uppercase, lowercase, and number
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={passwordForm.control}
+                name="securityCode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>6-Digit Security Code</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="text"
+                        placeholder="123456"
+                        maxLength={6}
+                        disabled={passwordLoading || !user?.securityCode}
+                        data-testid="input-password-security-code"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Enter your 6-digit security code to confirm this change
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <Button
+                type="submit"
+                disabled={passwordLoading || !user?.securityCode}
+                data-testid="button-update-password"
+              >
+                {passwordLoading ? 'Updating...' : 'Update Password'}
+              </Button>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
+
+      <Card className="border-primary/20 bg-primary/5">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Shield className="h-4 w-4" />
+            Forgot Your Password?
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-4">
+            If you've forgotten your password, you can reset it using your email address.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => window.location.href = '/auth/forgot-password'}
+            data-testid="button-forgot-password"
+          >
+            <Mail className="mr-2 h-4 w-4" />
+            Reset Password via Email
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -222,3 +222,60 @@ export async function sendPasswordResetEmail(
     `,
   });
 }
+
+/**
+ * Send password changed confirmation email
+ */
+export async function sendPasswordChangedEmail(
+  email: string,
+  userName: string | null
+): Promise<void> {
+  await sendEmail({
+    to: email,
+    subject: 'Your Password Has Been Changed - PAYBACK247',
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Password Changed</title>
+      </head>
+      <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+        <div style="max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">PAYBACK247</h1>
+            <p style="color: #ffffff; margin: 10px 0 0 0; font-size: 16px;">Password Changed Successfully</p>
+          </div>
+          
+          <div style="padding: 40px 30px;">
+            <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+              ${userName ? `Hi ${userName},` : 'Hello,'}
+            </p>
+            
+            <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+              Your password has been successfully changed. You can now log in using your new password.
+            </p>
+            
+            <p style="color: #666666; font-size: 14px; line-height: 1.6; margin: 20px 0 0 0;">
+              If you didn't make this change, please contact support immediately.
+            </p>
+            
+            <div style="margin-top: 40px; padding-top: 30px; border-top: 1px solid #eeeeee;">
+              <p style="color: #999999; font-size: 12px; line-height: 1.6; margin: 0;">
+                This is an automated security notification. For your security, we recommend using a strong, unique password.
+              </p>
+            </div>
+          </div>
+          
+          <div style="background-color: #f9f9f9; padding: 20px 30px; text-align: center; border-top: 1px solid #eeeeee;">
+            <p style="color: #999999; font-size: 12px; margin: 0;">
+              © 2025 PAYBACK247. All rights reserved.
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+  });
+}

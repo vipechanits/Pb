@@ -74,6 +74,10 @@ export const users = pgTable("users", {
   emailVerificationToken: varchar("email_verification_token", { length: 255 }),
   emailVerificationExpiry: timestamp("email_verification_expiry"),
   
+  // Password reset
+  passwordResetToken: varchar("password_reset_token", { length: 255 }),
+  passwordResetExpiry: timestamp("password_reset_expiry"),
+  
   // User ID (PB1, PB2, etc.) - generated at registration
   userId: varchar("user_id", { length: 20 }).notNull().unique(),
   
@@ -586,8 +590,30 @@ export const resetPasswordSchema = z.object({
     .regex(/[0-9]/, "Password must contain at least one number"),
 });
 
+// Update email schema (requires security code for verification)
+export const updateEmailSchema = z.object({
+  newEmail: z.string().email("Invalid email address"),
+  securityCode: z.string()
+    .length(6, "Security code must be exactly 6 digits")
+    .regex(/^\d{6}$/, "Security code must contain only digits"),
+});
+
+// Update password schema (requires security code instead of old password)
+export const updatePasswordSchema = z.object({
+  newPassword: z.string()
+    .min(8, "Password must be at least 8 characters")
+    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+    .regex(/[0-9]/, "Password must contain at least one number"),
+  securityCode: z.string()
+    .length(6, "Security code must be exactly 6 digits")
+    .regex(/^\d{6}$/, "Security code must contain only digits"),
+});
+
 export type ForgotPasswordRequest = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordRequest = z.infer<typeof resetPasswordSchema>;
+export type UpdateEmailRequest = z.infer<typeof updateEmailSchema>;
+export type UpdatePasswordRequest = z.infer<typeof updatePasswordSchema>;
 
 // Binary Match Queue - FIFO queue for 3:3 matched pairs
 // When user builds 3:3 pair → enters queue

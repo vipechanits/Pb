@@ -387,8 +387,16 @@ export class DbStorage implements IStorage {
     if (profile.paymentQrUrl !== undefined) {
       normalizedProfile.paymentQrUrl = profile.paymentQrUrl?.trim() || null;
     }
+    // SECURITY: Hash security code before storing (never store plaintext)
     if (profile.securityCode !== undefined) {
-      normalizedProfile.securityCode = profile.securityCode?.trim() || null;
+      const trimmedCode = profile.securityCode?.trim() || null;
+      if (trimmedCode) {
+        // Import hashPassword dynamically to avoid circular dependency
+        const { hashPassword } = await import('./auth');
+        normalizedProfile.securityCode = await hashPassword(trimmedCode);
+      } else {
+        normalizedProfile.securityCode = null;
+      }
     }
     
     // Use transaction to ensure atomic update and flag recalculation

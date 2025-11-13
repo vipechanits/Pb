@@ -2,14 +2,14 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema, users, reentries, activationPayments, forgotPasswordSchema, resetPasswordSchema } from "@shared/schema";
+import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema, users, reentries, activationPayments, forgotPasswordSchema, resetPasswordSchema, updateEmailSchema, updatePasswordSchema } from "@shared/schema";
 import { hashPassword, verifyPassword, serializeUser } from "./auth";
 import { generateUserPaymentQR } from "./qrcode-generator";
 import { z } from "zod";
 import { db } from "./db";
 import { eq, desc, sql, count } from "drizzle-orm";
 import crypto from "crypto";
-import { sendVerificationEmail, sendPasswordResetEmail } from "./lib/email";
+import { sendVerificationEmail, sendPasswordResetEmail, sendPasswordChangedEmail } from "./lib/email";
 
 // Middleware to check if user is authenticated
 function requireAuth(req: any, res: any, next: any) {
@@ -25,6 +25,24 @@ function requireAdmin(req: any, res: any, next: any) {
     return res.status(403).json({ error: "Forbidden - Admin access required" });
   }
   next();
+}
+
+// SECURITY: Invalidate all other sessions for a user (e.g., after password change)
+async function invalidateOtherSessions(userId: string, currentSessionId: string): Promise<void> {
+  try {
+    // Query PostgreSQL session store to find and delete other sessions for this user
+    // The connect-pg-simple session store uses a table called 'session'
+    // with columns: sid (session ID) and sess (JSON data containing userId)
+    await db.execute(sql`
+      DELETE FROM session
+      WHERE sess::jsonb->>'userId' = ${userId}
+      AND sid != ${currentSessionId}
+    `);
+    console.log(`[SESSION] Invalidated all other sessions for user ${userId}`);
+  } catch (error) {
+    console.error(`[SESSION] Failed to invalidate other sessions for user ${userId}:`, error);
+    // Don't throw - session invalidation failure shouldn't block password update
+  }
 }
 
 // Rate limiter utility using sliding window algorithm
@@ -547,6 +565,151 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to fetch profile" });
     }
   });
+  
+  // Update user email (requires security code verification)
+  app.patch("/api/profile/email", requireAuth,
+    applyRateLimit({
+      keyFn: (req) => req.session.userId || getClientIp(req),
+      limit: 5,
+      windowMs: 60 * 60 * 1000, // 5 requests per hour
+      name: 'Update Email'
+    }),
+    async (req, res) => {
+      try {
+        const validation = updateEmailSchema.safeParse(req.body);
+        if (!validation.success) {
+          return res.status(400).json({ error: validation.error.errors[0].message });
+        }
+        
+        const { newEmail, securityCode } = validation.data;
+        const normalizedEmail = newEmail.toLowerCase().trim();
+        
+        // Get current user
+        const user = await storage.getUserById(req.session.userId!);
+        if (!user) {
+          return res.status(404).json({ error: "User not found" });
+        }
+        
+        // Verify security code (SECURITY: use constant-time bcrypt comparison)
+        if (!user.securityCode) {
+          return res.status(400).json({ error: "Security code not set. Please set up your security code first." });
+        }
+        
+        const isValidCode = await verifyPassword(securityCode, user.securityCode);
+        if (!isValidCode) {
+          console.warn(`[UPDATE_EMAIL] Invalid security code attempt for user ${user.userId}`);
+          return res.status(401).json({ error: "Invalid security code" });
+        }
+        
+        // Check if email already exists
+        const existingUser = await storage.getUserByEmail(normalizedEmail);
+        if (existingUser && existingUser.id !== req.session.userId) {
+          return res.status(400).json({ error: "Email address is already in use" });
+        }
+        
+        // Update email
+        await db.update(users)
+          .set({ email: normalizedEmail })
+          .where(eq(users.id, req.session.userId!));
+        
+        console.log(`[UPDATE_EMAIL] Email updated for user ${user.userId} from ${user.email} to ${normalizedEmail}`);
+        
+        res.json({ message: "Email updated successfully" });
+      } catch (error) {
+        console.error("Error updating email:", error);
+        res.status(500).json({ error: "Failed to update email" });
+      }
+    }
+  );
+  
+  // Update user password (requires security code, sends confirmation email)
+  app.patch("/api/profile/password", requireAuth,
+    applyRateLimit({
+      keyFn: (req) => req.session.userId || getClientIp(req),
+      limit: 5,
+      windowMs: 60 * 60 * 1000, // 5 requests per hour
+      name: 'Update Password'
+    }),
+    async (req, res) => {
+      try {
+        const validation = updatePasswordSchema.safeParse(req.body);
+        if (!validation.success) {
+          return res.status(400).json({ error: validation.error.errors[0].message });
+        }
+        
+        const { newPassword, securityCode } = validation.data;
+        
+        // Get current user
+        const user = await storage.getUserById(req.session.userId!);
+        if (!user) {
+          return res.status(404).json({ error: "User not found" });
+        }
+        
+        // Verify security code (SECURITY: use constant-time bcrypt comparison)
+        if (!user.securityCode) {
+          return res.status(400).json({ error: "Security code not set. Please set up your security code first." });
+        }
+        
+        const isValidCode = await verifyPassword(securityCode, user.securityCode);
+        if (!isValidCode) {
+          console.warn(`[UPDATE_PASSWORD] Invalid security code attempt for user ${user.userId}`);
+          return res.status(401).json({ error: "Invalid security code" });
+        }
+        
+        // SECURITY: Reject pre-hashed passwords (must be plaintext only)
+        if (newPassword.startsWith('$2a$') || newPassword.startsWith('$2b$') || newPassword.startsWith('$2y$')) {
+          console.warn(`[UPDATE_PASSWORD] Rejected pre-hashed password attempt for user ${user.userId}`);
+          return res.status(400).json({ error: "Invalid password format" });
+        }
+        
+        // Hash new password server-side
+        const hashedPassword = await hashPassword(newPassword);
+        
+        // Update password and invalidate all reset tokens
+        await storage.updateUserPassword(user.userId!, hashedPassword);
+        
+        // Invalidate all password reset tokens for this user (security measure)
+        await db.update(users)
+          .set({ passwordResetToken: null, passwordResetExpires: null })
+          .where(eq(users.id, req.session.userId!));
+        
+        // SECURITY: Invalidate all other sessions for this user (prevent session hijacking)
+        const currentSessionId = req.sessionID;
+        await invalidateOtherSessions(user.userId!, currentSessionId);
+        
+        // SECURITY: Regenerate current session ID (prevent session fixation)
+        await new Promise<void>((resolve, reject) => {
+          req.session.regenerate((err: any) => {
+            if (err) {
+              console.error('[UPDATE_PASSWORD] Failed to regenerate session:', err);
+              reject(err);
+            } else {
+              // Restore session data after regeneration
+              req.session.userId = user.id;
+              req.session.isAdmin = user.role === 'admin';
+              resolve();
+            }
+          });
+        });
+        
+        console.log(`[UPDATE_PASSWORD] Password updated and sessions invalidated for user ${user.userId}`);
+        
+        // Send confirmation email (async, with error handling)
+        try {
+          await sendPasswordChangedEmail(user.email, user.name);
+          console.log(`[UPDATE_PASSWORD] Confirmation email sent to ${user.email}`);
+        } catch (emailError) {
+          console.error('[UPDATE_PASSWORD] Failed to send confirmation email:', emailError);
+          // Don't fail the request if email fails - password is already updated
+        }
+        
+        res.json({ message: "Password updated successfully. A confirmation email has been sent." });
+      } catch (error) {
+        console.error("Error updating password:", error);
+        res.status(500).json({ error: "Failed to update password" });
+      }
+    }
+  );
   
   // Get public user info (for sponsor details, etc.)
   app.get("/api/users/:userId/public", requireAuth, async (req, res) => {
