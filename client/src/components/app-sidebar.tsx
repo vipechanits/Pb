@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth-context';
+import { useQuery } from '@tanstack/react-query';
 import logoUrl from '@assets/payback247-logo.png';
 
 interface AppSidebarProps {
@@ -44,6 +45,13 @@ interface AppSidebarProps {
 export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   const [location, setLocation] = useLocation();
   const { user, logout } = useAuth();
+
+  // Fetch pending confirmations count for notification badge
+  const { data: pendingData } = useQuery<{ count: number }>({
+    queryKey: ['/api/activation-payments/pending-count'],
+    refetchInterval: 30000, // Refresh every 30 seconds
+    enabled: !!user, // Only fetch when user is logged in
+  });
 
   const handleLogout = async () => {
     await logout();
@@ -178,7 +186,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="space-y-2">
           <div className="flex items-center justify-center">
-            <img src={logoUrl} alt="PAYBACK247" className="w-80 h-80" />
+            <img src={logoUrl} alt="PAYBACK247" className="w-40 h-40" />
           </div>
           {user && (
             <div className="pt-2 border-t border-sidebar-border">
@@ -195,16 +203,30 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
           <SidebarGroupLabel>{isAdmin ? 'Admin Panel' : 'User Menu'}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {menuItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={location === item.url}>
-                    <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
-                      <item.icon className="w-4 h-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {menuItems.map((item) => {
+                const pendingCount = pendingData?.count || 0;
+                const showBadge = (item.title === 'Confirmations' || item.title === 'Payment Confirmations') && pendingCount > 0;
+                
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={location === item.url}>
+                      <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                        <item.icon className="w-4 h-4" />
+                        <span>{item.title}</span>
+                        {showBadge && (
+                          <Badge 
+                            variant="destructive" 
+                            className="ml-auto" 
+                            data-testid="badge-pending-count"
+                          >
+                            {pendingCount}
+                          </Badge>
+                        )}
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

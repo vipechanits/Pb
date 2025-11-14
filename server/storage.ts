@@ -29,7 +29,7 @@ import {
   userIncomeSummaries
 } from "@shared/schema";
 import { SLOT_TO_PAYMENT_TYPE, PAYMENT_TYPE_AMOUNTS, MATRIX_PAYMENT_TYPES } from "@shared/constants";
-import { eq, and, or, ne, isNull, desc, sql, lt, asc, inArray } from "drizzle-orm";
+import { eq, and, or, ne, isNull, desc, sql, lt, asc, inArray, count } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "./db";
 import crypto from "crypto";
@@ -49,6 +49,8 @@ export interface IStorage {
   checkProfileComplete(identifier: string): Promise<boolean>;
   getUsersBySponsorAndLeg(sponsorUserId: string, leg: 'left' | 'right'): Promise<User[]>;
   getDirectReferrals(sponsorUserId: string): Promise<User[]>;
+  getSponsorChain(userId: string): Promise<string[]>;
+  isInDownline(requesterId: string, targetId: string): Promise<boolean>;
   
   // Binary match queue methods
   releaseAbandonedQueueReservations(hoursOld?: number): Promise<number>;
@@ -88,6 +90,7 @@ export interface IStorage {
   getActivationPaymentsByReceiverUserId(receiverUserId: string): Promise<ActivationPayment[]>;
   getActivationPaymentsPendingConfirmation(receiverUserId: string): Promise<ActivationPayment[]>;
   getAdminPendingConfirmations(adminUserId: string): Promise<ActivationPayment[]>;
+  getAllPendingConfirmationsCount(): Promise<number>;
   getAllConfirmedPayments(): Promise<ActivationPayment[]>;
   getConfirmedPaymentsWithDetails(): Promise<Array<ActivationPayment & { payerName: string | null, receiverName: string | null }>>;
   submitPaymentProof(id: string, utrId: string, proofUrl?: string): Promise<ActivationPayment | undefined>;
@@ -484,6 +487,44 @@ export class DbStorage implements IStorage {
       ))
       .orderBy(desc(users.createdAt));
     return result;
+  }
+
+  async getSponsorChain(userId: string): Promise<string[]> {
+    // Get all ancestors in the sponsor chain using WITH RECURSIVE
+    // Returns array ordered from user up to root: [userId, sponsor, sponsor's sponsor, ...]
+    // Excludes PB0 (admin) as per documentation: "admin account (PB0) completely excluded from tree structures"
+    const result = await db.execute<{ user_id: string }>(sql`
+      WITH RECURSIVE sponsor_chain AS (
+        -- Base case: start with the given user (exclude PB0 from being a starting point)
+        SELECT user_id, sponsor_id, 0 as depth
+        FROM users
+        WHERE user_id = ${userId} AND user_id != 'PB0'
+        
+        UNION ALL
+        
+        -- Recursive case: get sponsor of current user
+        -- Add sponsor only if it's not NULL and not PB0
+        SELECT u.user_id, u.sponsor_id, sc.depth + 1
+        FROM users u
+        INNER JOIN sponsor_chain sc ON u.user_id = sc.sponsor_id
+        WHERE u.user_id != 'PB0'
+      )
+      SELECT user_id FROM sponsor_chain ORDER BY depth ASC
+    `);
+    
+    return result.rows.map(row => row.user_id);
+  }
+
+  async isInDownline(requesterId: string, targetId: string): Promise<boolean> {
+    // Check if targetId is in requesterId's downline (sponsor hierarchy)
+    // Returns true ONLY if targetId is a descendant of requesterId
+    if (requesterId === targetId) return true;
+    
+    // Get sponsor chain for target user
+    const targetChain = await this.getSponsorChain(targetId);
+    
+    // Check if requester is an ancestor of target (requester is in target's upline)
+    return targetChain.includes(requesterId);
   }
 
   async getMatrixAncestors(userId: string, depth: number, tx?: any): Promise<string[]> {
@@ -973,6 +1014,15 @@ export class DbStorage implements IStorage {
         eq(activationPayments.status, 'submitted')
       )
     ).orderBy(desc(activationPayments.updatedAt));
+  }
+
+  async getAllPendingConfirmationsCount(): Promise<number> {
+    // Get total count of ALL submitted payments in the system (for admin global notifications)
+    const result = await db.select({ count: count() })
+      .from(activationPayments)
+      .where(eq(activationPayments.status, 'submitted'));
+    
+    return result[0]?.count || 0;
   }
 
   async getAllConfirmedPayments(): Promise<ActivationPayment[]> {
@@ -1507,38 +1557,59 @@ export class DbStorage implements IStorage {
           
           console.log(`[ACTIVATION] ✓ Final income verification passed: All 8 income records confirmed`);
           
-          // Step 4: Update sponsor's network statistics NOW (only after activation)
-          // This is when the user becomes visible in the binary tree
+          // Step 4: Update ALL upline network statistics recursively NOW (only after activation)
+          // This propagates the activation up the entire sponsor chain
           if (activatedUser.sponsorId && assignedBinaryLeg) {
-            const sponsorId = activatedUser.sponsorId;
+            console.log(`[ACTIVATION] Updating upline leg counts for ${activatedUser.userId} (leg: ${assignedBinaryLeg})`);
             
-            // Increment sponsor's referral count, global leg count, AND personal leg count
-            const updateData: any = {
-              totalReferrals: sql`${users.totalReferrals} + 1`,
-              updatedAt: now
-            };
+            // Get sponsor chain (excluding PB0)
+            const sponsorChain = await this.getSponsorChain(activatedUser.userId);
+            console.log(`[ACTIVATION] Found ${sponsorChain.length} upline sponsors (excluding PB0 and self)`);
             
-            if (assignedBinaryLeg === 'left') {
-              updateData.leftLegCount = sql`${users.leftLegCount} + 1`; // Global count
-              updateData.personalLeftCount = sql`${users.personalLeftCount} + 1`; // Personal count
-            } else if (assignedBinaryLeg === 'right') {
-              updateData.rightLegCount = sql`${users.rightLegCount} + 1`; // Global count
-              updateData.personalRightCount = sql`${users.personalRightCount} + 1`; // Personal count
+            // Update each upline user's leg counts
+            for (const uplineId of sponsorChain) {
+              if (uplineId === activatedUser.userId) continue; // Skip self
+              if (uplineId === 'PB0') continue; // Skip admin
+              
+              const updateData: any = {
+                updatedAt: now
+              };
+              
+              // Direct sponsor gets personal + global count increment
+              // Other uplines get only global count increment
+              const isDirectSponsor = uplineId === activatedUser.sponsorId;
+              
+              if (assignedBinaryLeg === 'left') {
+                updateData.leftLegCount = sql`${users.leftLegCount} + 1`; // Global count for all
+                if (isDirectSponsor) {
+                  updateData.personalLeftCount = sql`${users.personalLeftCount} + 1`; // Personal only for direct sponsor
+                  updateData.totalReferrals = sql`${users.totalReferrals} + 1`; // Total referrals only for direct sponsor
+                }
+              } else if (assignedBinaryLeg === 'right') {
+                updateData.rightLegCount = sql`${users.rightLegCount} + 1`; // Global count for all
+                if (isDirectSponsor) {
+                  updateData.personalRightCount = sql`${users.personalRightCount} + 1`; // Personal only for direct sponsor
+                  updateData.totalReferrals = sql`${users.totalReferrals} + 1`; // Total referrals only for direct sponsor
+                }
+              }
+              
+              await tx.update(users)
+                .set(updateData)
+                .where(eq(users.userId, uplineId));
+              
+              const typeLabel = isDirectSponsor ? 'direct sponsor' : 'upline';
+              console.log(`[ACTIVATION] Updated ${typeLabel} ${uplineId}: +1 to ${assignedBinaryLeg} leg (${isDirectSponsor ? 'personal + global' : 'global only'})`);
             }
             
-            await tx.update(users)
-              .set(updateData)
-              .where(eq(users.userId, sponsorId));
+            // Step 5: Check ALL upline users for queue entry eligibility
+            // Import QUEUE-BASED binary matching service
+            const { BinaryMatchService } = await import('./binary-match-service');
+            const binaryMatchService = new BinaryMatchService(tx as any);
             
-            console.log(`[ACTIVATION] Updated sponsor ${sponsorId} stats: +1 total, +1 to ${assignedBinaryLeg} leg (global & personal)`);
+            console.log(`[BINARY_MATCH_QUEUE] Checking upline for queue entry after ${activatedUser.userId} activation`);
+            await binaryMatchService.processUplineForQueueEntry(activatedUser.userId);
+            console.log(`[BINARY_MATCH_QUEUE] ✓ Upline queue check completed`);
           }
-          
-          // Process binary match queue for upline (check if upline users built 3:3 pairs)
-          const { BinaryMatchService } = await import('./binary-match-service');
-          const binaryMatchService = new BinaryMatchService(tx);
-          
-          console.log(`[ACTIVATION] Processing binary match queue for upline after user ${activatedUser.userId} activation`);
-          await binaryMatchService.processUplineForQueueEntry(activatedUser.userId);
           
           console.log(`[ACTIVATION] User ${activatedUser.userId} successfully activated and placed in binary tree!`);
         }

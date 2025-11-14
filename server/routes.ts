@@ -776,12 +776,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/users/:userId/binary-tree", requireAuth, async (req, res) => {
     try {
       const { userId } = req.params;
-      const maxDepth = parseInt(req.query.maxDepth as string) || 3; // Default 3 levels for initial load
+      const maxDepth = parseInt(req.query.maxDepth as string) || 5; // Default 5 levels for initial load
       const requestingUser = await storage.getUserById(req.session.userId!);
       
-      // Users can only view their own tree, admins can view any
-      if (requestingUser?.userId !== userId && requestingUser?.role !== 'admin') {
-        return res.status(403).json({ error: "Forbidden - You can only view your own binary tree" });
+      if (!requestingUser?.userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      // Authorization: Can view if (1) own tree, (2) admin, or (3) target is in requester's downline
+      const canView = 
+        requestingUser.userId === userId ||
+        requestingUser.role === 'admin' ||
+        await storage.isInDownline(requestingUser.userId, userId);
+        
+      if (!canView) {
+        return res.status(403).json({ error: "Forbidden - You can only view your own tree or downline trees" });
       }
       
       const rootUser = await storage.getUserByUserId(userId);
@@ -790,8 +799,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Get sponsor info for the root node
+      // Exclude PB0 (admin) as per documentation: "admin account (PB0) completely excluded from tree structures"
       let directSponsor = null;
-      if (rootUser.sponsorId) {
+      if (rootUser.sponsorId && rootUser.sponsorId !== 'PB0') {
         const sponsor = await storage.getUserByUserId(rootUser.sponsorId);
         if (sponsor) {
           directSponsor = {
@@ -865,9 +875,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { userId, childUserId } = req.params;
       const requestingUser = await storage.getUserById(req.session.userId!);
       
-      // Users can only view their own tree, admins can view any
-      if (requestingUser?.userId !== userId && requestingUser?.role !== 'admin') {
-        return res.status(403).json({ error: "Forbidden - You can only view your own binary tree" });
+      if (!requestingUser?.userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      // Authorization: Can view if (1) own tree, (2) admin, or (3) target is in requester's downline
+      const canView = 
+        requestingUser.userId === userId ||
+        requestingUser.role === 'admin' ||
+        await storage.isInDownline(requestingUser.userId, userId);
+        
+      if (!canView) {
+        return res.status(403).json({ error: "Forbidden - You can only view your own tree or downline trees" });
       }
       
       const childUser = await storage.getUserByUserId(childUserId);
@@ -1531,6 +1550,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching pending payments:", error);
       res.status(500).json({ error: "Failed to fetch pending payments" });
+    }
+  });
+
+  // Get count of pending confirmations for notification badge
+  app.get("/api/activation-payments/pending-count", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user || !user.userId) {
+        return res.status(400).json({ error: "User ID not found" });
+      }
+      
+      // If admin, count ALL submitted payments in the system; regular users count only their own
+      let count: number = 0;
+      if (user.role === 'admin') {
+        count = await storage.getAllPendingConfirmationsCount();
+      } else {
+        const payments = await storage.getActivationPaymentsPendingConfirmation(user.userId);
+        count = payments.length;
+      }
+      
+      res.json({ count });
+    } catch (error) {
+      console.error("Error fetching pending count:", error);
+      res.status(500).json({ error: "Failed to fetch pending count" });
     }
   });
 

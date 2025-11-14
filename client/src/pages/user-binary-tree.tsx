@@ -56,15 +56,29 @@ interface UserNodeProps {
   node: BinaryTreeNode | null;
   position: 'root' | 'left' | 'right';
   rootUserId: string;
+  onViewTeam?: (userId: string) => void;
+  expandedNodes: Set<string>;
+  loadedNodes: Set<string>;
+  onToggleExpansion: (nodeUserId: string, isExpanded: boolean) => void;
+  onMarkLoaded: (nodeUserId: string) => void;
 }
 
-function UserNode({ node, position, rootUserId }: UserNodeProps) {
+function UserNode({ 
+  node, 
+  position, 
+  rootUserId, 
+  onViewTeam,
+  expandedNodes,
+  loadedNodes,
+  onToggleExpansion,
+  onMarkLoaded,
+}: UserNodeProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   
-  // Initialize expansion state based on whether child objects exist
-  const [isExpanded, setIsExpanded] = useState(() => Boolean(node?.leftChild || node?.rightChild));
-  const [childrenLoaded, setChildrenLoaded] = useState(false);
+  // Use shared expansion state instead of local state
+  const isExpanded = node ? expandedNodes.has(node.userId) : false;
+  const childrenLoaded = node ? loadedNodes.has(node.userId) : false;
 
   // Mutation to load children on demand
   const loadChildren = useMutation({
@@ -106,8 +120,9 @@ function UserNode({ node, position, rootUserId }: UserNodeProps) {
             return updateNode(oldTree);
           }
         );
-        setChildrenLoaded(true);
-        setIsExpanded(true); // Ensure node stays expanded after loading children
+        // Mark as loaded and expanded in shared state
+        onMarkLoaded(node.userId);
+        onToggleExpansion(node.userId, true);
       }
     },
     onError: (error) => {
@@ -117,21 +132,19 @@ function UserNode({ node, position, rootUserId }: UserNodeProps) {
         title: "Failed to load children",
         description: error instanceof Error ? error.message : "An error occurred while loading children. Please try again.",
       });
-      setIsExpanded(false); // Reset to collapsed so user can retry
+      // Reset to collapsed in shared state
+      if (node) {
+        onToggleExpansion(node.userId, false);
+      }
     },
   });
 
-  // Sync childrenLoaded with actual props to handle cache invalidation
+  // Auto-mark nodes as loaded if they have children in props (from cache)
   useEffect(() => {
-    // If children exist in props, mark as loaded
-    if (node?.leftChild || node?.rightChild) {
-      setChildrenLoaded(true);
+    if (node && (node.leftChild || node.rightChild) && !childrenLoaded) {
+      onMarkLoaded(node.userId);
     }
-    // If children don't exist in props and we're not loading, mark as not loaded
-    else if (!loadChildren.isPending) {
-      setChildrenLoaded(false);
-    }
-  }, [node?.leftChild, node?.rightChild, loadChildren.isPending]);
+  }, [node, childrenLoaded, onMarkLoaded]);
 
   if (!node) {
     return (
@@ -175,9 +188,13 @@ function UserNode({ node, position, rootUserId }: UserNodeProps) {
             </Badge>
           )}
           
+          <div className="flex items-center gap-2 text-xs">
+            <span className="font-semibold text-green-600" title="Total Left Leg Count">L: {node.leftLegCount}</span>
+            <span className="font-semibold text-blue-600" title="Total Right Leg Count">R: {node.rightLegCount}</span>
+          </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span title="Left Leg">L: {node.personalLeftCount}</span>
-            <span title="Right Leg">R: {node.personalRightCount}</span>
+            <span title="Personal Left">PL: {node.personalLeftCount}</span>
+            <span title="Personal Right">PR: {node.personalRightCount}</span>
           </div>
           
           {/* Expand/Collapse Button for nodes with children */}
@@ -187,14 +204,13 @@ function UserNode({ node, position, rootUserId }: UserNodeProps) {
               size="sm"
               className="w-full h-6 mt-1"
               onClick={() => {
-                // Recompute from latest props to avoid stale closures
-                const childrenAreLoaded = Boolean(node?.leftChild || node?.rightChild) || childrenLoaded;
+                if (!node) return;
                 
-                // If actual child objects exist, just toggle expansion state
-                if (childrenAreLoaded) {
-                  setIsExpanded(!isExpanded);
+                // If children are already loaded, just toggle expansion
+                if (childrenLoaded || node.leftChild || node.rightChild) {
+                  onToggleExpansion(node.userId, !isExpanded);
                 }
-                // Otherwise, trigger lazy load (onSuccess/onError will manage isExpanded)
+                // Otherwise, trigger lazy load (onSuccess will set expansion)
                 else if (!loadChildren.isPending) {
                   loadChildren.mutate(node.userId);
                 }
@@ -213,6 +229,20 @@ function UserNode({ node, position, rootUserId }: UserNodeProps) {
               </span>
             </Button>
           )}
+          
+          {/* View This Team Button */}
+          {onViewTeam && node.userId !== rootUserId && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="w-full h-6 mt-1"
+              onClick={() => onViewTeam(node.userId)}
+              data-testid={`button-view-team-${node.userId}`}
+            >
+              <Users className="w-3 h-3 mr-1" />
+              <span className="text-xs">View Team</span>
+            </Button>
+          )}
         </CardContent>
       </Card>
       
@@ -225,7 +255,16 @@ function UserNode({ node, position, rootUserId }: UserNodeProps) {
             <Badge variant="outline" className="mb-2 text-xs border-blue-500 text-blue-500">
               Left
             </Badge>
-            <UserNode node={node.leftChild || null} position="left" rootUserId={rootUserId} />
+            <UserNode 
+              node={node.leftChild || null} 
+              position="left" 
+              rootUserId={rootUserId} 
+              onViewTeam={onViewTeam}
+              expandedNodes={expandedNodes}
+              loadedNodes={loadedNodes}
+              onToggleExpansion={onToggleExpansion}
+              onMarkLoaded={onMarkLoaded}
+            />
           </div>
           
           {/* Right Child */}
@@ -234,7 +273,16 @@ function UserNode({ node, position, rootUserId }: UserNodeProps) {
             <Badge variant="outline" className="mb-2 text-xs border-green-500 text-green-500">
               Right
             </Badge>
-            <UserNode node={node.rightChild || null} position="right" rootUserId={rootUserId} />
+            <UserNode 
+              node={node.rightChild || null} 
+              position="right" 
+              rootUserId={rootUserId} 
+              onViewTeam={onViewTeam}
+              expandedNodes={expandedNodes}
+              loadedNodes={loadedNodes}
+              onToggleExpansion={onToggleExpansion}
+              onMarkLoaded={onMarkLoaded}
+            />
           </div>
         </div>
       )}
@@ -242,13 +290,164 @@ function UserNode({ node, position, rootUserId }: UserNodeProps) {
   );
 }
 
+type TreeExpansionState = {
+  expanded: Set<string>;
+  loaded: Set<string>;
+};
+
 export default function UserBinaryTreePage() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  
+  // Track which user's tree is being viewed (defaults to logged-in user)
+  const [viewedUserId, setViewedUserId] = useState<string | null>(null);
+  const effectiveViewedUserId = viewedUserId || user?.userId || '';
+
+  // Maintain expansion state per tree (keyed by rootUserId)
+  const [expansionStates, setExpansionStates] = useState<Record<string, TreeExpansionState>>({});
 
   const { data: tree, isLoading, error } = useQuery<BinaryTreeNode>({
-    queryKey: ['/api/users', user?.userId, 'binary-tree'],
-    enabled: !!user?.userId,
+    queryKey: ['/api/users', effectiveViewedUserId, 'binary-tree'],
+    enabled: !!effectiveViewedUserId,
+    retry: (failureCount, error: any) => {
+      // Don't retry on 403 (forbidden) - this means unauthorized access
+      if (error?.response?.status === 403) return false;
+      return failureCount < 3;
+    },
   });
+  
+  // Handle 403 errors by redirecting to own tree
+  useEffect(() => {
+    if (error && (error as any)?.response?.status === 403) {
+      toast({
+        title: "Access Denied",
+        description: "You can only view your own tree or downline trees",
+        variant: "destructive",
+      });
+      setViewedUserId(null); // Reset to own tree
+    }
+  }, [error, toast]);
+  
+  // Initialize expansion state for new trees (preserves existing state)
+  useEffect(() => {
+    if (!effectiveViewedUserId) return;
+    
+    setExpansionStates(prev => {
+      // Only initialize if this tree hasn't been viewed before
+      if (!prev[effectiveViewedUserId]) {
+        return {
+          ...prev,
+          [effectiveViewedUserId]: {
+            expanded: new Set([effectiveViewedUserId]), // Root expanded by default
+            loaded: new Set(),
+          },
+        };
+      }
+      return prev; // Preserve existing state
+    });
+  }, [effectiveViewedUserId]);
+  
+  // Hydrate loaded state from cached tree data (merges with existing, never overwrites expanded)
+  useEffect(() => {
+    if (!tree || !effectiveViewedUserId) return;
+    
+    // Traverse tree and collect nodes that have children (should be marked as loaded)
+    const nodesWithChildren = new Set<string>();
+    const traverseTree = (node: BinaryTreeNode | null) => {
+      if (!node) return;
+      
+      if (node.leftChild || node.rightChild) {
+        nodesWithChildren.add(node.userId);
+      }
+      
+      if (node.leftChild) traverseTree(node.leftChild);
+      if (node.rightChild) traverseTree(node.rightChild);
+    };
+    
+    traverseTree(tree);
+    
+    // ONLY update loaded Set, never touch expanded (user controls expanded via toggles)
+    if (nodesWithChildren.size > 0) {
+      setExpansionStates(prev => {
+        const existing = prev[effectiveViewedUserId];
+        
+        // Initialize if this is first time viewing this tree
+        if (!existing) {
+          return {
+            ...prev,
+            [effectiveViewedUserId]: {
+              expanded: new Set([effectiveViewedUserId]), // Root expanded by default
+              loaded: nodesWithChildren,
+            },
+          };
+        }
+        
+        // Merge new loaded nodes with existing (preserve expanded completely)
+        const newLoaded = new Set([...Array.from(existing.loaded), ...Array.from(nodesWithChildren)]);
+        
+        return {
+          ...prev,
+          [effectiveViewedUserId]: {
+            expanded: existing.expanded, // NEVER modify - user controls this
+            loaded: newLoaded, // ONLY merge new cached children
+          },
+        };
+      });
+    }
+  }, [tree, effectiveViewedUserId]);
+  
+  // Get or initialize expansion state for current tree
+  const currentExpansionState = expansionStates[effectiveViewedUserId] || {
+    expanded: new Set<string>([effectiveViewedUserId]), // Root is expanded by default
+    loaded: new Set<string>(),
+  };
+  
+  // Helper to update expansion state for a node
+  const toggleNodeExpansion = (nodeUserId: string, isExpanded: boolean) => {
+    setExpansionStates(prev => {
+      const state = prev[effectiveViewedUserId] || {
+        expanded: new Set([effectiveViewedUserId]),
+        loaded: new Set(),
+      };
+      
+      const newExpanded = new Set(state.expanded);
+      if (isExpanded) {
+        newExpanded.add(nodeUserId);
+      } else {
+        newExpanded.delete(nodeUserId);
+      }
+      
+      return {
+        ...prev,
+        [effectiveViewedUserId]: {
+          ...state,
+          expanded: newExpanded,
+        },
+      };
+    });
+  };
+  
+  // Helper to mark node as loaded
+  const markNodeAsLoaded = (nodeUserId: string) => {
+    setExpansionStates(prev => {
+      const state = prev[effectiveViewedUserId] || {
+        expanded: new Set([effectiveViewedUserId]),
+        loaded: new Set(),
+      };
+      
+      const newLoaded = new Set(state.loaded);
+      newLoaded.add(nodeUserId);
+      
+      return {
+        ...prev,
+        [effectiveViewedUserId]: {
+          ...state,
+          loaded: newLoaded,
+        },
+      };
+    });
+  };
 
   if (isLoading) {
     return (
@@ -276,14 +475,47 @@ export default function UserBinaryTreePage() {
     );
   }
 
+  const isViewingOwnTree = effectiveViewedUserId === user?.userId;
+  
   return (
     <div className="container mx-auto p-6 space-y-6" data-testid="binary-tree-page">
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold">Binary Tree</h1>
-        <p className="text-muted-foreground">
-          View your binary team structure and downline placements
-        </p>
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <h1 className="text-3xl font-bold">Binary Tree</h1>
+            <p className="text-muted-foreground">
+              {isViewingOwnTree 
+                ? "View your binary team structure and downline placements"
+                : `Viewing ${tree?.name || effectiveViewedUserId}'s binary team structure`
+              }
+            </p>
+          </div>
+          
+          {/* Navigation Buttons */}
+          <div className="flex items-center gap-2">
+            {!isViewingOwnTree && (
+              <Button
+                variant="outline"
+                onClick={() => setViewedUserId(null)}
+                data-testid="button-back-to-my-tree"
+              >
+                <ArrowRight className="w-4 h-4 mr-2 rotate-180" />
+                Back to My Tree
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Tree Owner Info Badge */}
+      {!isViewingOwnTree && tree && (
+        <Alert data-testid="alert-viewing-other-tree">
+          <Users className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Viewing:</strong> {tree.name || tree.userId} ({tree.userId}) - {tree.isActivated ? "Activated" : "Not Activated"}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Sponsor Summary */}
       {tree?.directSponsor !== undefined && (
@@ -391,8 +623,18 @@ export default function UserBinaryTreePage() {
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <div className="flex justify-center min-w-max p-6">
-            {tree && user?.userId ? (
-              <UserNode node={tree} position="root" rootUserId={user.userId} />
+            {tree && effectiveViewedUserId ? (
+              <UserNode 
+                key={effectiveViewedUserId}
+                node={tree} 
+                position="root" 
+                rootUserId={effectiveViewedUserId} 
+                onViewTeam={setViewedUserId}
+                expandedNodes={currentExpansionState.expanded}
+                loadedNodes={currentExpansionState.loaded}
+                onToggleExpansion={toggleNodeExpansion}
+                onMarkLoaded={markNodeAsLoaded}
+              />
             ) : (
               <div className="text-center text-muted-foreground py-12">
                 <p>No team data available</p>
