@@ -105,6 +105,8 @@ export default function UserActivationPage() {
         return <Badge variant="secondary">Pending Review</Badge>;
       case 'rejected':
         return <Badge variant="destructive">Rejected</Badge>;
+      case 'awaiting_assignment':
+        return <Badge variant="outline" className="text-yellow-600">Awaiting Assignment</Badge>;
       default:
         return <Badge variant="outline">Not Paid</Badge>;
     }
@@ -126,6 +128,11 @@ export default function UserActivationPage() {
   const confirmedCount = payments?.filter(p => p.status === 'confirmed').length || 0;
   const submittedCount = payments?.filter(p => p.status === 'submitted').length || 0;
   const rejectedCount = payments?.filter(p => p.status === 'rejected').length || 0;
+  
+  // Check if first 3 payments (slots 0-2) are all confirmed
+  const firstThreeConfirmed = payments
+    ? payments.filter(p => p.slotIndex < 3).every(p => p.status === 'confirmed')
+    : false;
   
   // Sum actual amounts from confirmed payments
   const confirmedAmount = payments
@@ -458,53 +465,122 @@ export default function UserActivationPage() {
         <CardContent>
           <div className="space-y-3">
             {payments && payments.length > 0 ? (
-              payments.map((payment) => (
-                <div
-                  key={payment.id}
-                  className="flex items-center justify-between p-4 border rounded-lg hover-elevate"
-                  data-testid={`payment-slot-${payment.slotIndex}`}
-                >
-                  <div className="flex items-center gap-3">
-                    {getStatusIcon(payment.status)}
-                    <div>
-                      <p className="font-medium">{getPaymentSlotLabel(payment.slotIndex)}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {payment.receiverType === 'admin' ? 'Admin Account (PB0)' : payment.receiverUserId}
-                      </p>
-                      {payment.status === 'submitted' && payment.offlineUtrId && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          UTR: {payment.offlineUtrId}
-                        </p>
-                      )}
-                      {payment.status === 'rejected' && payment.rejectionReason && (
-                        <p className="text-xs text-red-600 mt-1">
-                          Reason: {payment.rejectionReason}
-                        </p>
-                      )}
+              <>
+                {/* First 3 payments (always visible) */}
+                {payments
+                  .filter(p => p.slotIndex < 3)
+                  .map((payment) => (
+                    <div
+                      key={payment.id}
+                      className="flex items-center justify-between p-4 border rounded-lg hover-elevate"
+                      data-testid={`payment-slot-${payment.slotIndex}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {getStatusIcon(payment.status)}
+                        <div>
+                          <p className="font-medium">{getPaymentSlotLabel(payment.slotIndex)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {payment.receiverType === 'admin' ? 'Admin Account (PB0)' : payment.receiverUserId}
+                          </p>
+                          {payment.status === 'submitted' && payment.offlineUtrId && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              UTR: {payment.offlineUtrId}
+                            </p>
+                          )}
+                          {payment.status === 'rejected' && payment.rejectionReason && (
+                            <p className="text-xs text-red-600 mt-1">
+                              Reason: {payment.rejectionReason}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className="font-bold">₹{payment.amountInr}</p>
+                          {getStatusBadge(payment.status)}
+                          {payment.submissionCount > 0 && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Attempts: {payment.submissionCount}
+                            </p>
+                          )}
+                        </div>
+                        {(payment.status === 'pending' || payment.status === 'rejected') && (
+                          <Button
+                            size="sm"
+                            onClick={() => handlePayClick(payment)}
+                            data-testid={`button-pay-${payment.slotIndex}`}
+                          >
+                            {payment.status === 'rejected' ? 'Resubmit' : 'Pay Now'}
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <p className="font-bold">₹{payment.amountInr}</p>
-                      {getStatusBadge(payment.status)}
-                      {payment.submissionCount > 0 && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Attempts: {payment.submissionCount}
-                        </p>
-                      )}
+                  ))}
+                
+                {/* Matrix payments notice (shown when first 3 not all confirmed) */}
+                {!firstThreeConfirmed && (
+                  <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+                    <Info className="h-4 w-4 text-blue-600" />
+                    <AlertDescription className="text-blue-900 dark:text-blue-100">
+                      <strong>Matrix Payments (5 remaining)</strong>
+                      <br />
+                      Matrix payment slots will appear after your first 3 payments are confirmed. 
+                      Complete and get confirmation for Direct Sponsor, Binary Match, and Creator Fee payments first.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Matrix payments (slots 3-7, shown only after first 3 confirmed) */}
+                {firstThreeConfirmed && payments
+                  .filter(p => p.slotIndex >= 3)
+                  .map((payment) => (
+                    <div
+                      key={payment.id}
+                      className="flex items-center justify-between p-4 border rounded-lg hover-elevate"
+                      data-testid={`payment-slot-${payment.slotIndex}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {getStatusIcon(payment.status)}
+                        <div>
+                          <p className="font-medium">{getPaymentSlotLabel(payment.slotIndex)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {payment.receiverType === 'admin' ? 'Admin Account (PB0)' : payment.receiverUserId || 'Assigning...'}
+                          </p>
+                          {payment.status === 'submitted' && payment.offlineUtrId && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              UTR: {payment.offlineUtrId}
+                            </p>
+                          )}
+                          {payment.status === 'rejected' && payment.rejectionReason && (
+                            <p className="text-xs text-red-600 mt-1">
+                              Reason: {payment.rejectionReason}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className="font-bold">₹{payment.amountInr}</p>
+                          {getStatusBadge(payment.status)}
+                          {payment.submissionCount > 0 && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Attempts: {payment.submissionCount}
+                            </p>
+                          )}
+                        </div>
+                        {(payment.status === 'pending' || payment.status === 'rejected') && (
+                          <Button
+                            size="sm"
+                            onClick={() => handlePayClick(payment)}
+                            data-testid={`button-pay-${payment.slotIndex}`}
+                          >
+                            {payment.status === 'rejected' ? 'Resubmit' : 'Pay Now'}
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                    {(payment.status === 'pending' || payment.status === 'rejected') && (
-                      <Button
-                        size="sm"
-                        onClick={() => handlePayClick(payment)}
-                        data-testid={`button-pay-${payment.slotIndex}`}
-                      >
-                        {payment.status === 'rejected' ? 'Resubmit' : 'Pay Now'}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))
+                  ))}
+              </>
             ) : (
               <div className="text-center py-8">
                 <p className="text-muted-foreground">No payment slots found. Contact admin.</p>
