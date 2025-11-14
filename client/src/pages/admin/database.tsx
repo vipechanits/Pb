@@ -146,7 +146,7 @@ export default function DatabaseBackupPage() {
       <Alert>
         <AlertTriangle className="h-4 w-4" />
         <AlertDescription>
-          <strong>Admin Access Required</strong> - Database backup/restore operations are restricted to PB0 and PB1 only.
+          <strong>Admin Access Required</strong> - Database backup/restore operations are restricted to PB0 only.
           Always create a backup before performing a restore operation.
         </AlertDescription>
       </Alert>

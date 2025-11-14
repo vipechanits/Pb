@@ -193,8 +193,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Hash password
       const hashedPassword = await hashPassword(password);
       
-      // Auto-assign PB1 as sponsor if no sponsor provided
-      let finalSponsorId = sponsorId ? sponsorId.toUpperCase() : 'PB1';
+      // Auto-assign PB0 as sponsor if no sponsor provided
+      // ALL admin fees and fallback payments go to PB0
+      let finalSponsorId = sponsorId ? sponsorId.toUpperCase() : 'PB0';
       let finalBinaryLeg = binaryLeg;
       
       // Validate sponsor exists
@@ -216,7 +217,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         password: hashedPassword,
         role: 'user',
         // userId auto-generated from sequence (PB10000+)
-        sponsorId: finalSponsorId, // Auto-assign PB1 if not provided
+        sponsorId: finalSponsorId, // Auto-assign PB0 if not provided (all admin fees go to PB0)
         binaryLeg: finalBinaryLeg, // Auto-select best leg if not provided
         isActivated: false,
         emailVerified: true, // Auto-verify email (no verification required)

@@ -16,10 +16,12 @@ export function serializeUser(user: User) {
   return userWithoutPassword;
 }
 
-// Generate next user ID (PB1, PB2, etc.)
+// DEPRECATED: Generate next user ID (PB10000, PB10001, etc.)
+// This function is no longer used. User IDs are now generated via PostgreSQL sequence.
+// See initializeUserIdSequence() in server/storage.ts
 export function generateNextUserId(lastUserId: string | null): string {
   if (!lastUserId) {
-    return 'PB1';
+    return 'PB10000';
   }
   
   const num = parseInt(lastUserId.replace('PB', ''));

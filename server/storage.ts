@@ -25,7 +25,8 @@ import {
   passwordResetTokens,
   databaseBackups,
   binaryMatchQueue,
-  incomeTransactions
+  incomeTransactions,
+  userIncomeSummaries
 } from "@shared/schema";
 import { SLOT_TO_PAYMENT_TYPE, PAYMENT_TYPE_AMOUNTS, MATRIX_PAYMENT_TYPES } from "@shared/constants";
 import { eq, and, or, ne, isNull, desc, sql, lt, asc, inArray } from "drizzle-orm";
@@ -134,7 +135,7 @@ export class DbStorage implements IStorage {
     }
   }
   
-  // Initialize admin users (PB0 root admin and PB1 secondary admin)
+  // Initialize admin user (PB0 root admin only)
   async initializeAdminUsers(hashPassword: (password: string) => Promise<string>): Promise<void> {
     try {
       // Get admin password from environment - REQUIRED unless explicitly in development
@@ -169,7 +170,7 @@ export class DbStorage implements IStorage {
       if (!adminPassword && isExplicitlyDevelopment) {
         console.error('');
         console.error('═══════════════════════════════════════════════════════════════════');
-        console.error('  ⚠️  WARNING: Using fallback admin passwords in DEVELOPMENT');
+        console.error('  ⚠️  WARNING: Using fallback admin password in DEVELOPMENT');
         console.error('═══════════════════════════════════════════════════════════════════');
         console.error('  This is ONLY allowed in development.');
         console.error('  Production deployments will fail without ADMIN_DEFAULT_PASSWORD.');
@@ -178,7 +179,6 @@ export class DbStorage implements IStorage {
       }
       
       const pb0Password = adminPassword || 'Admin@1234'; // Fallback ONLY in development
-      const pb1Password = adminPassword || 'Admin@2000'; // Fallback ONLY in development
       
       // Check if PB0 root admin exists
       const pb0Exists = await this.getUserByUserId('PB0');
@@ -194,31 +194,12 @@ export class DbStorage implements IStorage {
           mobile: '9999999999',
           isActivated: true,
           isProfileComplete: true,
-          matrixLevel: 0, // Root of global matrix
-          matrixPath: 'PB0', // Root path
+          matrixLevel: 0, // Excluded from matrix tree
+          matrixPath: 'PB0', // Admin path
           requiresPostActivationProfileUpdate: true, // Force password change on first login
         });
         console.log('[INIT] ✓ PB0 root admin user created');
         console.log('[INIT] ⚠️  IMPORTANT: Change root admin password immediately after first login!');
-      }
-      
-      // Check if PB1 secondary admin exists
-      const pb1AdminExists = await this.getUserByEmail('payback2472000@gmail.com');
-      if (!pb1AdminExists) {
-        console.log('[INIT] Creating PB1 secondary admin user...');
-        const hashedPassword = await hashPassword(pb1Password);
-        await db.insert(users).values({
-          email: 'payback2472000@gmail.com',
-          password: hashedPassword,
-          role: 'admin',
-          userId: 'PB1',
-          name: 'Secondary Administrator',
-          mobile: '9876543210',
-          isActivated: true,
-          isProfileComplete: true,
-          requiresPostActivationProfileUpdate: true, // Force password change on first login
-        });
-        console.log('[INIT] ✓ PB1 secondary admin user created');
       }
     } catch (error) {
       // CRITICAL: Rethrow production security errors to halt server startup
@@ -246,16 +227,15 @@ export class DbStorage implements IStorage {
       
       // Set sequence to MAX existing PB#### number (using is_called=true)
       // This makes next nextval() return MAX+1, avoiding duplicates
-      // Exclude system admins PB0, PB1 from MAX calculation
-      // Fallback to 9999 so next ID is PB10000 (not PB15!)
+      // Exclude system admin PB0 from MAX calculation
+      // Fallback to 9999 so next ID is PB10000
       await db.execute(sql`
         SELECT setval('pb_user_id_seq', 
           COALESCE((
             SELECT MAX(CAST(SUBSTRING(user_id FROM 3) AS INTEGER))
             FROM users
             WHERE user_id LIKE 'PB%' 
-              AND user_id != 'PB0' 
-              AND user_id != 'PB1'
+              AND user_id != 'PB0'
           ), 9999),
           true
         )
@@ -554,12 +534,50 @@ export class DbStorage implements IStorage {
         return targetUser[0];
       }
 
+      // Check if this is the FIRST user in the matrix (root node)
+      // Excludes admin account (PB0) - they are not part of the matrix
+      const existingMatrixUsers = await txn.select()
+        .from(users)
+        .where(and(
+          sql`matrix_level IS NOT NULL`,
+          ne(users.role, 'admin')  // Exclude admin accounts from matrix
+        ))
+        .limit(1);
+
+      if (existingMatrixUsers.length === 0) {
+        // This user is the first non-admin to activate - make them the root node
+        // Typically PB10000, but dynamically handles whichever user activates first
+        console.log(`[MATRIX] ${userId} is the FIRST user in matrix - assigning as ROOT NODE`);
+        const result = await txn.update(users)
+          .set({
+            matrixParentId: null,      // Root has no parent
+            matrixPosition: null,      // Root has no position (not 0 or 1)
+            matrixLevel: 1,            // Root is level 1
+            matrixPath: userId,        // Root path is just the user ID (e.g., "PB10000")
+            updatedAt: new Date()
+          })
+          .where(and(
+            eq(users.userId, userId),
+            sql`matrix_parent_id IS NULL`  // Safety: only if not already placed
+          ))
+          .returning();
+        
+        if (result.length > 0) {
+          console.log(`[MATRIX] ✓ ${userId} successfully assigned as matrix root (Level 1, Path: ${userId})`);
+          return result[0];
+        } else {
+          throw new Error(`Failed to assign ${userId} as matrix root - already placed by another transaction`);
+        }
+      }
+
+      // Matrix has existing users - find next available slot using BFS
       const frontier = await txn.select()
         .from(users)
         .where(and(
           sql`matrix_level IS NOT NULL`,
           sql`matrix_level < 5`,
-          eq(users.isActivated, true)
+          eq(users.isActivated, true),
+          ne(users.role, 'admin')  // Exclude admin accounts from matrix
         ))
         .orderBy(sql`matrix_level ASC, matrix_path ASC`)
         .for('update');
@@ -1190,14 +1208,15 @@ export class DbStorage implements IStorage {
           return; // Exit gracefully - not ready yet
         }
         
-        console.log(`[ACTIVATION] All 8 payments confirmed. Verifying non-matrix income creation...`);
+        console.log(`[ACTIVATION] All 8 payments confirmed. Verifying immediately-created income...`);
         
-        // BUG #2 FIX: Defensive income verification - ensure income was created for non-matrix confirmed payments
-        // Matrix payments have deferred income creation (happens after matrix placement)
-        // At this point, we only verify direct_sponsor, binary_match, creator_fee (slots 0-2)
+        // DEFERRED INCOME POLICY: Both sponsor AND matrix incomes are deferred until activation completion
+        // Only binary_match (Slot 1) and creator_fee (Slot 2) incomes are created immediately upon payment confirmation
+        // Sponsor income (Slot 0) is created AFTER all 8 payments are confirmed (see lines 1388-1427)
+        // Matrix income (Slots 3-7) is created AFTER matrix placement (see lines 1431-1469)
         // CRITICAL: Only count slot-linked income (activationPaymentId NOT NULL) to exclude queue payouts
-        const expectedNonMatrixIncomeCount = 3; // Slots 0-2 (direct_sponsor, binary_match, creator_fee)
-        const actualNonMatrixIncome = await tx.select()
+        const expectedImmediateIncomeCount = 2; // Only binary_match + creator_fee
+        const actualImmediateIncome = await tx.select()
           .from(incomeTransactions)
           .where(and(
             eq(incomeTransactions.activationId, activationId),
@@ -1206,14 +1225,14 @@ export class DbStorage implements IStorage {
             sql`${incomeTransactions.activationPaymentId} IN (
               SELECT id FROM ${activationPayments} 
               WHERE ${activationPayments.activationId} = ${activationId} 
-              AND ${activationPayments.paymentType} IN ('direct_sponsor', 'binary_match', 'creator_fee')
+              AND ${activationPayments.paymentType} IN ('binary_match', 'creator_fee')
             )`
           ));
         
-        if (actualNonMatrixIncome.length !== expectedNonMatrixIncomeCount) {
-          // CRITICAL: Non-matrix payments confirmed but income missing - this is a data integrity issue
-          console.error(`[ACTIVATION ERROR] Non-matrix income mismatch for ${activationId}: Expected ${expectedNonMatrixIncomeCount}, Found ${actualNonMatrixIncome.length}`);
-          console.error(`[ACTIVATION ERROR] Confirmed payments: ${payments.length}, Non-matrix income created: ${actualNonMatrixIncome.length}`);
+        if (actualImmediateIncome.length !== expectedImmediateIncomeCount) {
+          // CRITICAL: Immediate-creation payments confirmed but income missing - this is a data integrity issue
+          console.error(`[ACTIVATION ERROR] Immediate income mismatch for ${activationId}: Expected ${expectedImmediateIncomeCount}, Found ${actualImmediateIncome.length}`);
+          console.error(`[ACTIVATION ERROR] Confirmed payments: ${payments.length}, Immediate income created: ${actualImmediateIncome.length}`);
           
           // Mark activation as failed for manual investigation
           await tx.update(activations)
@@ -1223,10 +1242,10 @@ export class DbStorage implements IStorage {
             })
             .where(eq(activations.id, activationId));
           
-          throw new Error(`Income verification failed: Expected ${expectedNonMatrixIncomeCount} non-matrix income records, found ${actualNonMatrixIncome.length}. Activation marked as FAILED for manual investigation.`);
+          throw new Error(`Income verification failed: Expected ${expectedImmediateIncomeCount} immediate income records (binary_match + creator_fee), found ${actualImmediateIncome.length}. Activation marked as FAILED for manual investigation.`);
         }
         
-        console.log(`[ACTIVATION] ✓ Non-matrix income verification passed: ${actualNonMatrixIncome.length} income records confirmed`);
+        console.log(`[ACTIVATION] ✓ Immediate income verification passed: ${actualImmediateIncome.length} income records confirmed (sponsor + matrix will be created next)`);
         
         if (allConfirmed) {
           console.log(`[ACTIVATION] All validations passed. Proceeding with activation...`);
@@ -1383,18 +1402,44 @@ export class DbStorage implements IStorage {
             .limit(1);
           
           if (sponsorPayment.length > 0) {
-            // Check if sponsor income already exists (deduplication for legacy data)
-            const existingSponsorIncome = await tx.select()
-              .from(incomeTransactions)
-              .where(eq(incomeTransactions.activationPaymentId, sponsorPayment[0].id))
-              .limit(1);
+            // CRITICAL: Delete any legacy sponsor income for this payment (created prematurely)
+            // This ensures the 8-income invariant holds and business rules are enforced
+            const deletedLegacyIncome = await tx.delete(incomeTransactions)
+              .where(and(
+                eq(incomeTransactions.activationPaymentId, sponsorPayment[0].id),
+                eq(incomeTransactions.incomeType, 'direct_sponsor')
+              ))
+              .returning();
             
-            if (existingSponsorIncome.length > 0) {
-              console.log(`[SPONSOR] Sponsor income already exists (ID: ${existingSponsorIncome[0].id}) - skipping creation`);
-            } else {
-              console.log(`[SPONSOR] Creating sponsor income for ${sponsorPayment[0].paymentType} → ${sponsorPayment[0].receiverUserId} (₹${sponsorPayment[0].amountInr})`);
-              await incomeService.createIncomesForPayment(sponsorPayment[0]);
-              console.log(`[SPONSOR] ✓ Sponsor income created successfully`);
+            // DEFENSIVE: Assert at most 1 legacy record deleted per activation
+            if (deletedLegacyIncome.length > 1) {
+              console.error(`[SPONSOR ERROR] Unexpected: Deleted ${deletedLegacyIncome.length} sponsor income records (expected 0 or 1)`);
+              throw new Error(`Data integrity violation: Multiple sponsor income records found for activation payment ${sponsorPayment[0].id}`);
+            }
+            
+            if (deletedLegacyIncome.length > 0) {
+              console.log(`[SPONSOR] Deleted ${deletedLegacyIncome.length} legacy sponsor income record created prematurely - will correct summary after recreation`);
+            }
+            
+            // Create the correct sponsor income (deferred until activation)
+            // This MUST succeed before we update summaries to avoid permanent double deduction
+            console.log(`[SPONSOR] Creating sponsor income for ${sponsorPayment[0].paymentType} → ${sponsorPayment[0].receiverUserId} (₹${sponsorPayment[0].amountInr})`);
+            await incomeService.createIncomesForPayment(sponsorPayment[0]);
+            console.log(`[SPONSOR] ✓ Sponsor income created successfully`);
+            
+            // CRITICAL: Only update summary AFTER successful income creation
+            // This prevents permanent double deduction if creation fails
+            if (deletedLegacyIncome.length > 0) {
+              const legacyIncome = deletedLegacyIncome[0];
+              await tx.update(userIncomeSummaries)
+                .set({
+                  directSponsorIncome: sql`CAST(${userIncomeSummaries.directSponsorIncome} AS DECIMAL) - CAST(${legacyIncome.amountInr} AS DECIMAL)`,
+                  totalEarnings: sql`CAST(${userIncomeSummaries.totalEarnings} AS DECIMAL) - CAST(${legacyIncome.amountInr} AS DECIMAL)`,
+                  updatedAt: new Date()
+                })
+                .where(eq(userIncomeSummaries.userId, legacyIncome.userId));
+              
+              console.log(`[SPONSOR] Corrected income summary for ${legacyIncome.userId} (removed legacy ₹${legacyIncome.amountInr})`);
             }
           } else {
             console.warn(`[SPONSOR] WARNING: No confirmed sponsor payment found for activation ${activationId}`);

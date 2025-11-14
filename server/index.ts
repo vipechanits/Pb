@@ -210,7 +210,7 @@ app.use((req, res, next) => {
     // Initialize system configuration (ensure singleton row exists)
     await storage.initializeSystemConfig();
     
-    // Initialize admin users (PB0 root admin and PB1 secondary admin)
+    // Initialize admin user (PB0 root admin only)
     const { hashPassword } = await import('./auth');
     await storage.initializeAdminUsers(hashPassword);
     

@@ -167,7 +167,7 @@ export default function SignupPage() {
               <Input
                 id="sponsorId"
                 type="text"
-                placeholder="PB123 (if you have a referral)"
+                placeholder="PB10000 (if you have a referral)"
                 value={sponsorId}
                 onChange={(e) => setSponsorId(e.target.value)}
                 data-testid="input-sponsor-id"

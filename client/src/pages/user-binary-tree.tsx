@@ -18,7 +18,7 @@ function SponsorSummary({ sponsor }: { sponsor: SponsorInfo | null }) {
       <Alert data-testid="alert-no-sponsor">
         <UserCircle className="h-4 w-4" />
         <AlertDescription>
-          No direct sponsor (Root user or PB0/PB1)
+          No direct sponsor (Root user or PB0)
         </AlertDescription>
       </Alert>
     );

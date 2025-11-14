@@ -173,4 +173,4 @@ export const MATRIX_PLACEMENT = {
 } as const;
 
 // User ID format
-export const USER_ID_PREFIX = 'PB';  // e.g., PB1, PB2, PB150
+export const USER_ID_PREFIX = 'PB';  // e.g., PB10000, PB10001, PB10150

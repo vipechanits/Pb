@@ -58,8 +58,8 @@ export class IncomeService {
       if (result.length > 0) {
         // Only update user summary for non-system-fee income types
         // System fees (creator_fee) go to admin but don't count as MLM earnings
-        // Admin (PB0/PB1) also doesn't need summary updates
-        const isAdmin = finalReceiverId === 'PB0' || finalReceiverId === 'PB1';
+        // Admin (PB0) also doesn't need summary updates
+        const isAdmin = finalReceiverId === 'PB0';
         if (incomeType !== 'system_fee' && !isAdmin) {
           await this.updateUserIncomeSummary(finalReceiverId, incomeType, amount);
         } else {
