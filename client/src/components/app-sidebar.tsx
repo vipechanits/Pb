@@ -103,6 +103,11 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     icon: typeof Clock;
   }> = [
     {
+      title: 'Transaction History',
+      url: '/user/transaction-history',
+      icon: FileText,
+    },
+    {
       title: 'Binary Match Queue',
       url: '/user/binary-match-queue-history',
       icon: Clock,

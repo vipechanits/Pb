@@ -90,24 +90,22 @@ export default function LoginPage() {
         <CardFooter className="flex flex-col gap-4">
           <div className="flex justify-center gap-2 text-sm text-muted-foreground">
             Don't have an account?
-            <Button
-              variant="link"
-              className="p-0 h-auto text-primary"
+            <button
+              className="p-0 h-auto text-primary hover:underline font-medium"
               onClick={() => setLocation('/auth/signup')}
               data-testid="link-signup"
             >
               Sign up
-            </Button>
+            </button>
           </div>
           <div className="text-center">
-            <Button
-              variant="link"
-              className="p-0 h-auto text-sm text-muted-foreground"
+            <button
+              className="p-0 h-auto text-sm text-muted-foreground hover:underline"
               onClick={() => setLocation('/auth/forgot-password')}
               data-testid="link-forgot-password"
             >
               Forgot password?
-            </Button>
+            </button>
           </div>
         </CardFooter>
       </Card>

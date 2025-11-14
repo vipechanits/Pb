@@ -144,9 +144,21 @@ function getClientIp(req: any): string {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // CSRF token endpoint
+  // CSRF token endpoint - ensures session is saved so cookie is set before first login attempt
   app.get("/api/csrf-token", (req: any, res) => {
-    res.json({ csrfToken: req.csrfToken() });
+    // Touch the session to ensure it gets saved and the cookie is sent
+    if (!req.session.csrfInitialized) {
+      req.session.csrfInitialized = true;
+      req.session.save((err: any) => {
+        if (err) {
+          console.error('[CSRF] Error saving session:', err);
+          return res.status(500).json({ error: 'Failed to initialize session' });
+        }
+        res.json({ csrfToken: req.csrfToken() });
+      });
+    } else {
+      res.json({ csrfToken: req.csrfToken() });
+    }
   });
 
   // Authentication routes
@@ -759,10 +771,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get binary tree structure for a user
+  // Get binary tree structure for a user (with lazy loading support)
   app.get("/api/users/:userId/binary-tree", requireAuth, async (req, res) => {
     try {
       const { userId } = req.params;
+      const maxDepth = parseInt(req.query.maxDepth as string) || 3; // Default 3 levels for initial load
       const requestingUser = await storage.getUserById(req.session.userId!);
       
       // Users can only view their own tree, admins can view any
@@ -775,11 +788,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "User not found" });
       }
       
-      // Recursively fetch binary tree (limit to 5 levels deep)
-      const fetchTreeNode = async (user: any, depth: number = 0): Promise<any> => {
-        if (depth > 5) return null; // Limit recursion depth
+      // Get sponsor info for the root node
+      let directSponsor = null;
+      if (rootUser.sponsorId) {
+        const sponsor = await storage.getUserByUserId(rootUser.sponsorId);
+        if (sponsor) {
+          directSponsor = {
+            userId: sponsor.userId,
+            name: sponsor.name,
+            email: sponsor.email,
+            isActivated: sponsor.isActivated,
+          };
+        }
+      }
+      
+      // Recursively fetch binary tree with sponsor and placement info
+      const fetchTreeNode = async (user: any, depth: number = 0, parentUserId: string | null): Promise<any> => {
+        // Find users under this user's left and right legs
+        const [leftUsers, rightUsers] = await Promise.all([
+          storage.getUsersBySponsorAndLeg(user.userId, 'left'),
+          storage.getUsersBySponsorAndLeg(user.userId, 'right'),
+        ]);
         
-        const node = {
+        const hasLeftChild = leftUsers && leftUsers.length > 0;
+        const hasRightChild = rightUsers && rightUsers.length > 0;
+        
+        const node: any = {
           userId: user.userId,
           name: user.name,
           email: user.email,
@@ -789,32 +823,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
           personalLeftCount: user.personalLeftCount,
           personalRightCount: user.personalRightCount,
           totalReferrals: user.totalReferrals,
-          leftChild: null as any,
-          rightChild: null as any,
+          
+          // Sponsor and placement info
+          sponsorId: user.sponsorId,
+          directSponsor: depth === 0 ? directSponsor : null, // Only for root
+          // Compare to immediate parent: if no parent (root), mark as 'direct'; otherwise compare sponsorId
+          placementType: !parentUserId ? 'direct' : (user.sponsorId === parentUserId ? 'direct' : 'spillover') as 'direct' | 'spillover',
+          binaryLeg: user.binaryLeg,
+          
+          // Lazy loading flags
+          hasLeftChild,
+          hasRightChild,
         };
         
-        // Find users under this user's left and right legs
-        const [leftUsers, rightUsers] = await Promise.all([
-          storage.getUsersBySponsorAndLeg(user.userId, 'left'),
-          storage.getUsersBySponsorAndLeg(user.userId, 'right'),
-        ]);
-        
-        // Recursively fetch children
-        if (leftUsers && leftUsers.length > 0) {
-          node.leftChild = await fetchTreeNode(leftUsers[0], depth + 1);
-        }
-        if (rightUsers && rightUsers.length > 0) {
-          node.rightChild = await fetchTreeNode(rightUsers[0], depth + 1);
+        // Only fetch children if within depth limit
+        // Don't include leftChild/rightChild unless they're being loaded
+        if (depth < maxDepth) {
+          if (hasLeftChild) {
+            node.leftChild = await fetchTreeNode(leftUsers[0], depth + 1, user.userId);
+          }
+          if (hasRightChild) {
+            node.rightChild = await fetchTreeNode(rightUsers[0], depth + 1, user.userId);
+          }
         }
         
         return node;
       };
       
-      const tree = await fetchTreeNode(rootUser);
+      const tree = await fetchTreeNode(rootUser, 0, null); // Root has no parent
       res.json(tree);
     } catch (error) {
       console.error("Error fetching binary tree:", error);
       res.status(500).json({ error: "Failed to fetch binary tree" });
+    }
+  });
+  
+  // Get child nodes for a specific user (for lazy loading)
+  app.get("/api/users/:userId/binary-tree/children/:childUserId", requireAuth, async (req, res) => {
+    try {
+      const { userId, childUserId } = req.params;
+      const requestingUser = await storage.getUserById(req.session.userId!);
+      
+      // Users can only view their own tree, admins can view any
+      if (requestingUser?.userId !== userId && requestingUser?.role !== 'admin') {
+        return res.status(403).json({ error: "Forbidden - You can only view your own binary tree" });
+      }
+      
+      const childUser = await storage.getUserByUserId(childUserId);
+      if (!childUser) {
+        return res.status(404).json({ error: "Child user not found" });
+      }
+      
+      // Fetch ONLY immediate children (left and right) of the node being expanded
+      // childUserId is the parent of the children we're fetching
+      const [leftUsers, rightUsers] = await Promise.all([
+        storage.getUsersBySponsorAndLeg(childUserId, 'left'),
+        storage.getUsersBySponsorAndLeg(childUserId, 'right'),
+      ]);
+      
+      const buildChildNode = (user: any): any => {
+        return {
+          userId: user.userId,
+          name: user.name,
+          email: user.email,
+          isActivated: user.isActivated,
+          leftLegCount: user.leftLegCount,
+          rightLegCount: user.rightLegCount,
+          personalLeftCount: user.personalLeftCount,
+          personalRightCount: user.personalRightCount,
+          totalReferrals: user.totalReferrals,
+          sponsorId: user.sponsorId,
+          directSponsor: null,
+          // childUserId is the parent being expanded - check if this child is directly sponsored by it
+          placementType: user.sponsorId === childUserId ? 'direct' : 'spillover' as 'direct' | 'spillover',
+          binaryLeg: user.binaryLeg,
+          hasLeftChild: false, // Will be populated below
+          hasRightChild: false,
+        };
+      };
+      
+      // Build response with just the immediate children
+      const response: any = {
+        leftChild: null,
+        rightChild: null,
+      };
+      
+      if (leftUsers && leftUsers.length > 0) {
+        const leftNode = buildChildNode(leftUsers[0]);
+        // Check if left child has its own children
+        const [leftGrandLeft, leftGrandRight] = await Promise.all([
+          storage.getUsersBySponsorAndLeg(leftNode.userId, 'left'),
+          storage.getUsersBySponsorAndLeg(leftNode.userId, 'right'),
+        ]);
+        leftNode.hasLeftChild = leftGrandLeft && leftGrandLeft.length > 0;
+        leftNode.hasRightChild = leftGrandRight && leftGrandRight.length > 0;
+        response.leftChild = leftNode;
+      }
+      
+      if (rightUsers && rightUsers.length > 0) {
+        const rightNode = buildChildNode(rightUsers[0]);
+        // Check if right child has its own children
+        const [rightGrandLeft, rightGrandRight] = await Promise.all([
+          storage.getUsersBySponsorAndLeg(rightNode.userId, 'left'),
+          storage.getUsersBySponsorAndLeg(rightNode.userId, 'right'),
+        ]);
+        rightNode.hasLeftChild = rightGrandLeft && rightGrandLeft.length > 0;
+        rightNode.hasRightChild = rightGrandRight && rightGrandRight.length > 0;
+        response.rightChild = rightNode;
+      }
+      
+      res.json(response);
+    } catch (error) {
+      console.error("Error fetching binary tree children:", error);
+      res.status(500).json({ error: "Failed to fetch binary tree children" });
     }
   });
 

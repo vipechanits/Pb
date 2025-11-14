@@ -1,44 +1,156 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useAuth } from '@/lib/auth-context';
-import { Users, CheckCircle, XCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { apiRequest } from '@/lib/queryClient';
+import { useToast } from '@/hooks/use-toast';
+import { Users, CheckCircle, XCircle, AlertCircle, Loader2, ChevronDown, ChevronRight, UserCircle, ArrowRight } from 'lucide-react';
+import type { BinaryTreeNode, SponsorInfo } from '@shared/schema';
 
-interface TreeNode {
-  userId: string;
-  name: string | null;
-  email: string;
-  isActivated: boolean;
-  leftLegCount: number;
-  rightLegCount: number;
-  personalLeftCount: number;
-  personalRightCount: number;
-  totalReferrals: number;
-  leftChild: TreeNode | null;
-  rightChild: TreeNode | null;
+// Sponsor Summary Component
+function SponsorSummary({ sponsor }: { sponsor: SponsorInfo | null }) {
+  if (!sponsor) {
+    return (
+      <Alert data-testid="alert-no-sponsor">
+        <UserCircle className="h-4 w-4" />
+        <AlertDescription>
+          No direct sponsor (Root user or PB0/PB1)
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  return (
+    <Card data-testid="card-sponsor-summary">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
+          <UserCircle className="w-4 h-4" />
+          Your Direct Sponsor
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-sm font-mono font-semibold" data-testid="text-sponsor-userid">{sponsor.userId}</p>
+            <p className="text-xs text-muted-foreground" data-testid="text-sponsor-name">{sponsor.name || 'No name'}</p>
+            <p className="text-xs text-muted-foreground" data-testid="text-sponsor-email">{sponsor.email}</p>
+          </div>
+          <div>
+            {sponsor.isActivated ? (
+              <Badge variant="default" data-testid="badge-sponsor-activated">Active</Badge>
+            ) : (
+              <Badge variant="secondary" data-testid="badge-sponsor-not-activated">Not Active</Badge>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 interface UserNodeProps {
-  node: TreeNode | null;
+  node: BinaryTreeNode | null;
   position: 'root' | 'left' | 'right';
-  depth: number;
+  rootUserId: string;
 }
 
-function UserNode({ node, position, depth }: UserNodeProps) {
-  if (!node || depth > 5) {
+function UserNode({ node, position, rootUserId }: UserNodeProps) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  
+  // Initialize expansion state based on whether child objects exist
+  const [isExpanded, setIsExpanded] = useState(() => Boolean(node?.leftChild || node?.rightChild));
+  const [childrenLoaded, setChildrenLoaded] = useState(false);
+
+  // Mutation to load children on demand
+  const loadChildren = useMutation({
+    mutationFn: async (childUserId: string) => {
+      // Fetch children of the node being expanded (childUserId is the parent)
+      const response = await fetch(`/api/users/${rootUserId}/binary-tree/children/${childUserId}`);
+      if (!response.ok) {
+        throw new Error('Failed to load children');
+      }
+      return response.json() as Promise<{ leftChild: BinaryTreeNode | null; rightChild: BinaryTreeNode | null }>;
+    },
+    onSuccess: (data) => {
+      if (node) {
+        // Immutably update the cache while preserving metadata
+        queryClient.setQueryData<BinaryTreeNode>(
+          ['/api/users', rootUserId, 'binary-tree'],
+          (oldTree) => {
+            if (!oldTree) return oldTree;
+            
+            // Recursively update the tree to add children to the target node
+            const updateNode = (currentNode: BinaryTreeNode): BinaryTreeNode => {
+              if (currentNode.userId === node.userId) {
+                // This is the node being expanded - add its children while preserving all metadata
+                return {
+                  ...currentNode, // Preserve all existing properties including hasLeftChild/hasRightChild
+                  leftChild: data.leftChild,
+                  rightChild: data.rightChild,
+                };
+              }
+              
+              // Recursively update children
+              return {
+                ...currentNode,
+                leftChild: currentNode.leftChild ? updateNode(currentNode.leftChild) : currentNode.leftChild,
+                rightChild: currentNode.rightChild ? updateNode(currentNode.rightChild) : currentNode.rightChild,
+              };
+            };
+            
+            return updateNode(oldTree);
+          }
+        );
+        setChildrenLoaded(true);
+        setIsExpanded(true); // Ensure node stays expanded after loading children
+      }
+    },
+    onError: (error) => {
+      // Show error toast and reset expansion state so user can retry
+      toast({
+        variant: "destructive",
+        title: "Failed to load children",
+        description: error instanceof Error ? error.message : "An error occurred while loading children. Please try again.",
+      });
+      setIsExpanded(false); // Reset to collapsed so user can retry
+    },
+  });
+
+  // Sync childrenLoaded with actual props to handle cache invalidation
+  useEffect(() => {
+    // If children exist in props, mark as loaded
+    if (node?.leftChild || node?.rightChild) {
+      setChildrenLoaded(true);
+    }
+    // If children don't exist in props and we're not loading, mark as not loaded
+    else if (!loadChildren.isPending) {
+      setChildrenLoaded(false);
+    }
+  }, [node?.leftChild, node?.rightChild, loadChildren.isPending]);
+
+  if (!node) {
     return (
       <div className="flex flex-col items-center gap-2 p-4">
-        <div className="w-32 h-24 border-2 border-dashed border-muted rounded-lg flex items-center justify-center bg-muted/20">
+        <div className="w-36 h-28 border-2 border-dashed border-muted rounded-md flex items-center justify-center bg-muted/20">
           <p className="text-xs text-muted-foreground">Empty Spot</p>
         </div>
       </div>
     );
   }
 
+  const hasChildren = node.hasLeftChild || node.hasRightChild;
+
   return (
     <div className="flex flex-col items-center gap-2">
-      <Card className={`w-32 ${node.isActivated ? 'border-green-500/50' : 'border-muted'}`} data-testid={`node-${node.userId}`}>
+      <Card 
+        className={`w-36 ${node.isActivated ? 'border-green-500/50' : 'border-muted'}`} 
+        data-testid={`node-${node.userId}`}
+      >
         <CardContent className="p-3 space-y-1">
           <div className="flex items-center justify-between">
             <p className="text-xs font-mono font-semibold">{node.userId}</p>
@@ -51,24 +163,78 @@ function UserNode({ node, position, depth }: UserNodeProps) {
           <p className="text-xs truncate" data-testid={`name-${node.userId}`}>
             {node.name || 'No name'}
           </p>
+          
+          {/* Placement Type Badge */}
+          {node.placementType === 'spillover' && (
+            <Badge 
+              variant="secondary" 
+              className="text-xs py-0" 
+              data-testid={`badge-placement-spillover-${node.userId}`}
+            >
+              Spillover
+            </Badge>
+          )}
+          
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span title="Left Leg">L: {node.personalLeftCount}</span>
             <span title="Right Leg">R: {node.personalRightCount}</span>
           </div>
+          
+          {/* Expand/Collapse Button for nodes with children */}
+          {hasChildren && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full h-6 mt-1"
+              onClick={() => {
+                // Recompute from latest props to avoid stale closures
+                const childrenAreLoaded = Boolean(node?.leftChild || node?.rightChild) || childrenLoaded;
+                
+                // If actual child objects exist, just toggle expansion state
+                if (childrenAreLoaded) {
+                  setIsExpanded(!isExpanded);
+                }
+                // Otherwise, trigger lazy load (onSuccess/onError will manage isExpanded)
+                else if (!loadChildren.isPending) {
+                  loadChildren.mutate(node.userId);
+                }
+              }}
+              data-testid={`button-toggle-${node.userId}`}
+            >
+              {loadChildren.isPending ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : isExpanded ? (
+                <ChevronDown className="w-3 h-3" />
+              ) : (
+                <ChevronRight className="w-3 h-3" />
+              )}
+              <span className="ml-1 text-xs">
+                {isExpanded ? 'Collapse' : 'Expand'}
+              </span>
+            </Button>
+          )}
         </CardContent>
       </Card>
       
-      {(node.leftChild || node.rightChild) && depth < 5 && (
+      {/* Children - Collapsible */}
+      {hasChildren && isExpanded && (Boolean(node?.leftChild || node?.rightChild) || childrenLoaded) && (
         <div className="flex gap-8 mt-6">
+          {/* Left Child */}
           <div className="flex flex-col items-center">
             <div className="h-6 border-l-2 border-muted" />
-            <Badge variant="outline" className="mb-2 text-xs border-blue-500 text-blue-500">Left</Badge>
-            <UserNode node={node.leftChild} position="left" depth={depth + 1} />
+            <Badge variant="outline" className="mb-2 text-xs border-blue-500 text-blue-500">
+              Left
+            </Badge>
+            <UserNode node={node.leftChild || null} position="left" rootUserId={rootUserId} />
           </div>
+          
+          {/* Right Child */}
           <div className="flex flex-col items-center">
             <div className="h-6 border-l-2 border-muted" />
-            <Badge variant="outline" className="mb-2 text-xs border-green-500 text-green-500">Right</Badge>
-            <UserNode node={node.rightChild} position="right" depth={depth + 1} />
+            <Badge variant="outline" className="mb-2 text-xs border-green-500 text-green-500">
+              Right
+            </Badge>
+            <UserNode node={node.rightChild || null} position="right" rootUserId={rootUserId} />
           </div>
         </div>
       )}
@@ -79,7 +245,7 @@ function UserNode({ node, position, depth }: UserNodeProps) {
 export default function UserBinaryTreePage() {
   const { user } = useAuth();
 
-  const { data: tree, isLoading, error } = useQuery<TreeNode>({
+  const { data: tree, isLoading, error } = useQuery<BinaryTreeNode>({
     queryKey: ['/api/users', user?.userId, 'binary-tree'],
     enabled: !!user?.userId,
   });
@@ -118,6 +284,11 @@ export default function UserBinaryTreePage() {
           View your binary team structure and downline placements
         </p>
       </div>
+
+      {/* Sponsor Summary */}
+      {tree?.directSponsor !== undefined && (
+        <SponsorSummary sponsor={tree.directSponsor} />
+      )}
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
@@ -216,12 +387,12 @@ export default function UserBinaryTreePage() {
       <Card>
         <CardHeader>
           <CardTitle>Your Binary Network</CardTitle>
-          <CardDescription>Visual representation of your team structure (up to 5 levels deep)</CardDescription>
+          <CardDescription>Visual representation of your team structure (unlimited depth, collapsible)</CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <div className="flex justify-center min-w-max p-6">
-            {tree ? (
-              <UserNode node={tree} position="root" depth={0} />
+            {tree && user?.userId ? (
+              <UserNode node={tree} position="root" rootUserId={user.userId} />
             ) : (
               <div className="text-center text-muted-foreground py-12">
                 <p>No team data available</p>
@@ -231,7 +402,7 @@ export default function UserBinaryTreePage() {
         </CardContent>
       </Card>
 
-      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
           <CheckCircle className="w-4 h-4 text-green-500" />
           <span>Activated</span>
@@ -239,6 +410,10 @@ export default function UserBinaryTreePage() {
         <div className="flex items-center gap-2">
           <XCircle className="w-4 h-4 text-muted-foreground" />
           <span>Not Activated</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="text-xs py-0">Spillover</Badge>
+          <span>Placed by upline (not your direct referral)</span>
         </div>
       </div>
     </div>

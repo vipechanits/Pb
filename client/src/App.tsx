@@ -24,6 +24,7 @@ import UserBinaryTreePage from '@/pages/user-binary-tree';
 import UserGlobalMatrixPage from '@/pages/user-global-matrix';
 import UserIncomeDetailsPage from '@/pages/user-income-details';
 import DirectSponsoringPage from '@/pages/user/direct-sponsoring';
+import TransactionHistoryPage from '@/pages/user/transaction-history';
 import BinaryMatchQueueHistory from '@/pages/user/binary-match-queue-history';
 import BinaryPairMatchingHistory from '@/pages/user/binary-pair-matching-history';
 import MatrixIncomeHistory from '@/pages/user/matrix-income-history';
@@ -186,6 +187,16 @@ function Router() {
           <ProtectedRoute>
             <DashboardLayout>
               <UserIncomeDetailsPage />
+            </DashboardLayout>
+          </ProtectedRoute>
+        )}
+      </Route>
+      
+      <Route path="/user/transaction-history">
+        {() => (
+          <ProtectedRoute>
+            <DashboardLayout>
+              <TransactionHistoryPage />
             </DashboardLayout>
           </ProtectedRoute>
         )}

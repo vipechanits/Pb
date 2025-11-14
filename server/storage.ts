@@ -1072,16 +1072,17 @@ export class DbStorage implements IStorage {
       
       console.log(`[STORAGE] Payment updated successfully, creating income for receiver: ${confirmedPayment.receiverUserId}`);
 
-      // IMPORTANT: Skip income creation for matrix payments (slots 3-7)
-      // Matrix payments need deferred income creation because:
-      // 1. Matrix placement only happens AFTER all 8 payments are confirmed
-      // 2. At confirmation time, receiver_user_id is still PB0 (placeholder)
-      // 3. Real matrix uplines are discovered during checkAndCompleteActivation
-      // 4. Income will be created there with correct receivers
+      // IMPORTANT: Defer income creation for matrix AND sponsor payments
+      // Matrix payments: Receivers determined after matrix placement (during activation)
+      // Sponsor payments: Only credited AFTER user completes full activation (8 payments)
+      // Other payments (binary_match, creator_fee): Created immediately
       const isMatrixPayment = confirmedPayment.paymentType.startsWith('matrix_level_');
+      const isSponsorPayment = confirmedPayment.paymentType === 'direct_sponsor';
       
       if (isMatrixPayment) {
         console.log(`[STORAGE] Skipping income creation for ${confirmedPayment.paymentType} - will be created after matrix placement`);
+      } else if (isSponsorPayment) {
+        console.log(`[STORAGE] Skipping income creation for ${confirmedPayment.paymentType} - will be created after full activation`);
       } else {
         const { IncomeService } = await import('./income-service');
         const incomeService = new IncomeService(tx as any);
@@ -1371,6 +1372,34 @@ export class DbStorage implements IStorage {
           const { IncomeService } = await import('./income-service');
           const incomeService = new IncomeService(tx as any);
           
+          // Fetch sponsor payment (deferred until activation completion)
+          const sponsorPayment = await tx.select()
+            .from(activationPayments)
+            .where(and(
+              eq(activationPayments.activationId, activationId),
+              eq(activationPayments.paymentType, 'direct_sponsor'),
+              eq(activationPayments.status, 'confirmed')
+            ))
+            .limit(1);
+          
+          if (sponsorPayment.length > 0) {
+            // Check if sponsor income already exists (deduplication for legacy data)
+            const existingSponsorIncome = await tx.select()
+              .from(incomeTransactions)
+              .where(eq(incomeTransactions.activationPaymentId, sponsorPayment[0].id))
+              .limit(1);
+            
+            if (existingSponsorIncome.length > 0) {
+              console.log(`[SPONSOR] Sponsor income already exists (ID: ${existingSponsorIncome[0].id}) - skipping creation`);
+            } else {
+              console.log(`[SPONSOR] Creating sponsor income for ${sponsorPayment[0].paymentType} → ${sponsorPayment[0].receiverUserId} (₹${sponsorPayment[0].amountInr})`);
+              await incomeService.createIncomesForPayment(sponsorPayment[0]);
+              console.log(`[SPONSOR] ✓ Sponsor income created successfully`);
+            }
+          } else {
+            console.warn(`[SPONSOR] WARNING: No confirmed sponsor payment found for activation ${activationId}`);
+          }
+          
           // Fetch all confirmed matrix payments for this activation
           // Use shared MATRIX_PAYMENT_TYPES constant to ensure consistency
           const matrixPayments = await tx.select()
@@ -1390,7 +1419,7 @@ export class DbStorage implements IStorage {
             await incomeService.createIncomesForPayment(payment);
           }
           
-          console.log(`[MATRIX] ✓ Deferred income creation completed for all matrix payments`);
+          console.log(`[MATRIX] ✓ Deferred income creation completed for sponsor and matrix payments`);
           
           // Final verification: Ensure all 8 income records now exist (3 non-matrix + 5 matrix)
           const allIncome = await tx.select()
