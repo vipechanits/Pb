@@ -1215,7 +1215,17 @@ export class DbStorage implements IStorage {
         // Sponsor income (Slot 0) is created AFTER all 8 payments are confirmed (see lines 1388-1427)
         // Matrix income (Slots 3-7) is created AFTER matrix placement (see lines 1431-1469)
         // CRITICAL: Only count slot-linked income (activationPaymentId NOT NULL) to exclude queue payouts
-        const expectedImmediateIncomeCount = 2; // Only binary_match + creator_fee
+        
+        // FIX: Dynamically count confirmed immediate-type payments instead of hardcoding 2
+        // This prevents false failures when activation completion check runs during partial payment confirmation
+        const confirmedImmediatePayments = payments.filter((p: any) => 
+          p.status === 'confirmed' && 
+          (p.paymentType === 'binary_match' || p.paymentType === 'creator_fee')
+        );
+        const expectedImmediateIncomeCount = confirmedImmediatePayments.length;
+        
+        console.log(`[ACTIVATION] Verified ${confirmedImmediatePayments.length} immediate-type payments confirmed (binary_match + creator_fee)`);
+        
         const actualImmediateIncome = await tx.select()
           .from(incomeTransactions)
           .where(and(
@@ -1232,7 +1242,8 @@ export class DbStorage implements IStorage {
         if (actualImmediateIncome.length !== expectedImmediateIncomeCount) {
           // CRITICAL: Immediate-creation payments confirmed but income missing - this is a data integrity issue
           console.error(`[ACTIVATION ERROR] Immediate income mismatch for ${activationId}: Expected ${expectedImmediateIncomeCount}, Found ${actualImmediateIncome.length}`);
-          console.error(`[ACTIVATION ERROR] Confirmed payments: ${payments.length}, Immediate income created: ${actualImmediateIncome.length}`);
+          console.error(`[ACTIVATION ERROR] Confirmed immediate payments: ${confirmedImmediatePayments.length}, Immediate income created: ${actualImmediateIncome.length}`);
+          console.error(`[ACTIVATION ERROR] Confirmed payment types: ${confirmedImmediatePayments.map((p: any) => p.paymentType).join(', ')}`);
           
           // Mark activation as failed for manual investigation
           await tx.update(activations)
@@ -1242,7 +1253,7 @@ export class DbStorage implements IStorage {
             })
             .where(eq(activations.id, activationId));
           
-          throw new Error(`Income verification failed: Expected ${expectedImmediateIncomeCount} immediate income records (binary_match + creator_fee), found ${actualImmediateIncome.length}. Activation marked as FAILED for manual investigation.`);
+          throw new Error(`Income verification failed: Expected ${expectedImmediateIncomeCount} immediate income records (matching confirmed binary_match + creator_fee payments), found ${actualImmediateIncome.length}. Activation marked as FAILED for manual investigation.`);
         }
         
         console.log(`[ACTIVATION] ✓ Immediate income verification passed: ${actualImmediateIncome.length} income records confirmed (sponsor + matrix will be created next)`);
@@ -1327,7 +1338,11 @@ export class DbStorage implements IStorage {
           const placedUser = await this.findAndAssignMatrixSlot(activatedUser.userId, tx);
           
           // CRITICAL: Verify matrix placement succeeded before continuing
-          if (!placedUser || !placedUser.matrixParentId || !placedUser.matrixLevel || !placedUser.matrixPath) {
+          // Matrix root (level 1) has no parent - this is expected and valid
+          const isMatrixRoot = placedUser?.matrixLevel === 1;
+          const hasValidParent = isMatrixRoot ? true : !!placedUser?.matrixParentId;
+          
+          if (!placedUser || !hasValidParent || !placedUser.matrixLevel || !placedUser.matrixPath) {
             // Matrix placement failed - mark activation as failed before rolling back
             // This allows us to track and potentially retry failed activations
             await tx.update(activations)

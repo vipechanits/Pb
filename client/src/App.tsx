@@ -42,7 +42,7 @@ import DatabaseBackupPage from '@/pages/admin/database';
 import { useEffect } from 'react';
 function DashboardLayout({ children, isAdmin = false }: { children: React.ReactNode; isAdmin?: boolean }) {
   const style = {
-    '--sidebar-width': '20rem',
+    '--sidebar-width': '24rem',
     '--sidebar-width-icon': '4rem',
   };
 

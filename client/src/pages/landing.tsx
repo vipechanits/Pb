@@ -99,7 +99,7 @@ export default function Landing() {
       <header className="border-b sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50">
         <div className="container mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={logoUrl} alt="PAYBACK247" className="w-20 h-20 sm:w-28 sm:h-28" />
+            <img src={logoUrl} alt="PAYBACK247" className="w-40 h-40" />
             <span className="font-bold text-xl sm:text-2xl">PAYBACK247</span>
           </div>
           <div className="flex items-center gap-2">
@@ -317,7 +317,7 @@ export default function Landing() {
           <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-8 mb-8">
             <div className="col-span-2">
               <div className="flex items-center gap-2 mb-4">
-                <img src={logoUrl} alt="PAYBACK247" className="w-14 h-14" />
+                <img src={logoUrl} alt="PAYBACK247" className="w-40 h-40" />
                 <span className="font-bold text-lg">PAYBACK247</span>
               </div>
               <p className="text-sm text-muted-foreground max-w-sm">
