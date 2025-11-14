@@ -2430,6 +2430,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================================
+  // TEMPORARY TESTING UTILITY - REMOVE AFTER PB10004 MATRIX FIX IS VALIDATED
+  // ============================================================================
+  // Force re-confirmation of a payment to trigger matrix reconciliation
+  // This is used to test/fix legacy activations like PB10004 who are missing matrix placement
+  app.post("/api/admin/activation/force-confirm", requireAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        paymentId: z.string().uuid("paymentId must be a valid UUID"),
+      });
+      
+      const { paymentId } = schema.parse(req.body);
+      
+      console.log(`[ADMIN UTILITY] Admin ${req.session.userId} forcing confirmation for payment ${paymentId}`);
+      
+      // Call the storage method to trigger reconciliation
+      const result = await storage.confirmActivationPayment(paymentId, "Admin forced re-confirmation for matrix placement fix");
+      
+      if (!result) {
+        return res.status(404).json({ 
+          success: false,
+          error: "Payment not found or confirmation failed" 
+        });
+      }
+      
+      // Get updated matrix info for the payer (query directly by userId)
+      const userResult = await db.select()
+        .from(users)
+        .where(eq(users.userId, result.payerUserId))
+        .limit(1);
+      const user = userResult[0];
+      
+      // Get updated matrix payment receivers
+      const matrixPayments = await db.select()
+        .from(activationPayments)
+        .where(eq(activationPayments.activationId, result.activationId))
+        .orderBy(activationPayments.slotIndex);
+      
+      res.json({
+        success: true,
+        paymentId,
+        result: {
+          payerId: result.payerUserId,
+          activationId: result.activationId,
+          paymentStatus: result.status,
+        },
+        reconciliation: {
+          matrixPlacement: {
+            parentId: user?.matrixParentId || null,
+            level: user?.matrixLevel || null,
+            path: user?.matrixPath || null,
+          },
+          matrixPaymentReceivers: matrixPayments
+            .filter(p => p.slotIndex >= 3)
+            .map(p => ({
+              slot: p.slotIndex,
+              type: p.paymentType,
+              receiver: p.receiverUserId,
+              status: p.status,
+            })),
+        },
+      });
+    } catch (error: any) {
+      console.error("[ADMIN UTILITY] Error forcing confirmation:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors[0].message });
+      }
+      res.status(500).json({ error: "Failed to force confirmation" });
+    }
+  });
+  // ============================================================================
+  // END TEMPORARY TESTING UTILITY
+  // ============================================================================
+
   const httpServer = createServer(app);
 
   return httpServer;

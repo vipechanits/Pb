@@ -558,6 +558,123 @@ export class DbStorage implements IStorage {
     }
   }
 
+  /**
+   * Reconciles matrix payment receivers after 3rd payment confirmed.
+   * Handles BOTH new activations (awaiting_assignment) AND legacy broken data (pending with wrong receivers).
+   * 
+   * @param activationId - The activation ID
+   * @param payerUserId - The user being activated (PB####)
+   * @param allPayments - All 8 activation payments
+   * @param tx - Active transaction
+   */
+  async reconcileMatrixPaymentsForActivation(
+    activationId: string,
+    payerUserId: string,
+    allPayments: ActivationPayment[],
+    tx: any
+  ): Promise<void> {
+    console.log(`[MATRIX RECONCILE] Starting reconciliation for activation ${activationId}`);
+    
+    // STEP 1: Lock user row to prevent race conditions
+    const userRows = await tx.select()
+      .from(users)
+      .where(eq(users.userId, payerUserId))
+      .for('update')
+      .limit(1);
+    
+    if (userRows.length === 0) {
+      throw new Error(`User ${payerUserId} not found for matrix reconciliation`);
+    }
+    
+    const user = userRows[0];
+    
+    // STEP 2: Ensure matrix placement exists (if not, place user now)
+    if (!user.matrixParentId || !user.matrixPath) {
+      console.log(`[MATRIX RECONCILE] User ${user.userId} not yet placed in matrix - placing now...`);
+      const placedUser = await this.findAndAssignMatrixSlot(user.userId, tx);
+      
+      if (!placedUser || !placedUser.matrixPath) {
+        // Matrix placement failed - this will abort the entire confirmation transaction
+        throw new Error(`Matrix placement failed for user ${user.userId} during reconciliation`);
+      }
+      
+      console.log(`[MATRIX RECONCILE] ✓ User ${user.userId} placed at ${placedUser.matrixPath} (Level ${placedUser.matrixLevel})`);
+    } else {
+      console.log(`[MATRIX RECONCILE] User ${user.userId} already placed at ${user.matrixPath} (Level ${user.matrixLevel})`);
+    }
+    
+    // STEP 3: Get matrix ancestors (up to 5 levels upline)
+    const matrixAncestors = await this.getMatrixAncestors(user.userId, 5, tx);
+    console.log(`[MATRIX RECONCILE] Found ${matrixAncestors.length}/5 matrix ancestors:`, matrixAncestors);
+    
+    // STEP 4: Build expected receiver map for slots 3-7 (Matrix Levels 1-5)
+    const expectedReceivers: Record<number, string> = {
+      3: matrixAncestors[0] || 'PB0', // Matrix Level 1
+      4: matrixAncestors[1] || 'PB0', // Matrix Level 2
+      5: matrixAncestors[2] || 'PB0', // Matrix Level 3
+      6: matrixAncestors[3] || 'PB0', // Matrix Level 4
+      7: matrixAncestors[4] || 'PB0', // Matrix Level 5
+    };
+    
+    // STEP 5: Reconcile matrix payments (slots 3-7)
+    const matrixPayments = allPayments.filter(p => 
+      p.slotIndex >= 3 && 
+      p.slotIndex <= 7 &&
+      MATRIX_PAYMENT_TYPES.includes(p.paymentType as any)
+    );
+    
+    console.log(`[MATRIX RECONCILE] Checking ${matrixPayments.length} matrix payments for receiver correctness...`);
+    
+    let correctedCount = 0;
+    let newlyAssignedCount = 0;
+    
+    for (const payment of matrixPayments) {
+      const expectedReceiver = expectedReceivers[payment.slotIndex];
+      const currentReceiver = payment.receiverUserId;
+      const isAwaitingAssignment = payment.status === 'awaiting_assignment';
+      const isMismatched = currentReceiver !== expectedReceiver;
+      
+      // Update if: (1) awaiting initial assignment, OR (2) has wrong receiver (legacy incorrect data)
+      if (isAwaitingAssignment || isMismatched) {
+        // Only update payments that aren't already confirmed (don't mess with completed payments)
+        if (payment.status !== 'confirmed') {
+          await tx.update(activationPayments)
+            .set({
+              receiverUserId: expectedReceiver,
+              receiverType: 'user',
+              status: 'pending', // Always set to pending (ready for payment submission)
+              updatedAt: new Date()
+            })
+            .where(eq(activationPayments.id, payment.id));
+          
+          if (isAwaitingAssignment) {
+            newlyAssignedCount++;
+            console.log(`[MATRIX RECONCILE] ✓ Slot ${payment.slotIndex} (${payment.paymentType}) newly assigned: ${expectedReceiver}`);
+          } else if (isMismatched) {
+            correctedCount++;
+            console.warn(`[MATRIX RECONCILE] ⚠️  LEGACY FIX: Slot ${payment.slotIndex} receiver corrected from ${currentReceiver} to ${expectedReceiver}`);
+          }
+        } else {
+          // Payment already confirmed - don't touch it
+          console.log(`[MATRIX RECONCILE] Slot ${payment.slotIndex} already confirmed - skipping reconciliation`);
+        }
+      } else {
+        // Receiver already correct and not awaiting assignment
+        console.log(`[MATRIX RECONCILE] Slot ${payment.slotIndex} receiver already correct: ${expectedReceiver}`);
+      }
+    }
+    
+    if (newlyAssignedCount > 0) {
+      console.log(`[MATRIX RECONCILE] ✓ ${newlyAssignedCount} matrix slots newly assigned`);
+    }
+    
+    if (correctedCount > 0) {
+      console.warn(`[MATRIX RECONCILE] ⚠️  ${correctedCount} legacy matrix slots corrected (had wrong receivers)`);
+    }
+    
+    console.log(`[MATRIX RECONCILE] ✓ Matrix reconciliation complete for activation ${activationId}`);
+  }
+
   async findAndAssignMatrixSlot(userId: string, tx?: any): Promise<User | undefined> {
     const executeInTx = async (txn: any) => {
       const targetUser = await txn.select()
@@ -1074,6 +1191,49 @@ export class DbStorage implements IStorage {
       
       const payment = existingPayment[0];
       
+      // Step 1.5: LEGACY FIX - If payment already confirmed, check if user needs matrix placement/reconciliation
+      // This fixes legacy broken activations (like PB10004) who were activated before matrix logic existed
+      if (payment.status === 'confirmed') {
+        console.log(`[STORAGE] Payment ${id} already confirmed - checking if legacy reconciliation needed...`);
+        
+        // Check if user is missing matrix placement (legacy users from before matrix logic)
+        const userCheck = await tx.select()
+          .from(users)
+          .where(eq(users.userId, payment.payerUserId))
+          .limit(1);
+        
+        const needsMatrixPlacement = userCheck.length > 0 && !userCheck[0].matrixParentId;
+        
+        // Get all payments to check confirmation count
+        const allPayments = await tx.select()
+          .from(activationPayments)
+          .where(eq(activationPayments.activationId, payment.activationId));
+        
+        const confirmedCount = allPayments.filter(p => p.status === 'confirmed').length;
+        console.log(`[STORAGE] Legacy activation ${payment.activationId} has ${confirmedCount}/8 payments confirmed`);
+        
+        // Force reconciliation if:
+        // 1. User is missing matrix placement (critical fix for PB10004 and similar cases), OR
+        // 2. Activation has >= 3 confirmations (normal legacy fix)
+        if (needsMatrixPlacement) {
+          console.log(`[STORAGE] CRITICAL: User ${payment.payerUserId} missing matrix placement - forcing reconciliation...`);
+          await this.reconcileMatrixPaymentsForActivation(
+            payment.activationId,
+            payment.payerUserId,
+            allPayments,
+            tx
+          );
+        } else if (confirmedCount >= 3) {
+          console.log(`[STORAGE] Running standard legacy reconciliation for activation ${payment.activationId}...`);
+          await this.reconcileMatrixPaymentsForActivation(
+            payment.activationId,
+            payment.payerUserId,
+            allPayments,
+            tx
+          );
+        }
+      }
+      
       // Step 2: Idempotency check - if already confirmed, verify income exists and return
       if (payment.status === 'confirmed') {
         console.log(`[STORAGE] Payment ${id} already confirmed, verifying income exists`);
@@ -1173,6 +1333,31 @@ export class DbStorage implements IStorage {
       } else if (confirmedPayment.paymentType === 'binary_match' && confirmedPayment.receiverUserId === 'PB0') {
         // Binary match payment to PB0 (queue was empty) - no queue entry to mark
         console.log(`[STORAGE] Binary match payment to PB0 (queue empty fallback) - no queue entry to mark`);
+      }
+
+      // Step 5: NEW ACTIVATION FIX - After confirming this payment, check if we now have >= 3 confirmations
+      // This triggers matrix placement and receiver assignment for new activations
+      console.log(`[STORAGE] Checking if matrix reconciliation should run after confirming payment...`);
+      
+      // Re-fetch all payments with fresh data (using FOR UPDATE to prevent concurrent drift)
+      const freshPayments = await tx.select()
+        .from(activationPayments)
+        .where(eq(activationPayments.activationId, confirmedPayment.activationId))
+        .for('update');
+      
+      const freshConfirmedCount = freshPayments.filter(p => p.status === 'confirmed').length;
+      console.log(`[STORAGE] Activation ${confirmedPayment.activationId} now has ${freshConfirmedCount}/8 payments confirmed (post-confirmation)`);
+      
+      // If we have at least 3 confirmed payments, reconcile matrix placement and receivers
+      // This handles NEW activations where the 3rd payment just got confirmed
+      if (freshConfirmedCount >= 3) {
+        console.log(`[STORAGE] Running post-confirmation matrix reconciliation...`);
+        await this.reconcileMatrixPaymentsForActivation(
+          confirmedPayment.activationId,
+          confirmedPayment.payerUserId,
+          freshPayments,
+          tx
+        );
       }
 
       console.log(`[STORAGE] Checking if all 8 payments are confirmed for activation ${confirmedPayment.activationId}`);
