@@ -573,6 +573,38 @@ export interface MatrixNode {
   rightChild: MatrixNode | null;
 }
 
+// Binary tree node for visualization with sponsor and spillover info
+export interface SponsorInfo {
+  userId: string;
+  name: string | null;
+  email: string;
+  isActivated: boolean;
+}
+
+export interface BinaryTreeNode {
+  userId: string;
+  name: string | null;
+  email: string;
+  isActivated: boolean;
+  leftLegCount: number;
+  rightLegCount: number;
+  personalLeftCount: number;
+  personalRightCount: number;
+  totalReferrals: number;
+  
+  // Sponsor and placement info
+  sponsorId: string | null;
+  directSponsor: SponsorInfo | null; // Only populated for root node
+  placementType: 'direct' | 'spillover'; // Direct referral vs spillover from upline
+  binaryLeg: 'left' | 'right' | null; // Which leg this user is on under their binary parent
+  
+  // Lazy loading support
+  hasLeftChild: boolean;
+  hasRightChild: boolean;
+  leftChild?: BinaryTreeNode | null; // Optional for lazy loading
+  rightChild?: BinaryTreeNode | null; // Optional for lazy loading
+}
+
 // Password reset request schemas
 export const forgotPasswordSchema = z.object({
   email: z.string().email("Invalid email address"),

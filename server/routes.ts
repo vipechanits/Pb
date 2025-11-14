@@ -267,8 +267,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/login", 
     applyRateLimit({
       keyFn: (req) => getClientIp(req),
-      limit: 10,
-      windowMs: 15 * 60 * 1000, // 10 attempts per 15 minutes per IP
+      limit: 100,
+      windowMs: 15 * 60 * 1000, // 100 attempts per 15 minutes per IP
       name: 'Login'
     }),
     async (req, res) => {
@@ -394,8 +394,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/forgot-password", 
     applyRateLimit({
       keyFn: (req) => req.body.email?.toLowerCase().trim() || 'unknown',
-      limit: 3,
-      windowMs: 60 * 60 * 1000, // 3 requests per hour per email
+      limit: 20,
+      windowMs: 60 * 60 * 1000, // 20 requests per hour per email
       name: 'Forgot Password'
     }),
     async (req, res) => {
@@ -457,8 +457,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/auth/verify-reset-token/:token",
     applyRateLimit({
       keyFn: (req) => getClientIp(req),
-      limit: 10,
-      windowMs: 60 * 1000, // 10 requests per minute per IP
+      limit: 20,
+      windowMs: 60 * 1000, // 20 requests per minute per IP
       name: 'Verify Reset Token'
     }),
     async (req, res) => {
@@ -505,8 +505,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/reset-password",
     applyRateLimit({
       keyFn: (req) => getClientIp(req),
-      limit: 5,
-      windowMs: 60 * 60 * 1000, // 5 requests per hour per IP
+      limit: 20,
+      windowMs: 60 * 60 * 1000, // 20 requests per hour per IP
       name: 'Reset Password'
     }),
     async (req, res) => {
@@ -598,8 +598,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/profile/email", requireAuth,
     applyRateLimit({
       keyFn: (req) => req.session.userId || getClientIp(req),
-      limit: 5,
-      windowMs: 60 * 60 * 1000, // 5 requests per hour
+      limit: 20,
+      windowMs: 60 * 60 * 1000, // 20 requests per hour
       name: 'Update Email'
     }),
     async (req, res) => {
@@ -654,8 +654,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/profile/password", requireAuth,
     applyRateLimit({
       keyFn: (req) => req.session.userId || getClientIp(req),
-      limit: 5,
-      windowMs: 60 * 60 * 1000, // 5 requests per hour
+      limit: 20,
+      windowMs: 60 * 60 * 1000, // 20 requests per hour
       name: 'Update Password'
     }),
     async (req, res) => {
@@ -1475,19 +1475,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Payment not found" });
       }
       
-      // Enforce receiverType-based authorization
-      if (existingPayment.receiverType === 'user') {
-        // Only the specific user receiver can confirm
-        if (existingPayment.receiverUserId !== user.userId) {
-          return res.status(403).json({ error: "Forbidden - Only the receiver user can confirm this payment" });
-        }
-      } else if (existingPayment.receiverType === 'admin') {
-        // Only admin can confirm
-        if (user.role !== 'admin') {
-          return res.status(403).json({ error: "Forbidden - Only admin can confirm this payment" });
-        }
-      } else {
+      // All payments use receiverType='user' - only the receiver can confirm
+      if (existingPayment.receiverType !== 'user') {
         return res.status(400).json({ error: "Invalid receiver type" });
+      }
+      
+      // Only the specific receiver user can confirm this payment
+      if (existingPayment.receiverUserId !== user.userId) {
+        return res.status(403).json({ error: "Forbidden - Only the receiver can confirm this payment" });
       }
       
       console.log(`[CONFIRM-ROUTE] Attempting to confirm payment ${req.params.id}`);
@@ -1547,19 +1542,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Payment not found" });
       }
       
-      // Enforce receiverType-based authorization
-      if (existingPayment.receiverType === 'user') {
-        // Only the specific user receiver can reject
-        if (existingPayment.receiverUserId !== user.userId) {
-          return res.status(403).json({ error: "Forbidden - Only the receiver user can reject this payment" });
-        }
-      } else if (existingPayment.receiverType === 'admin') {
-        // Only admin can reject
-        if (user.role !== 'admin') {
-          return res.status(403).json({ error: "Forbidden - Only admin can reject this payment" });
-        }
-      } else {
+      // All payments use receiverType='user' - only the receiver can reject
+      if (existingPayment.receiverType !== 'user') {
         return res.status(400).json({ error: "Invalid receiver type" });
+      }
+      
+      // Only the specific receiver user can reject this payment
+      if (existingPayment.receiverUserId !== user.userId) {
+        return res.status(403).json({ error: "Forbidden - Only the receiver can reject this payment" });
       }
       
       const payment = await storage.rejectActivationPayment(req.params.id, validationResult.data.rejectionReason);

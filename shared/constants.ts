@@ -64,6 +64,16 @@ export const SLOT_TO_PAYMENT_TYPE = [
   'matrix_level_5',    // Slot 7: Matrix Level 5
 ] as const;
 
+// Matrix payment types derived from SLOT_TO_PAYMENT_TYPE (slots 3-7)
+// Used for filtering matrix payments during deferred income creation
+export const MATRIX_PAYMENT_TYPES = [
+  'matrix_level_1',
+  'matrix_level_2',
+  'matrix_level_3',
+  'matrix_level_4',
+  'matrix_level_5',
+] as const;
+
 // Matrix structure
 export const MATRIX_STRUCTURE = {
   LEVEL_1: { positions: 2, income_per_person: 500, total_potential: 1000 },

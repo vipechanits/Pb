@@ -6,7 +6,70 @@ PAYBACK247 is a peer-to-peer income platform designed for network marketing, fea
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
+## Production Deployment
+📋 **See [DEPLOYMENT_SETUP.md](./DEPLOYMENT_SETUP.md) for complete deployment instructions**
+
+**Required Deployment Secrets**:
+- `SESSION_SECRET` - Session encryption key (already configured)
+- `ADMIN_DEFAULT_PASSWORD` - Default admin password (12+ chars, mixed case, symbols) ⚠️ REQUIRED
+- `DATABASE_URL` - Production PostgreSQL connection (already configured via Replit PostgreSQL)
+
+**Server validates all required secrets at startup** and will fail fast with clear error messages if any are missing.
+
 ## Recent Changes
+
+### November 14, 2025 - Production Deployment & Payment Confirmation Fixes
+
+**Fix: Payment Confirmation Authorization (CRITICAL)**
+- **Issue**: All payments except sponsoring payments were going to admin for confirmation instead of the receiver account
+- **Impact**: Binary match, matrix payments, and creator fee payments were all being confirmed by admin panel instead of by the actual receiver
+- **Root Cause**: When payments fallback to PB0 (admin), `receiverType` was set to `'admin'`, allowing any admin to confirm
+- **Fix**: Changed payment confirmation system so **ALL payments are confirmed by receiver account only**:
+  1. **All payment types** now use `receiverType = 'user'` (no more admin type)
+  2. Sponsor payment fallback to PB0: Changed to `receiverType = 'user'`
+  3. Binary match fallback to PB0: Changed to `receiverType = 'user'`
+  4. Matrix payment fallback to PB0: Changed to `receiverType = 'user'`
+  5. Creator fee to PB0: Changed to `receiverType = 'user'`
+  6. Payment confirmation route: Simplified to only allow receiver to confirm (no admin override)
+- **Technical Details**:
+  - Modified `createActivationWithPayments`: ALL payments set `receiverType = 'user'` regardless of receiver
+  - Modified `checkAndCompleteActivation`: Matrix placement always sets `receiverType = 'user'`
+  - Modified `getAdminPendingConfirmations`: Simplified to only show payments where admin is the receiver
+  - Modified confirmation/rejection routes: Removed admin override logic, only receiver can confirm/reject
+  - Updated queue management: Only real users (not PB0) have queue entries to mark as paid
+- **Impact - ALL payments confirmed by receiver only**: 
+  - ✅ **Sponsor payment to user**: Sponsor user confirms
+  - ✅ **Sponsor payment to PB0**: PB0 confirms (not any admin)
+  - ✅ **Binary payment to user**: User confirms
+  - ✅ **Binary payment to PB0**: PB0 confirms (not any admin)
+  - ✅ **Matrix payment to upline**: Upline confirms
+  - ✅ **Matrix payment to PB0**: PB0 confirms (not any admin)
+  - ✅ **Creator fee to PB0**: PB0 confirms (not any admin)
+
+**Enhancement: Production Deployment Validation (CRITICAL)**
+- **Issue**: Deployment failed with missing `ADMIN_DEFAULT_PASSWORD` secret and connection error to 'helium' hostname
+- **Impact**: Server crash loop in production due to missing required secrets and local database usage
+- **Fix**: Added comprehensive startup validation in `server/index.ts`:
+  1. Early validation for `ADMIN_DEFAULT_PASSWORD` - fails fast with clear error message if missing in production
+  2. Database validation - prevents production from using local helium database
+  3. Environment detection - uses `NODE_ENV` and `REPL_DEPLOYMENT` to determine environment
+  4. Clear error messages with step-by-step resolution instructions
+- **Technical Details**:
+  - Validation runs before database initialization to fail fast
+  - Production requires: `SESSION_SECRET`, `ADMIN_DEFAULT_PASSWORD`, valid `DATABASE_URL`
+  - Development mode (NODE_ENV=development) allows fallback passwords for testing
+  - Server checks DATABASE_URL doesn't contain 'helium' in production
+  - All validation errors include actionable fixes in error messages
+- **Documentation**:
+  - Created `DEPLOYMENT_SETUP.md` with complete deployment instructions
+  - Added deployment section to `replit.md` with quick reference
+  - Includes security best practices and troubleshooting guide
+- **Status**: ✅ Ready for production deployment after setting `ADMIN_DEFAULT_PASSWORD` secret
+
+**Enhancement: Rate Limit Adjustments**
+- Increased login rate limit from 10 to 100 attempts per 15 minutes
+- Increased all other endpoint limits to 20 requests per time window
+- Prevents 429 errors during normal usage and testing
 
 ### November 13, 2025 - Critical Bug Fixes
 
@@ -41,6 +104,22 @@ Preferred communication style: Simple, everyday language.
   - Prevents wildcard collisions (underscore is SQL single-char wildcard)
 - **Architect Reviewed**: ✅ PASS - Corrected SQL filter, two-phase verification sound, safe for production
 
+**Bug Fix #3: SQL LIKE Operator Type Error (CRITICAL) - Matrix Payment Query**
+- **Issue**: Deferred income creation failed with PostgreSQL error: "operator does not exist: payment_type ~~ unknown"
+- **Root Cause**: Raw SQL `LIKE 'matrix_level_%'` query caused PostgreSQL to not recognize the column type during matrix payment fetching
+- **Impact**: All activations failed when trying to create deferred income for matrix payments after successful matrix placement
+- **Fix**: Replaced SQL LIKE with Drizzle ORM `inArray()` and shared constants:
+  1. Created `MATRIX_PAYMENT_TYPES` constant in `shared/constants.ts` listing all 5 matrix payment types
+  2. Imported `inArray` from drizzle-orm
+  3. Replaced `sql\`LIKE 'matrix_level_%'\`` with `inArray(activationPayments.paymentType, [...MATRIX_PAYMENT_TYPES])`
+  4. Added inline documentation referencing shared constant
+- **Technical Details**:
+  - New constant: `export const MATRIX_PAYMENT_TYPES = ['matrix_level_1', 'matrix_level_2', 'matrix_level_3', 'matrix_level_4', 'matrix_level_5'] as const`
+  - Query now uses type-safe Drizzle ORM functions instead of raw SQL
+  - Spread operator `[...]` converts readonly tuple to mutable array for inArray compatibility
+  - More maintainable: Adding new matrix levels only requires updating the constant in one place
+- **Architect Reviewed**: ✅ PASS - Scalable solution, centralized constant prevents future drift, efficient query pattern
+
 **Feature: Direct Sponsoring Page**
 - Added comprehensive Direct Sponsoring page showing all direct referrals with statistics dashboard
 - Displays total referrals, activation rate, binary leg distribution, and detailed referral list
@@ -69,6 +148,59 @@ Preferred communication style: Simple, everyday language.
 - **Migrations**: Drizzle Kit.
 - **Validation**: Zod schemas for payment operations.
 - **Transaction Guarantees**: Atomic creation of activations and payments with row-level locking for idempotency and concurrency control.
+
+#### Database Environment Configuration (Dev/Prod Separation)
+
+The application supports **separate development and production databases** for data isolation and safety:
+
+**Environment Detection** (`server/db-config.ts`):
+- **Production Mode**: Detected when `REPL_DEPLOYMENT=1` (Replit deployment)
+- **Development Mode**: Default when running in workspace
+
+**Database URL Selection**:
+- **Production**: Always uses `DATABASE_URL` (Replit-managed Neon database)
+- **Development**: 
+  - Prefers `DEV_DATABASE_URL` if set (recommended for dev data isolation)
+  - Falls back to `DATABASE_URL` if `DEV_DATABASE_URL` not set (⚠️ uses production data)
+
+**Setup Instructions**:
+
+1. **Production Database** (Already Configured ✅):
+   - Replit PostgreSQL/Neon database automatically provisioned
+   - `DATABASE_URL` → `postgresql://neondb_owner:...@ep-round-hall-afz77jrn.c-2.us-west-2.aws.neon.tech/neondb`
+   - Schema migrated with `npm run db:push`
+
+2. **Development Database** (Choose One):
+   
+   **Option A: Local Database (Recommended)**
+   - Add to Replit Secrets: `DEV_DATABASE_URL=postgresql://postgres:password@helium/heliumdb?sslmode=disable`
+   - Keeps dev data local and separate from production
+   - Fast local access during development
+   
+   **Option B: Separate Neon Database**
+   - Create free Neon account at https://neon.tech
+   - Add to Replit Secrets: `DEV_DATABASE_URL=postgresql://user:pass@your-dev-instance.neon.tech/devdb`
+   - Cloud-based dev database with same infrastructure as production
+
+**How It Works**:
+```typescript
+// server/db-config.ts
+const isProduction = process.env.REPL_DEPLOYMENT === '1';
+
+getDatabaseUrl(): string {
+  if (isProduction) {
+    return process.env.DATABASE_URL; // Production DB
+  } else {
+    return process.env.DEV_DATABASE_URL || process.env.DATABASE_URL; // Dev DB or fallback
+  }
+}
+```
+
+**Benefits**:
+- ✅ Safe testing without affecting production data
+- ✅ Separate data for development and production
+- ✅ Automatic environment switching on deployment
+- ✅ No code changes needed between environments
 
 ### Object Storage
 - **Provider**: Replit Object Storage (Google Cloud Storage-backed).

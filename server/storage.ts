@@ -27,8 +27,8 @@ import {
   binaryMatchQueue,
   incomeTransactions
 } from "@shared/schema";
-import { SLOT_TO_PAYMENT_TYPE, PAYMENT_TYPE_AMOUNTS } from "@shared/constants";
-import { eq, and, or, ne, isNull, desc, sql, lt, asc } from "drizzle-orm";
+import { SLOT_TO_PAYMENT_TYPE, PAYMENT_TYPE_AMOUNTS, MATRIX_PAYMENT_TYPES } from "@shared/constants";
+import { eq, and, or, ne, isNull, desc, sql, lt, asc, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "./db";
 import crypto from "crypto";
@@ -790,12 +790,12 @@ export class DbStorage implements IStorage {
             receiverUserId = sponsorUserId;
             receiverType = 'user';
           } else {
-            // No sponsor - default to admin
+            // No sponsor - PB0 confirms as receiver user
             receiverUserId = 'PB0';
-            receiverType = 'admin';
+            receiverType = 'user';
           }
         } else if (paymentType === 'binary_match') {
-          // Binary match pays FIRST person in queue (fallback to admin if empty)
+          // Binary match pays FIRST person in queue (fallback to PB0 if empty)
           // Use FOR UPDATE lock and exclude already-reserved entries to prevent race conditions
           const firstInQueue = await tx.select()
             .from(binaryMatchQueue)
@@ -821,14 +821,15 @@ export class DbStorage implements IStorage {
               })
               .where(eq(binaryMatchQueue.id, firstInQueue[0].id));
           } else {
-            // Queue empty - fallback to admin
+            // Queue empty - fallback to PB0 (receiver confirms as user, not as admin)
             receiverUserId = 'PB0';
-            receiverType = 'admin';
-            console.log(`[ACTIVATION] Binary match queue empty - payment goes to admin fallback`);
+            receiverType = 'user';
+            console.log(`[ACTIVATION] Binary match queue empty - payment goes to PB0 (user confirmation)`);
           }
         } else if (paymentType === 'creator_fee') {
+          // Creator fee goes to PB0, who confirms as receiver user
           receiverUserId = 'PB0';
-          receiverType = 'admin';
+          receiverType = 'user';
         } else if (paymentType.startsWith('matrix_level_')) {
           // Matrix income goes to upline users based on level
           // Extract level number from payment type (matrix_level_1 → 1, matrix_level_2 → 2, etc.)
@@ -854,16 +855,16 @@ export class DbStorage implements IStorage {
               break;
           }
           
-          // If upline exists and is not admin, route to that user
+          // If upline exists and is not PB0, route to that user
           if (uplineId && uplineId !== 'PB0') {
             receiverUserId = uplineId;
             receiverType = 'user';
             console.log(`[ACTIVATION] Matrix Level ${level} payment will go to upline user ${uplineId}`);
           } else {
-            // Upline is null or is admin - fallback to admin
+            // Upline is null or is PB0 - fallback to PB0 (receiver confirms as user, not as admin)
             receiverUserId = 'PB0';
-            receiverType = 'admin';
-            console.log(`[ACTIVATION] Matrix Level ${level} upline is admin/null - payment goes to admin`);
+            receiverType = 'user';
+            console.log(`[ACTIVATION] Matrix Level ${level} upline is PB0/null - payment goes to PB0 (user confirmation)`);
           }
         }
         
@@ -945,19 +946,12 @@ export class DbStorage implements IStorage {
   }
   
   async getAdminPendingConfirmations(adminUserId: string): Promise<ActivationPayment[]> {
-    // Admin sees both:
-    // 1. Payments where receiverType='admin' (system payments)
-    // 2. Payments where receiverType='user' AND receiverUserId=their userId (personal sponsor payments)
-    // This ensures admins can confirm both system and their personal sponsor income
+    // All payments now use receiverType='user', so admins only see payments where they are the receiver
+    // This includes sponsor payments, binary fallback, matrix fallback, and creator fee where receiverUserId=adminUserId
     return db.select().from(activationPayments).where(
       and(
-        or(
-          eq(activationPayments.receiverType, 'admin'),
-          and(
-            eq(activationPayments.receiverType, 'user'),
-            eq(activationPayments.receiverUserId, adminUserId)
-          )
-        ),
+        eq(activationPayments.receiverType, 'user'),
+        eq(activationPayments.receiverUserId, adminUserId),
         eq(activationPayments.status, 'submitted')
       )
     ).orderBy(desc(activationPayments.updatedAt));
@@ -1102,9 +1096,9 @@ export class DbStorage implements IStorage {
         }
       }
 
-      // If this is a binary_match payment to a real user (not admin), mark queue entry as paid
-      // DEFENSIVE: Skip if receiver is PB0 (admin fallback) even if receiverType was incorrectly set to 'user'
-      if (confirmedPayment.paymentType === 'binary_match' && confirmedPayment.receiverType === 'user' && confirmedPayment.receiverUserId !== 'PB0') {
+      // If this is a binary_match payment to a real user (not PB0 fallback), mark queue entry as paid
+      // PB0 fallback payments don't have queue entries to mark (queue was empty)
+      if (confirmedPayment.paymentType === 'binary_match' && confirmedPayment.receiverUserId !== 'PB0') {
         console.log(`[STORAGE] Marking binary match queue entry as paid for user ${confirmedPayment.receiverUserId}`);
         
         // Update queue entry from reserved → paid
@@ -1129,11 +1123,8 @@ export class DbStorage implements IStorage {
           throw new Error(`Queue entry not found for binary match payment confirmation`);
         }
       } else if (confirmedPayment.paymentType === 'binary_match' && confirmedPayment.receiverUserId === 'PB0') {
-        // Binary match payment to admin (queue was empty)
-        console.log(`[STORAGE] Binary match payment to admin (queue empty fallback) - no queue entry to mark`);
-        if (confirmedPayment.receiverType === 'user') {
-          console.warn(`[STORAGE] WARNING: Binary match payment to PB0 has receiverType='user' - should be 'admin'`);
-        }
+        // Binary match payment to PB0 (queue was empty) - no queue entry to mark
+        console.log(`[STORAGE] Binary match payment to PB0 (queue empty fallback) - no queue entry to mark`);
       }
 
       console.log(`[STORAGE] Checking if all 8 payments are confirmed for activation ${confirmedPayment.activationId}`);
@@ -1351,10 +1342,11 @@ export class DbStorage implements IStorage {
             
             // Update payment receiver regardless of status (pending, submitted, or confirmed)
             // Income hasn't been created yet at this point - that happens in confirmActivationPayment
+            // Matrix payments always use receiverType='user' so receiver (even if PB0) confirms as user
             await tx.update(activationPayments)
               .set({
                 receiverUserId,
-                receiverType: receiverUserId === 'PB0' ? 'admin' : 'user',
+                receiverType: 'user',
                 updatedAt: now
               })
               .where(and(
@@ -1380,11 +1372,12 @@ export class DbStorage implements IStorage {
           const incomeService = new IncomeService(tx as any);
           
           // Fetch all confirmed matrix payments for this activation
+          // Use shared MATRIX_PAYMENT_TYPES constant to ensure consistency
           const matrixPayments = await tx.select()
             .from(activationPayments)
             .where(and(
               eq(activationPayments.activationId, activationId),
-              sql`${activationPayments.paymentType} LIKE 'matrix_level_%'`,
+              inArray(activationPayments.paymentType, [...MATRIX_PAYMENT_TYPES]),
               eq(activationPayments.status, 'confirmed')
             ));
           
@@ -1492,9 +1485,10 @@ export class DbStorage implements IStorage {
         return undefined;
       }
       
-      // If this is a binary_match payment, release the queue entry
+      // If this is a binary_match payment to a real user (not PB0 fallback), release the queue entry
       // Reset from 'reserved' back to 'waiting' so next activation can select it
-      if (payment.paymentType === 'binary_match' && payment.receiverType === 'user') {
+      // PB0 fallback payments don't have queue entries (queue was empty)
+      if (payment.paymentType === 'binary_match' && payment.receiverUserId !== 'PB0') {
         console.log(`[STORAGE] Releasing reserved queue entry for user ${payment.receiverUserId} (payment rejected)`);
         
         const queueReleaseResult = await tx.update(binaryMatchQueue)

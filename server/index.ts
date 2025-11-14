@@ -16,10 +16,47 @@ neonConfig.webSocketConstructor = ws;
 // Import database configuration
 import { dbConfig } from "./db";
 
+// Environment validation - fail fast if critical secrets are missing
+const nodeEnv = process.env.NODE_ENV;
+const isProduction = dbConfig.isProduction;
+const isExplicitDevelopment = nodeEnv === 'development';
+
+console.log(`🔧 Environment: ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'}`);
+console.log(`🔧 NODE_ENV: ${nodeEnv || '(undefined)'}`);
+
 // Require SESSION_SECRET at boot - fail fast if missing
 if (!process.env.SESSION_SECRET) {
-  console.error('FATAL: SESSION_SECRET environment variable is required');
-  console.error('Please set SESSION_SECRET in deployment secrets');
+  console.error('');
+  console.error('═══════════════════════════════════════════════════════════════════');
+  console.error('  ❌ FATAL: SESSION_SECRET environment variable is required');
+  console.error('═══════════════════════════════════════════════════════════════════');
+  console.error('  Add SESSION_SECRET to your deployment secrets');
+  console.error('═══════════════════════════════════════════════════════════════════');
+  console.error('');
+  process.exit(1);
+}
+
+// Require ADMIN_DEFAULT_PASSWORD in production - fail fast if missing
+if (!process.env.ADMIN_DEFAULT_PASSWORD && !isExplicitDevelopment) {
+  console.error('');
+  console.error('═══════════════════════════════════════════════════════════════════');
+  console.error('  ❌ FATAL: ADMIN_DEFAULT_PASSWORD environment variable is required');
+  console.error('═══════════════════════════════════════════════════════════════════');
+  console.error(`  Current environment: ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'}`);
+  console.error(`  Current NODE_ENV: ${nodeEnv || '(undefined)'}`);
+  console.error('');
+  console.error('  Fallback admin passwords are ONLY allowed when NODE_ENV="development"');
+  console.error('');
+  console.error('  📋 Required action:');
+  console.error('  1. Go to Replit Deployments pane');
+  console.error('  2. Navigate to Environment Variables section');
+  console.error('  3. Add secret: ADMIN_DEFAULT_PASSWORD');
+  console.error('  4. Use a strong password (min 12 chars, mixed case, numbers, symbols)');
+  console.error('');
+  console.error('  ⚠️  DO NOT use deployment secrets in your workspace!');
+  console.error('  Deployment secrets are separate from workspace secrets.');
+  console.error('═══════════════════════════════════════════════════════════════════');
+  console.error('');
   process.exit(1);
 }
 
@@ -27,9 +64,38 @@ if (!process.env.SESSION_SECRET) {
 try {
   const dbUrl = dbConfig.getDatabaseUrl();
   console.log('✓ Database connection configured');
+  
+  // Validate that production is using a real database (not local helium)
+  if (isProduction && dbUrl.includes('helium')) {
+    console.error('');
+    console.error('═══════════════════════════════════════════════════════════════════');
+    console.error('  ❌ FATAL: Production cannot use local helium database');
+    console.error('═══════════════════════════════════════════════════════════════════');
+    console.error('  DATABASE_URL is pointing to local helium instance.');
+    console.error('  Production deployments require a real PostgreSQL database.');
+    console.error('');
+    console.error('  Current DATABASE_URL: ' + dbUrl.substring(0, 50) + '...');
+    console.error('');
+    console.error('  📋 Required action:');
+    console.error('  1. Ensure Replit PostgreSQL database is provisioned');
+    console.error('  2. DATABASE_URL should point to Neon/PostgreSQL cloud instance');
+    console.error('  3. Check deployment environment variables configuration');
+    console.error('═══════════════════════════════════════════════════════════════════');
+    console.error('');
+    process.exit(1);
+  }
 } catch (error) {
-  console.error('FATAL: Database connection not configured');
-  console.error(error instanceof Error ? error.message : 'Unknown error');
+  console.error('');
+  console.error('═══════════════════════════════════════════════════════════════════');
+  console.error('  ❌ FATAL: Database connection not configured');
+  console.error('═══════════════════════════════════════════════════════════════════');
+  console.error('  Error: ' + (error instanceof Error ? error.message : 'Unknown error'));
+  console.error('');
+  console.error('  📋 Required action:');
+  console.error('  1. Verify DATABASE_URL is set in deployment secrets');
+  console.error('  2. Ensure PostgreSQL database is provisioned and accessible');
+  console.error('═══════════════════════════════════════════════════════════════════');
+  console.error('');
   process.exit(1);
 }
 
