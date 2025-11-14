@@ -890,42 +890,16 @@ export class DbStorage implements IStorage {
           receiverUserId = 'PB0';
           receiverType = 'user';
         } else if (paymentType.startsWith('matrix_level_')) {
-          // Matrix income goes to upline users based on level
-          // Extract level number from payment type (matrix_level_1 → 1, matrix_level_2 → 2, etc.)
-          const level = parseInt(paymentType.split('_')[2]);
-          
-          // Get the appropriate upline from activation record
-          let uplineId: string | null = null;
-          switch (level) {
-            case 1:
-              uplineId = createdActivation.matrixUpline1;
-              break;
-            case 2:
-              uplineId = createdActivation.matrixUpline2;
-              break;
-            case 3:
-              uplineId = createdActivation.matrixUpline3;
-              break;
-            case 4:
-              uplineId = createdActivation.matrixUpline4;
-              break;
-            case 5:
-              uplineId = createdActivation.matrixUpline5;
-              break;
-          }
-          
-          // If upline exists and is not PB0, route to that user
-          if (uplineId && uplineId !== 'PB0') {
-            receiverUserId = uplineId;
-            receiverType = 'user';
-            console.log(`[ACTIVATION] Matrix Level ${level} payment will go to upline user ${uplineId}`);
-          } else {
-            // Upline is null or is PB0 - fallback to PB0 (receiver confirms as user, not as admin)
-            receiverUserId = 'PB0';
-            receiverType = 'user';
-            console.log(`[ACTIVATION] Matrix Level ${level} upline is PB0/null - payment goes to PB0 (user confirmation)`);
-          }
+          // Matrix payments: receivers will be assigned AFTER matrix placement during activation completion
+          // Use NULL receiver and 'awaiting_assignment' status to prevent premature payment submission
+          // This fixes the issue where users see PB0 as receiver before actual uplines are determined
+          receiverUserId = null;
+          receiverType = 'user'; // Will be user (either actual upline or PB0 fallback)
+          console.log(`[ACTIVATION] Matrix Level ${paymentType} receiver will be assigned after matrix placement`);
         }
+        
+        // Matrix payments start with 'awaiting_assignment' status until receivers are determined
+        const paymentStatus = paymentType.startsWith('matrix_level_') ? 'awaiting_assignment' : 'pending';
         
         paymentsToCreate.push({
           activationId: createdActivation.id,
@@ -936,7 +910,7 @@ export class DbStorage implements IStorage {
           receiverType,
           amountInr: amount,
           paymentMode: 'offline',
-          status: 'pending',
+          status: paymentStatus as any,
           submissionCount: 0,
         });
       }
@@ -1063,6 +1037,11 @@ export class DbStorage implements IStorage {
     // Get current payment to increment submission count
     const currentPayment = await this.getActivationPayment(id);
     if (!currentPayment) return undefined;
+    
+    // Block submission if payment is awaiting receiver assignment (matrix payments before activation)
+    if (currentPayment.status === 'awaiting_assignment') {
+      throw new Error('Payment receiver not yet assigned - complete first 3 payments before paying matrix levels');
+    }
     
     const result = await db.update(activationPayments)
       .set({ 
@@ -1416,33 +1395,36 @@ export class DbStorage implements IStorage {
           const matrixAncestors = await this.getMatrixAncestors(activatedUser.userId, 5, tx);
           console.log(`[MATRIX] Found ${matrixAncestors.length} matrix ancestors for ${activatedUser.userId}:`, matrixAncestors);
           
-          // Update matrix payment receivers (slots 3-7) with ancestors or admin fallback
-          // This runs during activation completion, BEFORE income creation
-          // Updates receiver_user_id from placeholder (PB0) to actual matrix uplines
+          // STAGED RECEIVER ASSIGNMENT: Assign matrix payment receivers and change status from 'awaiting_assignment' to 'pending'
+          // This prevents users from seeing/paying wrong receivers before matrix placement completes
+          // Receivers were set to NULL with 'awaiting_assignment' status at activation creation
+          // Now we assign actual uplines (or PB0 fallback) and make payments submittable
           const matrixUplines: Record<string, string> = {};
           for (let level = 1; level <= 5; level++) {
             const ancestorIndex = level - 1;
             const receiverUserId = ancestorIndex < matrixAncestors.length ? matrixAncestors[ancestorIndex] : 'PB0';
             const slotIndex = level + 2; // Slot 3 = level 1, Slot 4 = level 2, etc.
             
-            // Update payment receiver regardless of status (pending, submitted, or confirmed)
-            // Income hasn't been created yet at this point - that happens in confirmActivationPayment
+            // Update payment receiver AND change status from 'awaiting_assignment' to 'pending'
+            // This atomically assigns receiver and enables payment submission
             // Matrix payments always use receiverType='user' so receiver (even if PB0) confirms as user
             await tx.update(activationPayments)
               .set({
                 receiverUserId,
                 receiverType: 'user',
+                status: 'pending', // Change from 'awaiting_assignment' to 'pending' (ready for payment)
                 updatedAt: now
               })
               .where(and(
                 eq(activationPayments.activationId, activationId),
-                eq(activationPayments.slotIndex, slotIndex)
+                eq(activationPayments.slotIndex, slotIndex),
+                eq(activationPayments.status, 'awaiting_assignment') // Only update if still awaiting
               ));
             
             // Track for activation record update
             matrixUplines[`matrixUpline${level}`] = receiverUserId;
             
-            console.log(`[MATRIX] Slot ${slotIndex} (Level ${level}) receiver: ${receiverUserId}`);
+            console.log(`[MATRIX] Slot ${slotIndex} (Level ${level}) receiver assigned: ${receiverUserId} (status → pending)`);
           }
           
           // Update activation record with matrix uplines

@@ -1600,6 +1600,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Forbidden - You can only submit proof for your own payments" });
       }
       
+      // Block submission if payment is awaiting receiver assignment (matrix payments before first 3 confirmed)
+      if (existingPayment.status === 'awaiting_assignment') {
+        return res.status(400).json({ 
+          error: "Payment receiver not yet assigned. Please complete and confirm the first 3 payments (sponsor, binary match, and creator fee) before paying matrix levels. Matrix receivers will be assigned automatically after your account is activated."
+        });
+      }
+      
       const payment = await storage.submitPaymentProof(
         req.params.id, 
         validationResult.data.offlineUtrId,

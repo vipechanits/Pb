@@ -20,7 +20,7 @@ export const paymentModeEnum = pgEnum("payment_mode", ["offline"]);
 
 export const activationStatusEnum = pgEnum("activation_status", ["pending", "partial", "completed", "failed"]);
 
-export const paymentStatusEnum = pgEnum("payment_status", ["pending", "submitted", "confirmed", "rejected"]);
+export const paymentStatusEnum = pgEnum("payment_status", ["pending", "awaiting_assignment", "submitted", "confirmed", "rejected"]);
 
 export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
 
