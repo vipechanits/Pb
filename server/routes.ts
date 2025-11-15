@@ -1607,7 +1607,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Block submission if payment is awaiting receiver assignment (matrix payments before first 3 confirmed)
       if (existingPayment.status === 'awaiting_assignment') {
         return res.status(400).json({ 
-          error: "Payment receiver not yet assigned. Please complete and confirm the first 3 payments (sponsor, binary match, and creator fee) before paying matrix levels. Matrix receivers will be assigned automatically after your account is activated."
+          error: "Payment receiver not yet assigned. Please complete and confirm the first 3 payments (sponsor, binary match, and top reward) before paying matrix levels. Matrix receivers will be assigned automatically after your account is activated."
         });
       }
       
@@ -1677,7 +1677,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`[CONFIRM-ROUTE] Payment confirmed successfully:`, payment.id);
       
       // NOTE: Income distribution is handled inside storage.confirmActivationPayment() within a transaction
-      // - Immediate incomes (binary_match, creator_fee) created at payment confirmation
+      // - Immediate incomes (binary_match, top_reward) created at payment confirmation
       // - Deferred incomes (sponsor, matrix) created when all 8 payments confirmed
       // See storage.ts lines 1176-1720 for complete implementation
 
@@ -1739,7 +1739,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const normalizedConfig = {
         sponsorPaymentAmount: parseFloat(config.sponsorPaymentAmount),
         binaryMatchPaymentAmount: parseFloat(config.binaryMatchPaymentAmount),
-        creatorFeeAmount: parseFloat(config.creatorFeeAmount),
+        topRewardAmount: parseFloat(config.topRewardAmount),
         matrixLevel1Amount: parseFloat(config.matrixLevel1Amount),
         matrixLevel2Amount: parseFloat(config.matrixLevel2Amount),
         matrixLevel3Amount: parseFloat(config.matrixLevel3Amount),

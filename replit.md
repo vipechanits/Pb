@@ -63,15 +63,15 @@ Preferred communication style: Simple, everyday language.
 - **Example**: User PB10007 (sponsored by PB10000) may be placed under PB10003's left leg if that's the first available position.
 
 ### Payment Processing
-- **8-Payment Activation System**: Each user activation requires 8 payments: Direct Sponsor (Slot 0), Binary Match (Slot 1), Creator Fee (Slot 2), Matrix Levels 1-5 (Slots 3-7).
+- **8-Payment Activation System**: Each user activation requires 8 payments: Direct Sponsor (Slot 0), Binary Match (Slot 1), Top Reward Payment (Slot 2), Matrix Levels 1-5 (Slots 3-7).
 - **Dynamic Configuration**: Payment amounts, binary matching rules, and matching ratio are admin-configurable.
-- **Admin Fee Routing**: ALL admin fees and fallback payments route exclusively to PB0. This includes: creator fees (always), binary match fallbacks (queue empty), matrix fallbacks (no upline), and sponsor payments (for users sponsored by PB0).
+- **Admin Fee Routing**: ALL admin fees and fallback payments route exclusively to PB0. This includes: top reward (always), binary match fallbacks (queue empty), matrix fallbacks (no upline), and sponsor payments (for users sponsored by PB0).
 - **Payment Mode**: Manual INR payments via UPI with UTR/Transaction ID and optional proof upload.
 - **Payment Flow**: User submits UTR/proof, receiver confirms/rejects, user can resubmit.
 - **Payment Status Tracking**: Pending, Submitted, Confirmed, Rejected.
 - **Manual Confirmation Required**: All payments require manual confirmation by PB0 admin. No auto-confirmation exists in the system.
 - **Profile Completion Enforcement**: Users must complete profile details before requesting activation.
-- **Deferred Income Creation**: Sponsor income and matrix income are created ONLY after full activation (all 8 payments confirmed), not when individual payments are confirmed. Only binary_match and creator_fee incomes are created immediately upon payment confirmation.
+- **Deferred Income Creation**: Sponsor income and matrix income are created ONLY after full activation (all 8 payments confirmed), not when individual payments are confirmed. Only binary_match and top_reward incomes are created immediately upon payment confirmation.
 - **Legacy Income Cleanup**: Activation completion automatically detects and removes any prematurely created sponsor income records, then recreates them correctly with proper summary adjustments.
 
 ### Key Application Pages

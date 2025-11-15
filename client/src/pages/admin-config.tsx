@@ -12,7 +12,7 @@ type SystemConfig = {
   id: string;
   sponsorPaymentAmount: string;
   binaryMatchPaymentAmount: string;
-  creatorFeeAmount: string;
+  topRewardAmount: string;
   matrixLevel1Amount: string;
   matrixLevel2Amount: string;
   matrixLevel3Amount: string;
@@ -124,7 +124,7 @@ export default function AdminConfig() {
   const totalActivationFee: number = [
     getValue('sponsorPaymentAmount'),
     getValue('binaryMatchPaymentAmount'),
-    getValue('creatorFeeAmount'),
+    getValue('topRewardAmount'),
     getValue('matrixLevel1Amount'),
     getValue('matrixLevel2Amount'),
     getValue('matrixLevel3Amount'),
@@ -190,14 +190,14 @@ export default function AdminConfig() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="creatorFeeAmount">Creator Fee (Slot 2)</Label>
+              <Label htmlFor="topRewardAmount">Top Reward Payment (Slot 2)</Label>
               <Input
-                id="creatorFeeAmount"
+                id="topRewardAmount"
                 type="number"
                 step="0.01"
-                value={getValue('creatorFeeAmount')}
-                onChange={(e) => handleChange('creatorFeeAmount', e.target.value)}
-                data-testid="input-creator-fee"
+                value={getValue('topRewardAmount')}
+                onChange={(e) => handleChange('topRewardAmount', e.target.value)}
+                data-testid="input-top-reward"
               />
             </div>
           </CardContent>

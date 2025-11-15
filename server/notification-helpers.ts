@@ -84,7 +84,7 @@ function formatSlotType(slotType: string): string {
   const typeMap: Record<string, string> = {
     'direct_sponsor': 'Direct Sponsor Payment',
     'binary_match': 'Binary Match Payment',
-    'creator_fee': 'Creator Fee',
+    'top_reward': 'Top Reward Payment',
     'matrix_level_1': 'Matrix Level 1',
     'matrix_level_2': 'Matrix Level 2',
     'matrix_level_3': 'Matrix Level 3',

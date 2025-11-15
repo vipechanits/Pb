@@ -16,7 +16,7 @@ import { format } from "date-fns";
 const SLOT_LABELS: Record<number, string> = {
   0: "Direct Sponsor",
   1: "Binary Match",
-  2: "Creator Fee",
+  2: "Top Reward Payment",
   3: "Matrix Level 1",
   4: "Matrix Level 2",
   5: "Matrix Level 3",

@@ -8,7 +8,7 @@ export interface SystemConfigDTO {
   // Payment amounts (in INR)
   sponsorPaymentAmount: number;
   binaryMatchPaymentAmount: number;
-  creatorFeeAmount: number;
+  topRewardAmount: number;
   matrixLevel1Amount: number;
   matrixLevel2Amount: number;
   matrixLevel3Amount: number;
@@ -35,7 +35,7 @@ export interface SystemConfigDTO {
 export const DEFAULT_SYSTEM_CONFIG: SystemConfigDTO = {
   sponsorPaymentAmount: 1000,
   binaryMatchPaymentAmount: 1000,
-  creatorFeeAmount: 500,
+  topRewardAmount: 500,
   matrixLevel1Amount: 500,
   matrixLevel2Amount: 500,
   matrixLevel3Amount: 500,
@@ -72,7 +72,7 @@ export interface ComputedSystemConfig extends SystemConfigDTO {
   paymentSlots: {
     slot0Amount: number; // Direct sponsor
     slot1Amount: number; // Binary match
-    slot2Amount: number; // Creator fee
+    slot2Amount: number; // Top reward
     slot3Amount: number; // Matrix L1
     slot4Amount: number; // Matrix L2
     slot5Amount: number; // Matrix L3
@@ -107,7 +107,7 @@ export function useSystemConfig() {
     const totalActivationCost = 
       config.sponsorPaymentAmount +
       config.binaryMatchPaymentAmount +
-      config.creatorFeeAmount +
+      config.topRewardAmount +
       config.matrixLevel1Amount +
       config.matrixLevel2Amount +
       config.matrixLevel3Amount +
@@ -137,7 +137,7 @@ export function useSystemConfig() {
       paymentSlots: {
         slot0Amount: config.sponsorPaymentAmount,
         slot1Amount: config.binaryMatchPaymentAmount,
-        slot2Amount: config.creatorFeeAmount,
+        slot2Amount: config.topRewardAmount,
         slot3Amount: config.matrixLevel1Amount,
         slot4Amount: config.matrixLevel2Amount,
         slot5Amount: config.matrixLevel3Amount,
@@ -171,7 +171,7 @@ export function getPaymentTypeLabel(paymentType: string): string {
   const labels: Record<string, string> = {
     direct_sponsor: 'Direct Sponsor',
     binary_match: 'Binary Match',
-    creator_fee: 'Creator Fee',
+    top_reward: 'Top Reward Payment',
     matrix_level_1: 'Matrix Level 1',
     matrix_level_2: 'Matrix Level 2',
     matrix_level_3: 'Matrix Level 3',
@@ -188,7 +188,7 @@ export function getPaymentAmount(config: ComputedSystemConfig, paymentType: stri
   const typeMap: Record<string, keyof ComputedSystemConfig> = {
     direct_sponsor: 'sponsorPaymentAmount',
     binary_match: 'binaryMatchPaymentAmount',
-    creator_fee: 'creatorFeeAmount',
+    top_reward: 'topRewardAmount',
     matrix_level_1: 'matrixLevel1Amount',
     matrix_level_2: 'matrixLevel2Amount',
     matrix_level_3: 'matrixLevel3Amount',

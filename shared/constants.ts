@@ -7,7 +7,7 @@
 export const PAYMENT_AMOUNTS = {
   SPONSOR: 1000,           // Slot 0: Direct sponsor
   BINARY_MATCH: 1000,      // Slot 1: Binary matching
-  CREATOR_FEE: 500,        // Slot 2: Admin creator fee
+  TOP_REWARD: 500,         // Slot 2: Admin top reward
   MATRIX_L1: 500,          // Slot 3: Matrix Level 1
   MATRIX_L2: 500,          // Slot 4: Matrix Level 2
   MATRIX_L3: 500,          // Slot 5: Matrix Level 3
@@ -17,7 +17,7 @@ export const PAYMENT_AMOUNTS = {
 
 // Total activation cost (8 payments)
 export const TOTAL_ACTIVATION_COST = 
-  PAYMENT_AMOUNTS.CREATOR_FEE +
+  PAYMENT_AMOUNTS.TOP_REWARD +
   PAYMENT_AMOUNTS.SPONSOR +
   PAYMENT_AMOUNTS.BINARY_MATCH +  // Now pays first person in queue (not admin)
   PAYMENT_AMOUNTS.MATRIX_L1 +
@@ -31,7 +31,7 @@ export const TOTAL_ACTIVATION_COST =
 export const PAYMENT_LABELS = {
   direct_sponsor: 'Direct Sponsor',
   binary_match: 'Binary Match',
-  creator_fee: 'Creator Fee',
+  top_reward: 'Top Reward Payment',
   matrix_level_1: 'Matrix Level 1',
   matrix_level_2: 'Matrix Level 2',
   matrix_level_3: 'Matrix Level 3',
@@ -43,7 +43,7 @@ export const PAYMENT_LABELS = {
 export const PAYMENT_TYPE_AMOUNTS: Record<string, number> = {
   direct_sponsor: PAYMENT_AMOUNTS.SPONSOR,
   binary_match: PAYMENT_AMOUNTS.BINARY_MATCH,
-  creator_fee: PAYMENT_AMOUNTS.CREATOR_FEE,
+  top_reward: PAYMENT_AMOUNTS.TOP_REWARD,
   matrix_level_1: PAYMENT_AMOUNTS.MATRIX_L1,
   matrix_level_2: PAYMENT_AMOUNTS.MATRIX_L2,
   matrix_level_3: PAYMENT_AMOUNTS.MATRIX_L3,
@@ -56,7 +56,7 @@ export const PAYMENT_TYPE_AMOUNTS: Record<string, number> = {
 export const SLOT_TO_PAYMENT_TYPE = [
   'direct_sponsor',    // Slot 0: Direct sponsor
   'binary_match',      // Slot 1: FIRST person in binary match queue (fallback to admin if empty)
-  'creator_fee',       // Slot 2: Admin creator fee
+  'top_reward',        // Slot 2: Admin top reward
   'matrix_level_1',    // Slot 3: Matrix Level 1
   'matrix_level_2',    // Slot 4: Matrix Level 2
   'matrix_level_3',    // Slot 5: Matrix Level 3
@@ -105,8 +105,8 @@ export const BINARY_RULES = {
 
 // Payment confirmation workflow
 export const CONFIRMATION_WORKFLOW = {
-  CREATOR_FEE: {
-    CONFIRMATIONS: ['admin'],  // Admin only confirms creator fee
+  TOP_REWARD: {
+    CONFIRMATIONS: ['admin'],  // Admin only confirms top reward
   },
   OTHER_PAYMENTS: {
     CONFIRMATIONS: ['receiver'],  // Receiver only confirms payments 1-7
@@ -164,7 +164,7 @@ export const MATRIX_PLACEMENT = {
     FEE: 5000,                 // Same ₹5,000 re-entry fee
     SPONSOR_PAYMENT: 1000,     // ₹1,000 to SAME sponsor
     BINARY_PAYMENT: 1000,      // ₹1,000 to next in binary queue (not matched pair)
-    CREATOR_FEE: 500,          // ₹500 to admin
+    TOP_REWARD: 500,           // ₹500 to admin
     MATRIX_PAYMENTS: 2500,     // ₹2,500 to new matrix uplines (5×₹500)
     BINARY_PLACEMENT: 'bubbled', // Placed as bubbled in binary tree (counts for matching)
     MATRIX_PLACEMENT: 'next_free_spot', // Gets new matrix position number

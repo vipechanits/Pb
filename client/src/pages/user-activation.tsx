@@ -87,7 +87,7 @@ export default function UserActivationPage() {
     const labels = [
       'Direct Sponsor',
       'Binary Match',
-      'Creator Fee',
+      'Top Reward Payment',
       'Matrix Level 1',
       'Matrix Level 2',
       'Matrix Level 3',
@@ -182,7 +182,7 @@ export default function UserActivationPage() {
               <ul className="text-sm space-y-1 text-muted-foreground ml-4">
                 <li>• Direct Sponsor: {formatINR(config.sponsorPaymentAmount)}</li>
                 <li>• Binary Match: {formatINR(config.binaryMatchPaymentAmount)}</li>
-                <li>• Admin Fee: {formatINR(config.creatorFeeAmount)}</li>
+                <li>• Top Reward: {formatINR(config.topRewardAmount)}</li>
                 <li>• Matrix Levels 1-5: {formatINR(config.matrixLevel1Amount)} each ({formatINR(config.matrixLevel1Amount * 5)} total)</li>
               </ul>
             </div>
@@ -276,7 +276,7 @@ export default function UserActivationPage() {
               Admin Payment Details (PB0)
             </CardTitle>
             <CardDescription>
-              Use these details for all admin payments (Creator Fee & Matrix Levels)
+              Use these details for all admin payments (Top Reward & Matrix Levels)
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -525,7 +525,7 @@ export default function UserActivationPage() {
                       <strong>Matrix Payments (5 remaining)</strong>
                       <br />
                       Matrix payment slots will appear after your first 3 payments are confirmed. 
-                      Complete and get confirmation for Direct Sponsor, Binary Match, and Creator Fee payments first.
+                      Complete and get confirmation for Direct Sponsor, Binary Match, and Top Reward Payment first.
                     </AlertDescription>
                   </Alert>
                 )}

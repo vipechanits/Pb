@@ -6,7 +6,7 @@ import { z } from "zod";
 export const paymentTypeEnum = pgEnum("payment_type", [
   "direct_sponsor",
   "binary_match",
-  "creator_fee",
+  "top_reward",
   "matrix_level_1",
   "matrix_level_2",
   "matrix_level_3",
@@ -34,7 +34,7 @@ export const incomeTypeEnum = pgEnum("income_type", [
   "matrix_level_3",
   "matrix_level_4",
   "matrix_level_5",
-  "system_fee", // For creator fees and other admin system payments
+  "system_fee", // For top reward and other admin system payments
 ]);
 
 export const incomeStatusEnum = pgEnum("income_status", ["pending", "confirmed", "failed", "reversed"]);
@@ -281,7 +281,7 @@ export const systemConfig = pgTable("system_config", {
   // Payment amounts (in INR)
   sponsorPaymentAmount: decimal("sponsor_payment_amount", { precision: 10, scale: 2 }).notNull().default('1000'),
   binaryMatchPaymentAmount: decimal("binary_match_payment_amount", { precision: 10, scale: 2 }).notNull().default('1000'),
-  creatorFeeAmount: decimal("creator_fee_amount", { precision: 10, scale: 2 }).notNull().default('500'),
+  topRewardAmount: decimal("top_reward_amount", { precision: 10, scale: 2 }).notNull().default('500'),
   matrixLevel1Amount: decimal("matrix_level_1_amount", { precision: 10, scale: 2 }).notNull().default('500'),
   matrixLevel2Amount: decimal("matrix_level_2_amount", { precision: 10, scale: 2 }).notNull().default('500'),
   matrixLevel3Amount: decimal("matrix_level_3_amount", { precision: 10, scale: 2 }).notNull().default('500'),

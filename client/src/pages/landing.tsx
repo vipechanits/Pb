@@ -69,7 +69,7 @@ export default function Landing() {
   const faqs = [
     {
       question: 'How do I get started?',
-      answer: `Sign up with your email, complete your profile with payment details (UPI ID, bank account), then activate your account by making 8 payments to designated members (${formatINR(config.paymentSlots.slot0Amount)} to sponsor, ${formatINR(config.paymentSlots.slot1Amount)} to binary match, ${formatINR(config.paymentSlots.slot2Amount)} creator fee, and ${formatINR(config.matrixLevel1Amount)} to each of 5 matrix levels).`
+      answer: `Sign up with your email, complete your profile with payment details (UPI ID, bank account), then activate your account by making 8 payments to designated members (${formatINR(config.paymentSlots.slot0Amount)} to sponsor, ${formatINR(config.paymentSlots.slot1Amount)} to binary match, ${formatINR(config.paymentSlots.slot2Amount)} top reward, and ${formatINR(config.matrixLevel1Amount)} to each of 5 matrix levels).`
     },
     {
       question: 'What is the 2+5 non-working matrix?',
@@ -77,7 +77,7 @@ export default function Landing() {
     },
     {
       question: 'How do payments work?',
-      answer: `All payments are direct peer-to-peer via UPI (Google Pay, Paytm, PhonePe). When you activate, you make 8 payments totaling ${formatINR(config.totalActivationCost)}: to your sponsor (${formatINR(config.sponsorPaymentAmount)}), binary match partner (${formatINR(config.binaryMatchPaymentAmount)}), creator fee (${formatINR(config.creatorFeeAmount)}), and 5 matrix uplines (${formatINR(config.matrixLevel1Amount)} each). You confirm payments by submitting UTR/transaction ID and optional proof.`
+      answer: `All payments are direct peer-to-peer via UPI (Google Pay, Paytm, PhonePe). When you activate, you make 8 payments totaling ${formatINR(config.totalActivationCost)}: to your sponsor (${formatINR(config.sponsorPaymentAmount)}), binary match partner (${formatINR(config.binaryMatchPaymentAmount)}), top reward (${formatINR(config.topRewardAmount)}), and 5 matrix uplines (${formatINR(config.matrixLevel1Amount)} each). You confirm payments by submitting UTR/transaction ID and optional proof.`
     },
     {
       question: 'What is binary income?',

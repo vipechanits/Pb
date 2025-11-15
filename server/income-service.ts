@@ -17,18 +17,18 @@ export class IncomeService {
     }
     
     // Determine final receiver ID with strict validation
-    // ONLY creator_fee can have null receiverUserId (defaults to PB0)
+    // ONLY top_reward can have null receiverUserId (defaults to PB0)
     // ALL other payments (including future admin payment types) MUST have receiverUserId
     let finalReceiverId: string;
-    if (payment.paymentType === 'creator_fee' && !payment.receiverUserId) {
-      // creator_fee is the only payment type that can have null receiverUserId
+    if (payment.paymentType === 'top_reward' && !payment.receiverUserId) {
+      // top_reward is the only payment type that can have null receiverUserId
       // This is a known system fee that goes to admin (PB0)
       finalReceiverId = 'PB0';
-      console.log(`[INCOME] creator_fee has null receiverUserId, defaulting to PB0`);
+      console.log(`[INCOME] top_reward has null receiverUserId, defaulting to PB0`);
     } else if (!payment.receiverUserId) {
       // ALL other payments MUST have receiverUserId populated
       // This includes: direct_sponsor, binary_match, matrix_level_*, and any future admin payments
-      throw new Error(`Payment ${payment.id} (type: ${payment.paymentType}) has null receiverUserId. Only creator_fee can have null receiver. This indicates a data integrity issue that must be fixed upstream.`);
+      throw new Error(`Payment ${payment.id} (type: ${payment.paymentType}) has null receiverUserId. Only top_reward can have null receiver. This indicates a data integrity issue that must be fixed upstream.`);
     } else {
       finalReceiverId = payment.receiverUserId;
     }
@@ -57,7 +57,7 @@ export class IncomeService {
 
       if (result.length > 0) {
         // Only update user summary for non-system-fee income types
-        // System fees (creator_fee) go to admin but don't count as MLM earnings
+        // System fees (top_reward) go to admin but don't count as MLM earnings
         // Admin (PB0) also doesn't need summary updates
         const isAdmin = finalReceiverId === 'PB0';
         if (incomeType !== 'system_fee' && !isAdmin) {
@@ -126,8 +126,8 @@ export class IncomeService {
         return 'direct_sponsor';
       case 'binary_match':
         return 'binary_match';
-      case 'creator_fee':
-        // Creator fee is tracked as system_fee income type for data integrity
+      case 'top_reward':
+        // Top reward is tracked as system_fee income type for data integrity
         // Counted in Bug #2 validation but excluded from user MLM summaries
         return 'system_fee';
       case 'matrix_level_1':

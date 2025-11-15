@@ -1016,8 +1016,8 @@ export class DbStorage implements IStorage {
           case 'binary_match':
             amount = config.binaryMatchPaymentAmount; // ₹1000 to first person in queue
             break;
-          case 'creator_fee':
-            amount = config.creatorFeeAmount;
+          case 'top_reward':
+            amount = config.topRewardAmount;
             break;
           case 'matrix_level_1':
             amount = config.matrixLevel1Amount;
@@ -1082,8 +1082,8 @@ export class DbStorage implements IStorage {
             receiverType = 'user';
             console.log(`[ACTIVATION] Binary match queue empty - payment goes to PB0 (user confirmation)`);
           }
-        } else if (paymentType === 'creator_fee') {
-          // Creator fee goes to PB0, who confirms as receiver user
+        } else if (paymentType === 'top_reward') {
+          // Top reward goes to PB0, who confirms as receiver user
           receiverUserId = 'PB0';
           receiverType = 'user';
         } else if (paymentType.startsWith('matrix_level_')) {
@@ -1177,7 +1177,7 @@ export class DbStorage implements IStorage {
   
   async getAdminPendingConfirmations(adminUserId: string): Promise<ActivationPayment[]> {
     // All payments now use receiverType='user', so admins only see payments where they are the receiver
-    // This includes sponsor payments, binary fallback, matrix fallback, and creator fee where receiverUserId=adminUserId
+    // This includes sponsor payments, binary fallback, matrix fallback, and top reward where receiverUserId=adminUserId
     return db.select().from(activationPayments).where(
       and(
         eq(activationPayments.receiverType, 'user'),
@@ -1370,7 +1370,7 @@ export class DbStorage implements IStorage {
           .where(eq(incomeTransactions.activationPaymentId, id))
           .limit(1);
         
-        if (existingIncome.length === 0 && payment.paymentType !== 'creator_fee' && payment.receiverUserId && payment.receiverUserId !== 'PB0') {
+        if (existingIncome.length === 0 && payment.paymentType !== 'top_reward' && payment.receiverUserId && payment.receiverUserId !== 'PB0') {
           console.warn(`[STORAGE] WARNING: Payment ${id} is confirmed but no income exists - recreating income`);
           const { IncomeService } = await import('./income-service');
           const incomeService = new IncomeService(tx as any);
@@ -1407,7 +1407,7 @@ export class DbStorage implements IStorage {
       // IMPORTANT: Defer income creation for matrix AND sponsor payments
       // Matrix payments: Receivers determined after matrix placement (during activation)
       // Sponsor payments: Only credited AFTER user completes full activation (8 payments)
-      // Other payments (binary_match, creator_fee): Created immediately
+      // Other payments (binary_match, top_reward): Created immediately
       const isMatrixPayment = confirmedPayment.paymentType.startsWith('matrix_level_');
       const isSponsorPayment = confirmedPayment.paymentType === 'direct_sponsor';
       
@@ -1576,7 +1576,7 @@ export class DbStorage implements IStorage {
         console.log(`[ACTIVATION] All 8 payments confirmed. Verifying immediately-created income...`);
         
         // DEFERRED INCOME POLICY: Both sponsor AND matrix incomes are deferred until activation completion
-        // Only binary_match (Slot 1) and creator_fee (Slot 2) incomes are created immediately upon payment confirmation
+        // Only binary_match (Slot 1) and top_reward (Slot 2) incomes are created immediately upon payment confirmation
         // Sponsor income (Slot 0) is created AFTER all 8 payments are confirmed (see lines 1388-1427)
         // Matrix income (Slots 3-7) is created AFTER matrix placement (see lines 1431-1469)
         // CRITICAL: Only count slot-linked income (activationPaymentId NOT NULL) to exclude queue payouts
@@ -1585,11 +1585,11 @@ export class DbStorage implements IStorage {
         // This prevents false failures when activation completion check runs during partial payment confirmation
         const confirmedImmediatePayments = payments.filter((p: any) => 
           p.status === 'confirmed' && 
-          (p.paymentType === 'binary_match' || p.paymentType === 'creator_fee')
+          (p.paymentType === 'binary_match' || p.paymentType === 'top_reward')
         );
         const expectedImmediateIncomeCount = confirmedImmediatePayments.length;
         
-        console.log(`[ACTIVATION] Verified ${confirmedImmediatePayments.length} immediate-type payments confirmed (binary_match + creator_fee)`);
+        console.log(`[ACTIVATION] Verified ${confirmedImmediatePayments.length} immediate-type payments confirmed (binary_match + top_reward)`);
         
         const actualImmediateIncome = await tx.select()
           .from(incomeTransactions)
@@ -1600,7 +1600,7 @@ export class DbStorage implements IStorage {
             sql`${incomeTransactions.activationPaymentId} IN (
               SELECT id FROM ${activationPayments} 
               WHERE ${activationPayments.activationId} = ${activationId} 
-              AND ${activationPayments.paymentType} IN ('binary_match', 'creator_fee')
+              AND ${activationPayments.paymentType} IN ('binary_match', 'top_reward')
             )`
           ));
         
@@ -1618,7 +1618,7 @@ export class DbStorage implements IStorage {
             })
             .where(eq(activations.id, activationId));
           
-          throw new Error(`Income verification failed: Expected ${expectedImmediateIncomeCount} immediate income records (matching confirmed binary_match + creator_fee payments), found ${actualImmediateIncome.length}. Activation marked as FAILED for manual investigation.`);
+          throw new Error(`Income verification failed: Expected ${expectedImmediateIncomeCount} immediate income records (matching confirmed binary_match + top_reward payments), found ${actualImmediateIncome.length}. Activation marked as FAILED for manual investigation.`);
         }
         
         console.log(`[ACTIVATION] ✓ Immediate income verification passed: ${actualImmediateIncome.length} income records confirmed (sponsor + matrix will be created next)`);
