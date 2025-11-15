@@ -437,12 +437,101 @@ export class DbStorage implements IStorage {
   }
 
   async determineBestLeg(sponsorUserId: string): Promise<'left' | 'right'> {
+    // DEPRECATED: This method uses sponsorship tree counts (leftLegCount/rightLegCount)
+    // For binary PLACEMENT, use findFirstAvailableBinarySlot() instead
     const sponsor = await this.getUserByUserId(sponsorUserId);
     if (!sponsor) {
       return 'left';
     }
     
     return sponsor.leftLegCount <= sponsor.rightLegCount ? 'left' : 'right';
+  }
+
+  async findFirstAvailableBinarySlot(preferredParentId?: string): Promise<{ parentId: string | null; leg: 'left' | 'right' | null } | null> {
+    // Find first available position in binary PLACEMENT tree using breadth-first search
+    // If preferredParentId is provided, try to place under that parent first
+    
+    // Find binary tree root (first activated regular user with no binary parent)
+    const rootUser = await db.select({
+      userId: users.userId,
+    }).from(users)
+      .where(and(
+        eq(users.isActivated, true),
+        sql`${users.userId} != 'PB0'`,
+        isNull(users.binaryParentId)
+      ))
+      .limit(1);
+
+    if (!rootUser || rootUser.length === 0) {
+      // Empty tree - caller becomes the binary tree root
+      // This handles first-ever activation in fresh deployment
+      return { parentId: null, leg: null };
+    }
+
+    const root = rootUser[0].userId;
+
+    // If preferredParentId provided, try it first
+    if (preferredParentId && preferredParentId !== 'PB0') {
+      const preferredParent = await this.getUserByUserId(preferredParentId);
+      if (preferredParent && preferredParent.isActivated) {
+        // Check if preferred parent has available slots
+        const leftChild = await this.getUsersByBinaryParentAndLeg(preferredParentId, 'left');
+        if (leftChild.length === 0) {
+          return { parentId: preferredParentId, leg: 'left' };
+        }
+        const rightChild = await this.getUsersByBinaryParentAndLeg(preferredParentId, 'right');
+        if (rightChild.length === 0) {
+          return { parentId: preferredParentId, leg: 'right' };
+        }
+      }
+    }
+
+    // Breadth-first search for first available slot
+    const queue: string[] = [root];
+    const visited = new Set<string>();
+
+    while (queue.length > 0) {
+      const currentParentId = queue.shift()!;
+      if (visited.has(currentParentId)) continue;
+      visited.add(currentParentId);
+
+      // Check left leg
+      const leftChildren = await this.getUsersByBinaryParentAndLeg(currentParentId, 'left');
+      if (leftChildren.length === 0) {
+        return { parentId: currentParentId, leg: 'left' };
+      } else {
+        // Add left child to queue for deeper search
+        queue.push(leftChildren[0].userId);
+      }
+
+      // Check right leg
+      const rightChildren = await this.getUsersByBinaryParentAndLeg(currentParentId, 'right');
+      if (rightChildren.length === 0) {
+        return { parentId: currentParentId, leg: 'right' };
+      } else {
+        // Add right child to queue for deeper search
+        queue.push(rightChildren[0].userId);
+      }
+    }
+
+    // No available slot found (tree is full - shouldn't happen in practice)
+    return null;
+  }
+
+  async getUsersByBinaryParentAndLeg(parentUserId: string, leg: 'left' | 'right'): Promise<User[]> {
+    // Query binary PLACEMENT tree (binaryParentId + binaryPlacementLeg)
+    // Only return ACTIVATED users - inactive users are not visible in binary tree
+    const result = await db
+      .select()
+      .from(users)
+      .where(and(
+        eq(users.binaryParentId, parentUserId),
+        eq(users.binaryPlacementLeg, leg),
+        eq(users.isActivated, true),
+        sql`${users.userId} IS NOT NULL`
+      ))
+      .orderBy(users.createdAt);
+    return result;
   }
 
   async checkProfileComplete(identifier: string): Promise<boolean> {
@@ -463,18 +552,9 @@ export class DbStorage implements IStorage {
   }
 
   async getUsersBySponsorAndLeg(sponsorUserId: string, leg: 'left' | 'right'): Promise<User[]> {
-    // Only return ACTIVATED users - inactive users are not visible in binary tree
-    const result = await db
-      .select()
-      .from(users)
-      .where(and(
-        eq(users.sponsorId, sponsorUserId),
-        eq(users.binaryLeg, leg),
-        eq(users.isActivated, true), // CRITICAL: Only show activated users in binary tree
-        sql`${users.userId} IS NOT NULL` // Ensure user has PB#### ID assigned
-      ))
-      .orderBy(users.createdAt);
-    return result;
+    // DEPRECATED: Replaced by getUsersByBinaryParentAndLeg()
+    // This method kept for backward compatibility during migration
+    return this.getUsersByBinaryParentAndLeg(sponsorUserId, leg);
   }
 
   async getDirectReferrals(sponsorUserId: string): Promise<User[]> {
@@ -1604,18 +1684,31 @@ export class DbStorage implements IStorage {
           
           console.log(`[ACTIVATION] Activating user ${activatedUser.userId}...`);
           
-          // Determine binary leg placement (tree placement happens at activation)
-          // RECOVERY-SAFE: If binary leg already assigned (partial activation), preserve it
-          let assignedBinaryLeg = activatedUser.binaryLeg; // May be pre-specified from signup OR from prior partial run
-          if (activatedUser.sponsorId && !assignedBinaryLeg) {
-            // Auto-assign to the leg with fewer members (only when not already set)
-            assignedBinaryLeg = await this.determineBestLeg(activatedUser.sponsorId);
-            console.log(`[ACTIVATION] Auto-assigned ${activatedUser.userId} to ${assignedBinaryLeg} leg under sponsor ${activatedUser.sponsorId}`);
-          } else if (hasBinaryLeg) {
-            console.log(`[ACTIVATION-RECOVERY] Binary leg already assigned: ${assignedBinaryLeg} - preserving existing assignment`);
+          // Determine binary PLACEMENT using new placement-based logic
+          // Separate from sponsorship: sponsor relationship is for income, placement is for tree structure
+          // findFirstAvailableBinarySlot() handles both empty tree (returns {null, null}) and populated tree
+          const placement = await this.findFirstAvailableBinarySlot(activatedUser.sponsorId || undefined);
+          
+          if (!placement) {
+            throw new Error(`Binary placement logic error - cannot activate ${activatedUser.userId}`);
           }
           
-          console.log(`[ACTIVATION] Binary placement: Sponsor=${activatedUser.sponsorId}, Leg=${assignedBinaryLeg}`);
+          const binaryPlacementParent = placement.parentId;
+          const binaryPlacementLeg = placement.leg;
+          
+          if (binaryPlacementParent === null && binaryPlacementLeg === null) {
+            console.log(`[ACTIVATION] ${activatedUser.userId} becomes BINARY TREE ROOT (first activated user)`);
+          } else {
+            console.log(`[ACTIVATION] Binary PLACEMENT: ${activatedUser.userId} placed in ${binaryPlacementParent}-${binaryPlacementLeg}`);
+          }
+          
+          // Keep legacy binaryLeg for audit trail (sponsorRequestedLeg also set during signup)
+          let assignedBinaryLeg = activatedUser.binaryLeg || activatedUser.sponsorRequestedLeg;
+          if (!assignedBinaryLeg && activatedUser.sponsorId) {
+            assignedBinaryLeg = await this.determineBestLeg(activatedUser.sponsorId);
+          }
+          
+          console.log(`[ACTIVATION] Sponsor=${activatedUser.sponsorId}, RequestedLeg=${assignedBinaryLeg}, ActualPlacement=${binaryPlacementParent}-${binaryPlacementLeg}`);
           
           // Update activation status to completed (with guard to prevent double-activation)
           const activationUpdateResult = await tx.update(activations)
@@ -1635,12 +1728,19 @@ export class DbStorage implements IStorage {
             return;
           }
           
-          // Activate user with binary leg assignment
+          // Activate user with binary PLACEMENT assignment
           // userId already assigned at signup, only updating binary placement and activation status
           await tx.update(users)
             .set({ 
-              // userId NOT updated (already assigned at signup via sequence)
-              binaryLeg: assignedBinaryLeg, // ASSIGN binary leg placement
+              // Legacy fields (for audit trail)
+              binaryLeg: assignedBinaryLeg,
+              sponsorRequestedLeg: assignedBinaryLeg,
+              
+              // NEW: Binary placement tree fields
+              binaryParentId: binaryPlacementParent,
+              binaryPlacementLeg: binaryPlacementLeg,
+              
+              // Activation flags
               isActivated: true,
               activatedAt: now,
               requiresPostActivationProfileUpdate: true,

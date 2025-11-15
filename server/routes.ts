@@ -219,7 +219,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: 'user',
         // userId auto-generated from sequence (PB10000+)
         sponsorId: finalSponsorId, // Auto-assign PB0 if not provided (all admin fees go to PB0)
-        binaryLeg: finalBinaryLeg, // Auto-select best leg if not provided
+        binaryLeg: finalBinaryLeg, // DEPRECATED: kept for backward compatibility
+        sponsorRequestedLeg: finalBinaryLeg, // Requested leg preference (actual placement at activation)
         isActivated: false,
         emailVerified: true, // Auto-verify email (no verification required)
         emailVerificationToken: null,

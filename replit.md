@@ -52,6 +52,16 @@ Preferred communication style: Simple, everyday language.
 - **Binary Matching**: Uses entire self team (spillover + personal recruitments) for 3:3 pair counting, with initial 1+1 qualification from personal counts.
 - **Admin Role**: PB0 exists as payment receiver and system administrator only, not as network participant.
 
+#### Binary Placement Architecture
+- **Separation of Concerns**: Sponsorship (income tracking) is completely separate from binary placement (tree structure).
+  - **Sponsorship Fields**: `sponsorId`, `sponsorRequestedLeg` - Used for income distribution and referral tracking.
+  - **Placement Fields**: `binaryParentId`, `binaryPlacementLeg` - Used for binary tree structure and spillover management.
+- **Unique Position Constraint**: Database enforces `UNIQUE(binaryParentId, binaryPlacementLeg)` to ensure each position has exactly ONE user.
+- **Breadth-First Placement**: New activations use breadth-first search to find first available slot in binary placement tree, independent of sponsorship.
+- **Spillover Handling**: Users are automatically placed in the first available position, even if it's under a different sponsor's downline.
+- **First-User Edge Case**: First activated user becomes binary tree root with `binaryParentId=NULL` and `binaryPlacementLeg=NULL`.
+- **Example**: User PB10007 (sponsored by PB10000) may be placed under PB10003's left leg if that's the first available position.
+
 ### Payment Processing
 - **8-Payment Activation System**: Each user activation requires 8 payments: Direct Sponsor (Slot 0), Binary Match (Slot 1), Creator Fee (Slot 2), Matrix Levels 1-5 (Slots 3-7).
 - **Dynamic Configuration**: Payment amounts, binary matching rules, and matching ratio are admin-configurable.

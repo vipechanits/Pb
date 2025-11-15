@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, decimal, boolean, pgEnum, integer, jsonb, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, decimal, boolean, pgEnum, integer, jsonb, unique, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -95,9 +95,15 @@ export const users = pgTable("users", {
   // Security
   securityCode: varchar("security_code", { length: 6 }),
   
-  // Referral link
-  sponsorId: varchar("sponsor_id", { length: 20 }), // PB ID of sponsor
-  binaryLeg: binaryLegEnum("binary_leg"), // Which leg (left/right) user was placed on
+  // Referral/Sponsorship (for income calculations)
+  sponsorId: varchar("sponsor_id", { length: 20 }), // PB ID of sponsor (who referred you)
+  binaryLeg: binaryLegEnum("binary_leg"), // DEPRECATED: Use sponsorRequestedLeg (kept for migration)
+  sponsorRequestedLeg: binaryLegEnum("sponsor_requested_leg"), // Original requested leg from sponsor
+  
+  // Binary Tree Placement (separate from sponsorship for true binary tree structure)
+  binaryParentId: varchar("binary_parent_id", { length: 20 }), // Actual parent in binary tree (may differ from sponsor)
+  binaryPlacementLeg: binaryLegEnum("binary_placement_leg"), // Actual leg you occupy in binary tree (left/right)
+  // Note: (binaryParentId, binaryPlacementLeg) has unique constraint - only ONE user per position
   
   // Network statistics (updated when downline members activate)
   leftLegCount: integer("left_leg_count").notNull().default(0), // Global left leg count (all downline)
@@ -136,7 +142,11 @@ export const users = pgTable("users", {
   
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (t) => ({
+  // Index on binaryParentId for fast subtree queries
+  binaryParentIdx: index("binary_parent_idx").on(t.binaryParentId),
+  // NOTE: Unique constraint on (binaryParentId, binaryPlacementLeg) will be added after data migration
+}));
 
 // Insert schema for signup
 export const insertUserSchema = createInsertSchema(users).omit({
