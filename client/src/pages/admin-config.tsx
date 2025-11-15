@@ -31,7 +31,6 @@ type SystemConfig = {
   recaptchaSiteKey: string | null;
   recaptchaSecretKey: string | null;
   recaptchaEnabled: boolean;
-  twoFactorRequired: boolean;
   updatedAt: string;
 };
 
@@ -405,7 +404,7 @@ export default function AdminConfig() {
               Security Features
             </CardTitle>
             <CardDescription>
-              Configure reCAPTCHA and Two-Factor Authentication settings
+              Configure reCAPTCHA verification for enhanced security
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -464,28 +463,6 @@ export default function AdminConfig() {
               </div>
             </div>
 
-            {/* Two-Factor Authentication Section */}
-            <div className="space-y-4 p-4 border rounded-lg">
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <Label htmlFor="twoFactorRequired" className="text-base font-medium">
-                    Require Two-Factor Authentication
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    Force all users to enable 2FA for enhanced security
-                  </p>
-                </div>
-                <Switch
-                  id="twoFactorRequired"
-                  checked={!!getValue('twoFactorRequired')}
-                  onCheckedChange={(checked) => handleChange('twoFactorRequired', checked)}
-                  data-testid="switch-2fa-required"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                When enabled, users will be required to set up 2FA using an authenticator app (Google Authenticator, Authy, etc.) after login.
-              </p>
-            </div>
           </CardContent>
         </Card>
       </div>

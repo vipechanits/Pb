@@ -11,7 +11,7 @@ import { eq, desc, sql, count, or, and } from "drizzle-orm";
 import crypto from "crypto";
 import { sendVerificationEmail, sendPasswordResetEmail, sendPasswordChangedEmail } from "./lib/email";
 import { IncomeService } from "./income-service";
-import { verifyRecaptcha, generate2FASecret, generate2FAQRCode, verify2FAToken, generateBackupCodes } from "./security-helpers";
+import { verifyRecaptcha } from "./security-helpers";
 
 // Middleware to check if user is authenticated
 function requireAuth(req: any, res: any, next: any) {
@@ -335,17 +335,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Email verification disabled - users can login immediately
       
-      // Check if 2FA is enabled for this user
-      if (user.twoFactorEnabled && user.twoFactorSecret) {
-        // Don't set full session yet - just mark as pending 2FA
-        // Frontend will need to handle 2FA verification step
-        return res.json({ 
-          requires2FA: true, 
-          userId: user.id,
-          email: user.email 
-        });
-      }
-      
       // Set session and save it before responding
       req.session.userId = user.id;
       req.session.isAdmin = user.role === 'admin';
@@ -374,134 +363,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  // ====================================
-  // Two-Factor Authentication (2FA) Routes
-  // ====================================
-
-  // Setup 2FA - Generate QR code and secret
-  app.post("/api/2fa/setup", requireAuth, async (req, res) => {
-    try {
-      const userId = req.session.userId;
-      if (!userId) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-
-      const user = await storage.getUserById(userId);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
-
-      // Generate new TOTP secret
-      const secret = generate2FASecret();
-      const qrCode = await generate2FAQRCode(user.email, secret);
-
-      // Don't save the secret yet - only save when user confirms with a valid token
-      res.json({ secret, qrCode });
-    } catch (error) {
-      console.error("[2FA] Setup error:", error);
-      res.status(500).json({ error: "Failed to setup 2FA" });
-    }
-  });
-
-  // Enable 2FA - Verify token and activate
-  app.post("/api/2fa/enable", requireAuth, async (req, res) => {
-    try {
-      const { token, secret } = req.body;
-      
-      if (!token || token.length !== 6) {
-        return res.status(400).json({ error: "Valid 6-digit token is required" });
-      }
-
-      if (!secret) {
-        return res.status(400).json({ error: "2FA secret is required. Please complete the setup process first." });
-      }
-
-      const userId = req.session.userId;
-      if (!userId) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-
-      const user = await storage.getUserById(userId);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
-
-      if (user.twoFactorEnabled) {
-        return res.status(400).json({ error: "2FA is already enabled for this account" });
-      }
-
-      // Verify the token against the secret
-      const isValid = verify2FAToken(token, secret);
-      if (!isValid) {
-        return res.status(401).json({ error: "Invalid token. Please check your authenticator app and try again." });
-      }
-
-      // Generate backup codes
-      const backupCodes = generateBackupCodes();
-
-      // Save secret and enable 2FA
-      await db.update(users)
-        .set({
-          twoFactorSecret: secret,
-          twoFactorEnabled: true,
-          twoFactorBackupCodes: JSON.stringify(backupCodes),
-        })
-        .where(eq(users.id, user.id));
-
-      console.log(`[2FA] Enabled for user ${user.userId} (${user.email})`);
-      res.json({ success: true, backupCodes });
-    } catch (error) {
-      console.error("[2FA] Enable error:", error);
-      res.status(500).json({ error: "Failed to enable 2FA" });
-    }
-  });
-
-  // Disable 2FA - Verify token and deactivate
-  app.post("/api/2fa/disable", requireAuth, async (req, res) => {
-    try {
-      const { token } = req.body;
-      
-      if (!token || token.length !== 6) {
-        return res.status(400).json({ error: "Valid 6-digit token is required" });
-      }
-
-      const userId = req.session.userId;
-      if (!userId) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-
-      const user = await storage.getUserById(userId);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
-
-      if (!user.twoFactorEnabled || !user.twoFactorSecret) {
-        return res.status(400).json({ error: "2FA is not enabled for this account" });
-      }
-
-      // Verify the token
-      const isValid = verify2FAToken(token, user.twoFactorSecret);
-      if (!isValid) {
-        return res.status(401).json({ error: "Invalid token. Please check your authenticator app and try again." });
-      }
-
-      // Disable 2FA
-      await db.update(users)
-        .set({
-          twoFactorSecret: null,
-          twoFactorEnabled: false,
-          twoFactorBackupCodes: null,
-        })
-        .where(eq(users.id, user.id));
-
-      console.log(`[2FA] Disabled for user ${user.userId} (${user.email})`);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("[2FA] Disable error:", error);
-      res.status(500).json({ error: "Failed to disable 2FA" });
-    }
-  });
-  
   // Email Verification
   app.get("/api/auth/verify-email/:token", async (req, res) => {
     try {

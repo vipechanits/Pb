@@ -95,11 +95,6 @@ export const users = pgTable("users", {
   // Security
   securityCode: varchar("security_code", { length: 6 }),
   
-  // Two-Factor Authentication (2FA)
-  twoFactorSecret: text("two_factor_secret"), // TOTP secret for authenticator app
-  twoFactorEnabled: boolean("two_factor_enabled").notNull().default(false),
-  twoFactorBackupCodes: jsonb("two_factor_backup_codes"), // Array of backup recovery codes
-  
   // Referral/Sponsorship (for income calculations)
   sponsorId: varchar("sponsor_id", { length: 20 }), // PB ID of sponsor (who referred you)
   binaryLeg: binaryLegEnum("binary_leg"), // DEPRECATED: Use sponsorRequestedLeg (kept for migration)
@@ -310,7 +305,6 @@ export const systemConfig = pgTable("system_config", {
   recaptchaSiteKey: text("recaptcha_site_key"), // Google reCAPTCHA v2 site key
   recaptchaSecretKey: text("recaptcha_secret_key"), // Google reCAPTCHA v2 secret key
   recaptchaEnabled: boolean("recaptcha_enabled").notNull().default(false),
-  twoFactorRequired: boolean("two_factor_required").notNull().default(false), // Require all users to enable 2FA
   
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
