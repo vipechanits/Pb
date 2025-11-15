@@ -32,7 +32,6 @@ import {
   Trophy,
   TrendingUp,
   UserPlus,
-  Archive,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth-context';
@@ -73,11 +72,6 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       title: 'Activation',
       url: '/user/activation',
       icon: Wallet,
-    },
-    {
-      title: 'Payment Archive',
-      url: '/user/payment-archive',
-      icon: Archive,
     },
     {
       title: 'Confirmations',

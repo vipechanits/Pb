@@ -1193,12 +1193,12 @@ export class DbStorage implements IStorage {
   })[]> {
     const payments = await db.select().from(activationPayments).where(eq(activationPayments.payerUserId, payerUserId));
     
-    // Get unique receiver user IDs
-    const receiverUserIds = Array.from(new Set(payments.map(p => p.receiverUserId).filter(Boolean)));
+    // Get unique receiver user IDs (filter out null/undefined)
+    const receiverUserIds = Array.from(new Set(payments.map(p => p.receiverUserId).filter((id): id is string => id !== null && id !== undefined)));
     
     // Fetch receiver details if there are any
     const receivers = receiverUserIds.length > 0
-      ? await db.select().from(users).where(sql`${users.userId} = ANY(${receiverUserIds})`)
+      ? await db.select().from(users).where(inArray(users.userId, receiverUserIds))
       : [];
     
     const receiverMap = new Map(receivers.map(u => [u.userId, u]));
@@ -1266,9 +1266,9 @@ export class DbStorage implements IStorage {
     }
 
     // Get all receiver user IDs to enrich payment data
-    const receiverUserIds = Array.from(new Set(userPayments.map(p => p.receiverUserId).filter(Boolean)));
+    const receiverUserIds = Array.from(new Set(userPayments.map(p => p.receiverUserId).filter((id): id is string => id !== null && id !== undefined)));
     const receivers = receiverUserIds.length > 0
-      ? await db.select().from(users).where(sql`${users.userId} = ANY(${receiverUserIds})`)
+      ? await db.select().from(users).where(inArray(users.userId, receiverUserIds))
       : [];
     const receiverMap = new Map(receivers.map(u => [u.userId, u]));
 
@@ -1294,7 +1294,7 @@ export class DbStorage implements IStorage {
       const activationIds = Array.from(paymentsByActivation.keys());
       const allActivations = await db.select()
         .from(activations)
-        .where(sql`${activations.id} = ANY(${activationIds})`);
+        .where(inArray(activations.id, activationIds));
       
       // Find earliest activation
       let firstActivation = allActivations[0];

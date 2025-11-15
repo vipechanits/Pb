@@ -19,7 +19,6 @@ import VerifyEmailPage from '@/pages/auth/verify-email';
 import UserDashboard from '@/pages/user-dashboard';
 import Profile from '@/pages/profile';
 import UserActivationPage from '@/pages/user-activation';
-import PaymentArchivePage from '@/pages/payment-archive';
 import UserConfirmationPage from '@/pages/user-confirmation';
 import UserBinaryTreePage from '@/pages/user-binary-tree';
 import UserGlobalMatrixPage from '@/pages/user-global-matrix';
@@ -138,16 +137,6 @@ function Router() {
           <ProtectedRoute>
             <DashboardLayout>
               <UserActivationPage />
-            </DashboardLayout>
-          </ProtectedRoute>
-        )}
-      </Route>
-      
-      <Route path="/user/payment-archive">
-        {() => (
-          <ProtectedRoute>
-            <DashboardLayout>
-              <PaymentArchivePage />
             </DashboardLayout>
           </ProtectedRoute>
         )}
