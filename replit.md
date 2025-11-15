@@ -4,6 +4,14 @@
 PAYBACK247 is a peer-to-peer income platform for network marketing, featuring binary pairing income, multi-level matrix rewards, and a manual payment tracking system with administrator approval. It allows users to activate accounts, build referral networks, monitor earnings, and manage profiles. Administrators can manage system configurations, approve payments, and access analytics for efficient operation and financial transparency.
 
 ## Recent Changes
+- **Security Enhancements - reCAPTCHA & 2FA System Implemented (November 15, 2025)**:
+  - **reCAPTCHA Integration**: Google reCAPTCHA v2 verification added to login and signup pages, with admin-configurable toggle and API keys in System Configuration
+  - **Two-Factor Authentication (2FA)**: Complete TOTP-based 2FA system with QR code setup, authenticator app verification, and backup codes for account recovery
+  - **Backend Security Routes**: Three new API endpoints (`/api/2fa/setup`, `/api/2fa/enable`, `/api/2fa/disable`) for 2FA management
+  - **Database Schema Updates**: Added `twoFactorSecret`, `twoFactorEnabled`, and `twoFactorBackupCodes` fields to users table
+  - **Security Helpers Module**: Created `server/security-helpers.ts` with functions for reCAPTCHA verification, TOTP generation/validation, and backup code generation
+  - **Login Flow Enhancement**: Login route now checks for 2FA and returns `requires2FA: true` for users with 2FA enabled
+  - **Profile Security Tab**: Users can enable/disable 2FA, scan QR codes with authenticator apps, and download backup codes
 - **Payment Archive Tab Disabled**: Payment archive tab removed from activation page. Users now see only their current activation payments in a clean, simplified interface
 - **Backend SQL Query Fix**: Fixed critical database error in payment retrieval by replacing PostgreSQL `ANY` operator with Drizzle ORM's `inArray()` method in 3 backend storage queries
 - **Enhanced Payment Details with Bank Information**: Payment details now display receiver's UPI ID, bank account number, IFSC code, and account holder name for both admin (PB0) and user receivers, making payment submission easier

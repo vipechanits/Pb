@@ -6,7 +6,7 @@ import { apiRequest, resetCsrfToken } from './queryClient';
 interface AuthContextType {
   user: Omit<User, 'password'> | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<Omit<User, 'password'>>;
+  login: (email: string, password: string, recaptchaToken?: string) => Promise<Omit<User, 'password'>>;
   logout: () => Promise<void>;
   signup: (email: string, password: string, sponsorId?: string, binaryLeg?: string) => Promise<Omit<User, 'password'>>;
   refreshUser: () => Promise<void>;
@@ -40,8 +40,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     fetchCurrentUser();
   }, []);
 
-  const login = async (email: string, password: string) => {
-    const response = await apiRequest('POST', '/api/auth/login', { email, password });
+  const login = async (email: string, password: string, recaptchaToken?: string) => {
+    const response = await apiRequest('POST', '/api/auth/login', { email, password, recaptchaToken });
     const data = await response.json();
     setUser(data.user);
     toast({

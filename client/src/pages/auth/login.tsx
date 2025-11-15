@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
+import { useRecaptcha } from '@/hooks/use-recaptcha';
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
@@ -15,6 +16,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const recaptchaRef = useRef<HTMLDivElement>(null);
+  const { isLoaded, isEnabled, renderRecaptcha, executeRecaptcha } = useRecaptcha();
+
+  // Render reCAPTCHA when loaded
+  useEffect(() => {
+    if (isLoaded && isEnabled && recaptchaRef.current) {
+      renderRecaptcha(recaptchaRef.current);
+    }
+  }, [isLoaded, isEnabled, renderRecaptcha]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,7 +32,19 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const user = await login(email, password);
+      // Get reCAPTCHA token if enabled
+      let recaptchaToken = '';
+      if (isEnabled) {
+        try {
+          recaptchaToken = await executeRecaptcha();
+        } catch (err: any) {
+          setError(err.message || 'Please complete the reCAPTCHA verification');
+          setLoading(false);
+          return;
+        }
+      }
+
+      const user = await login(email, password, recaptchaToken);
       // Redirect based on role returned from login
       if (user.role === 'admin') {
         setLocation('/admin/dashboard');
@@ -31,6 +53,10 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       setError(err.message || 'Failed to log in');
+      // Reset reCAPTCHA on error
+      if (isEnabled && window.grecaptcha) {
+        window.grecaptcha.reset();
+      }
     } finally {
       setLoading(false);
     }
@@ -81,6 +107,13 @@ export default function LoginPage() {
                 data-testid="input-password"
               />
             </div>
+
+            {/* reCAPTCHA Widget */}
+            {isEnabled && (
+              <div className="flex justify-center">
+                <div ref={recaptchaRef} className="g-recaptcha" data-testid="recaptcha-widget"></div>
+              </div>
+            )}
 
             <Button type="submit" className="w-full" disabled={loading} data-testid="button-login">
               {loading ? 'Logging in...' : 'Log In'}

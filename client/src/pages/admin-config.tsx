@@ -4,9 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { Settings, Save, Loader2, Upload, X } from 'lucide-react';
+import { Settings, Save, Loader2, Upload, X, Shield } from 'lucide-react';
 
 type SystemConfig = {
   id: string;
@@ -27,6 +28,10 @@ type SystemConfig = {
   adminIfscCode: string | null;
   adminMobile: string | null;
   adminQrCodeUrl: string | null;
+  recaptchaSiteKey: string | null;
+  recaptchaSecretKey: string | null;
+  recaptchaEnabled: boolean;
+  twoFactorRequired: boolean;
   updatedAt: string;
 };
 
@@ -73,7 +78,7 @@ export default function AdminConfig() {
     return value === null ? '' : value || '';
   };
 
-  const handleChange = (key: keyof SystemConfig, value: string | number) => {
+  const handleChange = (key: keyof SystemConfig, value: string | number | boolean) => {
     setFormData(prev => ({ ...prev, [key]: value }));
   };
 
@@ -151,7 +156,7 @@ export default function AdminConfig() {
           System Configuration
         </h1>
         <p className="text-muted-foreground">
-          Configure payment amounts, binary matching rules, and admin payment details
+          Configure payment amounts, binary matching rules, admin payment details, and security features
         </p>
       </div>
 
@@ -388,6 +393,98 @@ export default function AdminConfig() {
                   </div>
                 </div>
               )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Security Features */}
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              Security Features
+            </CardTitle>
+            <CardDescription>
+              Configure reCAPTCHA and Two-Factor Authentication settings
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* reCAPTCHA Section */}
+            <div className="space-y-4 p-4 border rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label htmlFor="recaptchaEnabled" className="text-base font-medium">
+                    Enable reCAPTCHA
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Require CAPTCHA verification on signup and login pages
+                  </p>
+                </div>
+                <Switch
+                  id="recaptchaEnabled"
+                  checked={!!getValue('recaptchaEnabled')}
+                  onCheckedChange={(checked) => handleChange('recaptchaEnabled', checked)}
+                  data-testid="switch-recaptcha-enabled"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div className="space-y-2">
+                  <Label htmlFor="recaptchaSiteKey">
+                    reCAPTCHA Site Key
+                    <span className="text-xs text-muted-foreground ml-1">(v2)</span>
+                  </Label>
+                  <Input
+                    id="recaptchaSiteKey"
+                    type="text"
+                    placeholder="6Lc..."
+                    value={getValue('recaptchaSiteKey')}
+                    onChange={(e) => handleChange('recaptchaSiteKey', e.target.value)}
+                    data-testid="input-recaptcha-site-key"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Get keys from <a href="https://www.google.com/recaptcha/admin" target="_blank" rel="noopener noreferrer" className="underline">Google reCAPTCHA</a>
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="recaptchaSecretKey">
+                    reCAPTCHA Secret Key
+                    <span className="text-xs text-muted-foreground ml-1">(v2)</span>
+                  </Label>
+                  <Input
+                    id="recaptchaSecretKey"
+                    type="password"
+                    placeholder="6Lc..."
+                    value={getValue('recaptchaSecretKey')}
+                    onChange={(e) => handleChange('recaptchaSecretKey', e.target.value)}
+                    data-testid="input-recaptcha-secret-key"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Two-Factor Authentication Section */}
+            <div className="space-y-4 p-4 border rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label htmlFor="twoFactorRequired" className="text-base font-medium">
+                    Require Two-Factor Authentication
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Force all users to enable 2FA for enhanced security
+                  </p>
+                </div>
+                <Switch
+                  id="twoFactorRequired"
+                  checked={!!getValue('twoFactorRequired')}
+                  onCheckedChange={(checked) => handleChange('twoFactorRequired', checked)}
+                  data-testid="switch-2fa-required"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                When enabled, users will be required to set up 2FA using an authenticator app (Google Authenticator, Authy, etc.) after login.
+              </p>
             </div>
           </CardContent>
         </Card>

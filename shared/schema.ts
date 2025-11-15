@@ -95,6 +95,11 @@ export const users = pgTable("users", {
   // Security
   securityCode: varchar("security_code", { length: 6 }),
   
+  // Two-Factor Authentication (2FA)
+  twoFactorSecret: text("two_factor_secret"), // TOTP secret for authenticator app
+  twoFactorEnabled: boolean("two_factor_enabled").notNull().default(false),
+  twoFactorBackupCodes: jsonb("two_factor_backup_codes"), // Array of backup recovery codes
+  
   // Referral/Sponsorship (for income calculations)
   sponsorId: varchar("sponsor_id", { length: 20 }), // PB ID of sponsor (who referred you)
   binaryLeg: binaryLegEnum("binary_leg"), // DEPRECATED: Use sponsorRequestedLeg (kept for migration)
@@ -300,6 +305,12 @@ export const systemConfig = pgTable("system_config", {
   adminIfscCode: text("admin_ifsc_code"),
   adminMobile: text("admin_mobile"),
   adminQrCodeUrl: text("admin_qr_code_url"),
+  
+  // Security features
+  recaptchaSiteKey: text("recaptcha_site_key"), // Google reCAPTCHA v2 site key
+  recaptchaSecretKey: text("recaptcha_secret_key"), // Google reCAPTCHA v2 secret key
+  recaptchaEnabled: boolean("recaptcha_enabled").notNull().default(false),
+  twoFactorRequired: boolean("two_factor_required").notNull().default(false), // Require all users to enable 2FA
   
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -683,3 +694,25 @@ export const insertBinaryMatchQueueSchema = createInsertSchema(binaryMatchQueue)
 
 export type InsertBinaryMatchQueue = z.infer<typeof insertBinaryMatchQueueSchema>;
 export type BinaryMatchQueue = typeof binaryMatchQueue.$inferSelect;
+
+// Two-Factor Authentication (2FA) schemas
+export const setup2FASchema = z.object({
+  token: z.string().length(6, "Token must be 6 digits").regex(/^\d{6}$/, "Token must contain only digits"),
+});
+
+export const verify2FASchema = z.object({
+  token: z.string().length(6, "Token must be 6 digits").regex(/^\d{6}$/, "Token must contain only digits"),
+});
+
+export const disable2FASchema = z.object({
+  token: z.string().length(6, "Token must be 6 digits").regex(/^\d{6}$/, "Token must contain only digits"),
+});
+
+export const verifyRecaptchaSchema = z.object({
+  recaptchaToken: z.string().min(1, "reCAPTCHA verification is required"),
+});
+
+export type Setup2FA = z.infer<typeof setup2FASchema>;
+export type Verify2FA = z.infer<typeof verify2FASchema>;
+export type Disable2FA = z.infer<typeof disable2FASchema>;
+export type VerifyRecaptcha = z.infer<typeof verifyRecaptchaSchema>;

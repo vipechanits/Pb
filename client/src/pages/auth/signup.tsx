@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Mail } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
+import { useRecaptcha } from '@/hooks/use-recaptcha';
 
 export default function SignupPage() {
   const [, setLocation] = useLocation();
@@ -18,6 +19,15 @@ export default function SignupPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
+  const recaptchaRef = useRef<HTMLDivElement>(null);
+  const { isLoaded, isEnabled, renderRecaptcha, executeRecaptcha } = useRecaptcha();
+
+  // Render reCAPTCHA when loaded
+  useEffect(() => {
+    if (isLoaded && isEnabled && recaptchaRef.current) {
+      renderRecaptcha(recaptchaRef.current);
+    }
+  }, [isLoaded, isEnabled, renderRecaptcha]);
 
   // Read URL parameters for referral
   useEffect(() => {
@@ -49,17 +59,34 @@ export default function SignupPage() {
 
     setLoading(true);
     try {
+      // Get reCAPTCHA token if enabled
+      let recaptchaToken = '';
+      if (isEnabled) {
+        try {
+          recaptchaToken = await executeRecaptcha();
+        } catch (err: any) {
+          setError(err.message || 'Please complete the reCAPTCHA verification');
+          setLoading(false);
+          return;
+        }
+      }
+
       const result = await apiRequest('POST', '/api/auth/signup', {
         email,
         password,
         sponsorId: sponsorId || undefined,
-        binaryLeg: binaryLeg || undefined
+        binaryLeg: binaryLeg || undefined,
+        recaptchaToken: recaptchaToken || undefined
       });
       
       // Show success message
       setSignupSuccess(true);
     } catch (err: any) {
       setError(err.message || 'Failed to create account');
+      // Reset reCAPTCHA on error
+      if (isEnabled && window.grecaptcha) {
+        window.grecaptcha.reset();
+      }
     } finally {
       setLoading(false);
     }
@@ -180,6 +207,13 @@ export default function SignupPage() {
                 </p>
               )}
             </div>
+
+            {/* reCAPTCHA Widget */}
+            {isEnabled && (
+              <div className="flex justify-center">
+                <div ref={recaptchaRef} className="g-recaptcha" data-testid="recaptcha-widget"></div>
+              </div>
+            )}
 
             <Button type="submit" className="w-full" disabled={loading} data-testid="button-signup">
               {loading ? 'Creating account...' : 'Sign Up'}
