@@ -282,8 +282,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/login", 
     applyRateLimit({
       keyFn: (req) => getClientIp(req),
-      limit: 100,
-      windowMs: 15 * 60 * 1000, // 100 attempts per 15 minutes per IP
+      limit: 600,
+      windowMs: 15 * 60 * 1000, // 600 attempts per 15 minutes per IP
       name: 'Login'
     }),
     async (req, res) => {
