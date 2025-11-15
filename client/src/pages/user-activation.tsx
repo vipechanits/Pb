@@ -97,10 +97,13 @@ export default function UserActivationPage() {
     return labels[slotIndex] || `Payment ${slotIndex + 1}`;
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, slotIndex?: number) => {
     switch (status) {
       case 'confirmed':
-        return <Badge variant="default" className="bg-green-600">Confirmed</Badge>;
+        // Phase 1 (first 3 payments: slots 0-2) use YELLOW badge
+        // Phase 2 (matrix payments: slots 3-7) use GREEN badge
+        const isPhase1 = slotIndex !== undefined && slotIndex < 3;
+        return <Badge variant="default" className={isPhase1 ? "bg-yellow-500" : "bg-green-600"}>Confirmed</Badge>;
       case 'submitted':
         return <Badge variant="secondary">Pending Review</Badge>;
       case 'rejected':
@@ -509,7 +512,7 @@ export default function UserActivationPage() {
                       <div className="flex items-center gap-3">
                         <div className="text-right">
                           <p className="font-bold">₹{payment.amountInr}</p>
-                          {getStatusBadge(payment.status)}
+                          {getStatusBadge(payment.status, payment.slotIndex)}
                           {payment.submissionCount > 0 && (
                             <p className="text-xs text-muted-foreground mt-1">
                               Attempts: {payment.submissionCount}
@@ -573,7 +576,7 @@ export default function UserActivationPage() {
                       <div className="flex items-center gap-3">
                         <div className="text-right">
                           <p className="font-bold">₹{payment.amountInr}</p>
-                          {getStatusBadge(payment.status)}
+                          {getStatusBadge(payment.status, payment.slotIndex)}
                           {payment.submissionCount > 0 && (
                             <p className="text-xs text-muted-foreground mt-1">
                               Attempts: {payment.submissionCount}
