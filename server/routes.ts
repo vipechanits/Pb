@@ -1037,11 +1037,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           FROM users
           WHERE is_activated = true
             AND matrix_level IS NOT NULL
+        ),
+        max_level AS (
+          SELECT MAX(matrix_level) as max_level
+          FROM users
+          WHERE matrix_level IS NOT NULL
+            AND matrix_path IS NOT NULL
+            AND is_activated = true
         )
         SELECT 
           json_build_object(
-            'totalCapacity', (2 + 4 + 8 + 16 + 32),
             'totalFilled', (SELECT count FROM total_activated),
+            'maxLevel', (SELECT max_level FROM max_level),
             'levelBreakdown', (
               SELECT json_agg(
                 json_build_object('level', level, 'filled', count)
@@ -1054,29 +1061,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const result = stats.rows[0] as { stats: any };
       const matrixStats = result.stats || {
-        totalCapacity: 62,
         totalFilled: 0,
+        maxLevel: 0,
         levelBreakdown: []
       };
 
-      const levelCapacities = [2, 4, 8, 16, 32];
-      const levelBreakdown = levelCapacities.map((capacity, index) => {
-        const level = index + 1;
+      // Calculate level breakdown dynamically for all active levels
+      const maxLevel = matrixStats.maxLevel || 0;
+      const levelBreakdown = [];
+      
+      for (let level = 1; level <= Math.max(maxLevel, 1); level++) {
+        const capacity = Math.pow(2, level); // 2^level positions at each level
         const existing = matrixStats.levelBreakdown?.find((l: any) => l.level === level);
-        return {
+        const filled = existing?.filled || 0;
+        
+        levelBreakdown.push({
           level,
           capacity,
-          filled: existing?.filled || 0,
-          available: capacity - (existing?.filled || 0)
-        };
-      });
+          filled,
+          available: capacity - filled
+        });
+      }
 
       res.json({
-        totalCapacity: matrixStats.totalCapacity,
         totalFilled: matrixStats.totalFilled || 0,
-        percentageFilled: matrixStats.totalFilled 
-          ? Math.round((matrixStats.totalFilled / matrixStats.totalCapacity) * 100) 
-          : 0,
+        maxLevel: maxLevel,
+        totalLevels: levelBreakdown.length,
         levelBreakdown
       });
     } catch (error) {

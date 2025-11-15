@@ -19,9 +19,9 @@ interface MatrixNode {
 }
 
 interface MatrixStats {
-  totalCapacity: number;
   totalFilled: number;
-  percentageFilled: number;
+  maxLevel: number;
+  totalLevels: number;
   levelBreakdown: Array<{
     level: number;
     capacity: number;
@@ -111,24 +111,14 @@ function MatrixFillingStatus() {
           <Layers className="w-5 h-5 text-purple-600 dark:text-purple-400" />
           <CardTitle>Global Matrix Filling Status</CardTitle>
         </div>
-        <CardDescription>Real-time overview of the 2×5 global matrix capacity</CardDescription>
+        <CardDescription>Real-time overview of unlimited global matrix growth</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Users className="w-4 h-4" />
-              <span>Total Capacity</span>
-            </div>
-            <div className="text-2xl font-bold" data-testid="stat-total-capacity">
-              {stats.totalCapacity}
-            </div>
-          </div>
-          
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <CheckCircle className="w-4 h-4" />
-              <span>Filled Positions</span>
+              <span>Total Members</span>
             </div>
             <div className="text-2xl font-bold text-purple-600 dark:text-purple-400" data-testid="stat-filled">
               {stats.totalFilled}
@@ -137,26 +127,35 @@ function MatrixFillingStatus() {
           
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <TrendingUp className="w-4 h-4" />
-              <span>Fill Percentage</span>
+              <Layers className="w-4 h-4" />
+              <span>Active Levels</span>
             </div>
-            <div className="text-2xl font-bold text-pink-600 dark:text-pink-400" data-testid="stat-percentage">
-              {stats.percentageFilled}%
+            <div className="text-2xl font-bold text-pink-600 dark:text-pink-400" data-testid="stat-levels">
+              {stats.totalLevels}
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <TrendingUp className="w-4 h-4" />
+              <span>Max Level Reached</span>
+            </div>
+            <div className="text-2xl font-bold" data-testid="stat-max-level">
+              Level {stats.maxLevel || 1}
             </div>
           </div>
         </div>
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Overall Progress</span>
-            <span className="font-medium">{stats.totalFilled} / {stats.totalCapacity}</span>
-          </div>
-          <Progress value={stats.percentageFilled} className="h-2" data-testid="progress-bar" />
-        </div>
+        <Alert className="bg-purple-50/50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800">
+          <AlertCircle className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+          <AlertDescription className="text-sm">
+            <strong>Unlimited Growth:</strong> The matrix has no level cap and grows infinitely. Each user earns from their 5-level downline (up to 62 members), regardless of their position in the matrix.
+          </AlertDescription>
+        </Alert>
 
         <div className="space-y-3 pt-2">
           <h4 className="text-sm font-semibold">Level-wise Breakdown</h4>
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-[400px] overflow-y-auto">
             {stats.levelBreakdown.map((level) => (
               <div key={level.level} className="flex items-center gap-3">
                 <Badge variant="outline" className="min-w-16 justify-center">
@@ -307,8 +306,8 @@ export default function UserGlobalMatrixPage() {
       <Alert>
         <Network className="h-4 w-4" />
         <AlertDescription>
-          <strong>Global Matrix System:</strong> All activated users are placed in a global 2x5 matrix (2 positions per level, 5 levels deep).
-          Placement is automatic and follows breadth-first order, independent of your binary sponsorship tree.
+          <strong>Global Matrix System:</strong> All activated users are placed in an unlimited global 2×∞ matrix (2 positions per level, infinite levels).
+          Placement is automatic and follows breadth-first order, independent of your binary sponsorship tree. You earn from your 5-level downline (62 members max) regardless of matrix depth.
         </AlertDescription>
       </Alert>
 
