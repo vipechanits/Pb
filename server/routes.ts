@@ -2424,6 +2424,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // END TEMPORARY TESTING UTILITY
   // ============================================================================
 
+  // ADMIN: Change admin password
+  app.post("/api/admin/change-password", requireAdmin, async (req: any, res: any) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      
+      // Validation
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ error: "Current password and new password are required" });
+      }
+      
+      if (newPassword.length < 8) {
+        return res.status(400).json({ error: "New password must be at least 8 characters long" });
+      }
+      
+      // Get current admin user
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Verify user is actually admin
+      if (user.role !== 'admin') {
+        return res.status(403).json({ error: "Only administrators can use this endpoint" });
+      }
+      
+      // Verify current password
+      const isValidPassword = await verifyPassword(currentPassword, user.password);
+      if (!isValidPassword) {
+        console.warn(`[ADMIN] Invalid current password attempt for ${user.userId}`);
+        return res.status(401).json({ error: "Current password is incorrect" });
+      }
+      
+      // Hash new password
+      const hashedPassword = await hashPassword(newPassword);
+      
+      // Update password
+      await storage.updateUserPassword(user.userId!, hashedPassword);
+      
+      // Invalidate all other sessions for security
+      await invalidateOtherSessions(user.id.toString(), req.session.id);
+      
+      console.log(`[ADMIN] Password changed successfully for ${user.userId}`);
+      
+      res.json({ 
+        success: true, 
+        message: "Admin password updated successfully" 
+      });
+    } catch (error: any) {
+      console.error("[ADMIN] Password change failed:", error);
+      res.status(500).json({ 
+        error: "Failed to change password", 
+        details: error.message 
+      });
+    }
+  });
+
   // ADMIN: Manual activation completion for broken activations
   // Use case: When activation has all 8 payments confirmed but completion failed
   app.post("/api/admin/activation/manual-complete", requireAdmin, async (req: any, res: any) => {
