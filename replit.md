@@ -4,7 +4,8 @@
 PAYBACK247 is a peer-to-peer income platform for network marketing, featuring binary pairing income, multi-level matrix rewards, and a manual payment tracking system with administrator approval. It allows users to activate accounts, build referral networks, monitor earnings, and manage profiles. Administrators can manage system configurations, approve payments, and access analytics for efficient operation and financial transparency.
 
 ## Recent Changes
-- **Payment Archive Integrated in Activation Page**: Standalone payment archive page removed. Activation page now features tabbed interface with "Current Activation" and "Payment Archive" tabs, consolidating all payment viewing in one location
+- **Payment Archive Tab Disabled**: Payment archive tab removed from activation page. Users now see only their current activation payments in a clean, simplified interface
+- **Backend SQL Query Fix**: Fixed critical database error in payment retrieval by replacing PostgreSQL `ANY` operator with Drizzle ORM's `inArray()` method in 3 backend storage queries
 - **Enhanced Payment Details with Bank Information**: Payment details now display receiver's UPI ID, bank account number, IFSC code, and account holder name for both admin (PB0) and user receivers, making payment submission easier
 - **Expandable Payment Details**: Users can expand each payment card to see comprehensive details including receiver banking information, UTR/Transaction ID, submission count, payment timeline (created, confirmed, rejected dates), rejection reasons, admin notes, and payment proof links
 - **Enhanced Confirmed Payments Report**: Comprehensive payment details with advanced filtering (search, slot type, receiver type), slot breakdown statistics, and full payer/receiver information including email, mobile, UPI ID
