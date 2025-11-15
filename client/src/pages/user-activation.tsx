@@ -4,7 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, Circle, Clock, Info, AlertCircle, RefreshCw, Copy, CheckCircle2, UserCheck, ArrowLeft, ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CheckCircle, Circle, Clock, Info, AlertCircle, RefreshCw, Copy, CheckCircle2, UserCheck, ArrowLeft, ArrowRight, ChevronDown, ChevronUp, History, FileText } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { PaymentSubmissionDialog } from '@/components/payment-submission-dialog';
@@ -23,6 +24,24 @@ interface AdminPaymentDetails {
   paymentQrUrl: string | null;
 }
 
+interface EnrichedPayment extends ActivationPayment {
+  receiverName?: string | null;
+  receiverEmail?: string | null;
+  receiverMobile?: string | null;
+  receiverUpiId?: string | null;
+}
+
+interface CycleData {
+  cycleNumber: number;
+  activationId: string;
+  status: 'pending' | 'active' | 'completed';
+  payments: EnrichedPayment[];
+  confirmedCount: number;
+  totalAmount: number;
+  confirmedAmount: number;
+  createdAt?: Date | string;
+}
+
 export default function UserActivationPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -31,6 +50,8 @@ export default function UserActivationPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [expandedPayments, setExpandedPayments] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState('current');
+  const [expandedArchivePayments, setExpandedArchivePayments] = useState<Set<string>>(new Set());
 
   // Fetch user's activation payments
   // Use userId (PB####) if available, otherwise use database UUID for pre-activation users
@@ -50,6 +71,12 @@ export default function UserActivationPage() {
   const { data: sponsorData } = useQuery<{ userId: string; name: string | null }>({
     queryKey: ['/api/users', user?.sponsorId, 'public'],
     enabled: !!user?.sponsorId,
+  });
+
+  // Fetch payment archive data for the archive tab
+  const { data: archiveCycles, isLoading: archiveLoading } = useQuery<CycleData[]>({
+    queryKey: ['/api/activation-payments/archive', user?.userId],
+    enabled: !!user?.userId && activeTab === 'archive',
   });
 
   const copyToClipboard = (text: string, fieldName: string) => {
@@ -162,6 +189,18 @@ export default function UserActivationPage() {
     });
   };
 
+  const toggleArchivePaymentDetails = (paymentId: string) => {
+    setExpandedArchivePayments(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(paymentId)) {
+        newSet.delete(paymentId);
+      } else {
+        newSet.add(paymentId);
+      }
+      return newSet;
+    });
+  };
+
   const formatDate = (date: Date | string | null | undefined) => {
     if (!date) return 'N/A';
     const dateObj = typeof date === 'string' ? new Date(date) : date;
@@ -256,14 +295,27 @@ export default function UserActivationPage() {
         </Button>
       </div>
 
-      <Alert>
-        <Info className="h-4 w-4" />
-        <AlertDescription>
-          <strong>Activation Fee: ₹{totalAmount.toLocaleString()}</strong>
-          <br />
-          Complete 8 payments to designated members below. Payment amounts vary by slot type. All payments are direct peer-to-peer transfers using Google Pay, Paytm, or PhonePe.
-        </AlertDescription>
-      </Alert>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="current" data-testid="tab-current-activation">
+            <FileText className="w-4 h-4 mr-2" />
+            Current Activation
+          </TabsTrigger>
+          <TabsTrigger value="archive" data-testid="tab-payment-archive">
+            <History className="w-4 h-4 mr-2" />
+            Payment Archive
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="current" className="space-y-6 mt-0">
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Activation Fee: ₹{totalAmount.toLocaleString()}</strong>
+              <br />
+              Complete 8 payments to designated members below. Payment amounts vary by slot type. All payments are direct peer-to-peer transfers using Google Pay, Paytm, or PhonePe.
+            </AlertDescription>
+          </Alert>
 
       {/* Sponsor Information */}
       {user?.sponsorId && (
@@ -870,6 +922,219 @@ export default function UserActivationPage() {
           </div>
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="archive" className="space-y-6 mt-0">
+          {archiveLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : archiveCycles && archiveCycles.length > 0 ? (
+            archiveCycles.map((cycle) => (
+              <Card key={cycle.cycleNumber} data-testid={`cycle-card-${cycle.cycleNumber}`}>
+                <CardHeader className="cursor-pointer">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1">
+                      <CardTitle className="flex items-center gap-2">
+                        Cycle {cycle.cycleNumber}
+                        {cycle.status === 'completed' && <CheckCircle className="h-5 w-5 text-green-600" />}
+                        {cycle.status === 'pending' && <Clock className="h-5 w-5 text-yellow-600" />}
+                      </CardTitle>
+                      <CardDescription>
+                        {cycle.activationId === 'PENDING' ? (
+                          <span className="text-yellow-600 font-medium">Cycle not yet started - No payments created</span>
+                        ) : cycle.status === 'active' ? (
+                          <>Cycle in progress • {cycle.confirmedCount}/8 payments confirmed</>
+                        ) : (
+                          <>
+                            {cycle.confirmedCount}/8 payments confirmed • {formatINR(cycle.confirmedAmount)} paid
+                            {cycle.status === 'completed' && ' • Activation complete'}
+                          </>
+                        )}
+                      </CardDescription>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-muted-foreground">Total Amount</p>
+                      <p className="text-lg font-bold">{formatINR(cycle.totalAmount)}</p>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                {cycle.payments.length === 0 ? (
+                  <CardContent>
+                    <Alert>
+                      <Clock className="h-4 w-4" />
+                      <AlertDescription>
+                        This cycle has not been started yet. No activation payments have been created.
+                      </AlertDescription>
+                    </Alert>
+                  </CardContent>
+                ) : (
+                  <CardContent className="space-y-4">
+                    {cycle.payments.map((payment) => {
+                      const isPaymentExpanded = expandedArchivePayments.has(payment.id);
+                      return (
+                        <div
+                          key={payment.id}
+                          className="border rounded-lg"
+                          data-testid={`archive-payment-slot-${cycle.cycleNumber}-${payment.slotIndex}`}
+                        >
+                          <div className="flex items-center justify-between p-4 hover-elevate cursor-pointer" onClick={() => toggleArchivePaymentDetails(payment.id)}>
+                            <div className="flex items-center gap-3">
+                              {getStatusIcon(payment.status)}
+                              <div>
+                                <p className="font-medium">{getPaymentSlotLabel(payment.slotIndex)}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {payment.receiverType === 'admin' 
+                                    ? 'Admin Account (PB0)' 
+                                    : payment.receiverName 
+                                      ? `${payment.receiverName} (${payment.receiverUserId})` 
+                                      : payment.receiverUserId || 'Not assigned'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <div className="text-right">
+                                <p className="font-bold">{formatINR(Number(payment.amountInr))}</p>
+                                {getStatusBadge(payment.status, payment.slotIndex)}
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="flex-shrink-0"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleArchivePaymentDetails(payment.id);
+                                }}
+                                data-testid={`button-toggle-archive-payment-${cycle.cycleNumber}-${payment.slotIndex}`}
+                              >
+                                {isPaymentExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                              </Button>
+                            </div>
+                          </div>
+
+                          {isPaymentExpanded && (payment.status === 'submitted' || payment.status === 'confirmed' || payment.status === 'rejected') && (
+                            <div className="border-t bg-muted/30 p-4 space-y-4">
+                              <h4 className="font-semibold text-sm">Payment Details</h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                {/* Payment Information */}
+                                <div className="space-y-2">
+                                  <div>
+                                    <span className="text-muted-foreground">Payment To:</span>
+                                    {payment.receiverType === 'admin' ? (
+                                      <p className="font-medium">Admin Account (PB0)</p>
+                                    ) : payment.receiverName ? (
+                                      <div>
+                                        <p className="font-medium">{payment.receiverName}</p>
+                                        <p className="text-xs text-muted-foreground">{payment.receiverUserId}</p>
+                                        {payment.receiverMobile && (
+                                          <p className="text-xs text-muted-foreground">Mobile: {payment.receiverMobile}</p>
+                                        )}
+                                        {payment.receiverUpiId && (
+                                          <p className="text-xs text-muted-foreground">UPI: {payment.receiverUpiId}</p>
+                                        )}
+                                        {payment.receiverEmail && (
+                                          <p className="text-xs text-muted-foreground">Email: {payment.receiverEmail}</p>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <p className="font-medium">{payment.receiverUserId || 'Not assigned'}</p>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Amount:</span>
+                                    <p className="font-medium">{formatINR(Number(payment.amountInr))}</p>
+                                  </div>
+                                  {payment.offlineUtrId && (
+                                    <div>
+                                      <span className="text-muted-foreground">UTR/Transaction ID:</span>
+                                      <p className="font-mono text-xs font-medium">{payment.offlineUtrId}</p>
+                                    </div>
+                                  )}
+                                  {payment.submissionCount > 0 && (
+                                    <div>
+                                      <span className="text-muted-foreground">Submission Count:</span>
+                                      <p className="font-medium">{payment.submissionCount}</p>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Timeline */}
+                                <div className="space-y-2">
+                                  <div>
+                                    <span className="text-muted-foreground">Created:</span>
+                                    <p className="text-xs">{formatDate(payment.createdAt)}</p>
+                                  </div>
+                                  {payment.confirmedAt && (
+                                    <div>
+                                      <span className="text-muted-foreground">Confirmed:</span>
+                                      <p className="text-xs text-green-600 font-medium">{formatDate(payment.confirmedAt)}</p>
+                                    </div>
+                                  )}
+                                  {payment.rejectedAt && (
+                                    <div>
+                                      <span className="text-muted-foreground">Rejected:</span>
+                                      <p className="text-xs text-red-600 font-medium">{formatDate(payment.rejectedAt)}</p>
+                                    </div>
+                                  )}
+                                  {payment.updatedAt && (
+                                    <div>
+                                      <span className="text-muted-foreground">Last Updated:</span>
+                                      <p className="text-xs">{formatDate(payment.updatedAt)}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Additional Information */}
+                              {(payment.rejectionReason || payment.notes || payment.offlineProofUrl) && (
+                                <div className="space-y-2 pt-2 border-t">
+                                  {payment.rejectionReason && (
+                                    <div>
+                                      <span className="text-muted-foreground text-sm">Rejection Reason:</span>
+                                      <p className="text-sm text-red-600 mt-1">{payment.rejectionReason}</p>
+                                    </div>
+                                  )}
+                                  {payment.notes && (
+                                    <div>
+                                      <span className="text-muted-foreground text-sm">Notes:</span>
+                                      <p className="text-sm mt-1">{payment.notes}</p>
+                                    </div>
+                                  )}
+                                  {payment.offlineProofUrl && (
+                                    <div>
+                                      <span className="text-muted-foreground text-sm">Payment Proof:</span>
+                                      <a 
+                                        href={payment.offlineProofUrl} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="text-sm text-primary hover:underline block mt-1"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        View Proof
+                                      </a>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                )}
+              </Card>
+            ))
+          ) : (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <p className="text-muted-foreground">No payment history found.</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {selectedPayment && (
         <PaymentSubmissionDialog
