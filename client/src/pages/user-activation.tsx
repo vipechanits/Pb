@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { useLocation } from 'wouter';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -47,6 +48,7 @@ interface CycleData {
 export default function UserActivationPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const { config, isLoading: configLoading } = useSystemConfig();
   const [selectedPayment, setSelectedPayment] = useState<ActivationPayment | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -97,11 +99,31 @@ export default function UserActivationPage() {
     },
     onError: (error: any) => {
       const errorMessage = error?.message || 'Failed to request activation';
-      toast({
-        title: 'Error',
-        description: errorMessage,
-        variant: 'destructive',
-      });
+      
+      // Check if this is a profile incomplete error
+      // Only redirect if error specifically mentions "incomplete" or "complete your profile"
+      const isProfileIncomplete = 
+        errorMessage.toLowerCase().includes('profile incomplete') ||
+        errorMessage.toLowerCase().includes('complete your profile') ||
+        (errorMessage.toLowerCase().includes('profile') && errorMessage.toLowerCase().includes('before'));
+      
+      if (isProfileIncomplete) {
+        toast({
+          title: 'Profile Incomplete',
+          description: 'Redirecting you to complete your profile...',
+          variant: 'destructive',
+        });
+        // Redirect to profile page after a short delay
+        setTimeout(() => {
+          setLocation('/profile');
+        }, 1500);
+      } else {
+        toast({
+          title: 'Error',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      }
     },
   });
 

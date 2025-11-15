@@ -61,11 +61,32 @@ export default function ReentryPage() {
       setLocation('/user/activate');
     },
     onError: (error: any) => {
-      toast({
-        variant: 'destructive',
-        title: 'Re-entry Failed',
-        description: error.message || 'Failed to initiate re-entry. Please try again.',
-      });
+      const errorMessage = error?.message || 'Failed to initiate re-entry. Please try again.';
+      
+      // Check if this is a profile incomplete error
+      // Only redirect if error specifically mentions "incomplete" or "complete your profile"
+      const isProfileIncomplete = 
+        errorMessage.toLowerCase().includes('profile incomplete') ||
+        errorMessage.toLowerCase().includes('complete your profile') ||
+        (errorMessage.toLowerCase().includes('profile') && errorMessage.toLowerCase().includes('before'));
+      
+      if (isProfileIncomplete) {
+        toast({
+          variant: 'destructive',
+          title: 'Profile Incomplete',
+          description: 'Redirecting you to complete your profile...',
+        });
+        // Redirect to profile page after a short delay
+        setTimeout(() => {
+          setLocation('/profile');
+        }, 1500);
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Re-entry Failed',
+          description: errorMessage,
+        });
+      }
     },
   });
 
