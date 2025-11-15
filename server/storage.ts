@@ -117,7 +117,7 @@ export interface IStorage {
   getBackupHistory(limit?: number): Promise<any[]>;
   deleteBackup(backupId: string): Promise<void>;
   exportDatabaseToJSON(): Promise<string>; // Returns JSON string of entire database
-  importDatabaseFromJSON(backupData: any, performedBy: string): Promise<void>; // Restores database from JSON
+  // REMOVED: importDatabaseFromJSON - Security vulnerability removed (see line 2249)
 }
 
 export class DbStorage implements IStorage {
@@ -1151,26 +1151,71 @@ export class DbStorage implements IStorage {
   }
 
   async submitPaymentProof(id: string, utrId: string, proofUrl?: string): Promise<ActivationPayment | undefined> {
-    // Get current payment to increment submission count
-    const currentPayment = await this.getActivationPayment(id);
-    if (!currentPayment) return undefined;
-    
-    // Block submission if payment is awaiting receiver assignment (matrix payments before activation)
-    if (currentPayment.status === 'awaiting_assignment') {
-      throw new Error('Payment receiver not yet assigned - complete first 3 payments before paying matrix levels');
-    }
-    
-    const result = await db.update(activationPayments)
-      .set({ 
-        status: 'submitted',
-        offlineUtrId: utrId,
-        offlineProofUrl: proofUrl,
-        submissionCount: (currentPayment.submissionCount || 0) + 1,
-        updatedAt: new Date()
-      })
-      .where(eq(activationPayments.id, id))
-      .returning();
-    return result[0];
+    // PHASE 1 FIX: Advisory lock with normalization to prevent duplicate UTR race condition
+    // Normalizes UTR (trim + uppercase) before locking to prevent whitespace/case variants
+    return await db.transaction(async (tx) => {
+      // STEP 1: Validate input BEFORE normalization
+      // Reject empty, whitespace-only, or overly long UTRs before any processing
+      if (!utrId || utrId.trim().length === 0) {
+        throw new Error('UTR/Transaction ID cannot be empty. Please enter a valid transaction reference.');
+      }
+      
+      if (utrId.length > 100) {
+        throw new Error('UTR/Transaction ID is too long (maximum 100 characters).');
+      }
+      
+      // STEP 2: Normalize UTR (trim + uppercase)
+      // Prevents bypass via whitespace/case variants: "ABC123" vs " ABC123 " vs "abc123"
+      const normalizedUtr = utrId.trim().toUpperCase();
+      
+      // STEP 2: Lock current payment row to prevent concurrent modifications
+      const currentPaymentResult = await tx.select()
+        .from(activationPayments)
+        .where(eq(activationPayments.id, id))
+        .for('update')
+        .limit(1);
+      
+      if (currentPaymentResult.length === 0) return undefined;
+      const currentPayment = currentPaymentResult[0];
+      
+      // STEP 3: Validate payment state
+      if (currentPayment.status === 'awaiting_assignment') {
+        throw new Error('Payment receiver not yet assigned - complete first 3 payments before paying matrix levels');
+      }
+      
+      // STEP 4: CRITICAL - Acquire advisory lock on NORMALIZED UTR hash
+      // Uses PostgreSQL advisory lock to serialize concurrent submissions with same UTR
+      // Lock is automatically released when transaction commits/rolls back
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${normalizedUtr}))`);
+      
+      // STEP 5: Check for duplicate NORMALIZED UTR (while holding lock)
+      // Even if two transactions start simultaneously, only one gets the lock at a time
+      const existingPaymentWithUtr = await tx.select()
+        .from(activationPayments)
+        .where(and(
+          eq(activationPayments.offlineUtrId, normalizedUtr),
+          ne(activationPayments.id, id) // Exclude current payment being updated
+        ))
+        .limit(1);
+      
+      if (existingPaymentWithUtr.length > 0) {
+        throw new Error('This UTR/Transaction ID has already been used for another payment. Each payment must have a unique transaction ID.');
+      }
+      
+      // STEP 6: Update payment with NORMALIZED UTR (within locked transaction)
+      const result = await tx.update(activationPayments)
+        .set({ 
+          status: 'submitted',
+          offlineUtrId: normalizedUtr, // Store normalized version
+          offlineProofUrl: proofUrl,
+          submissionCount: (currentPayment.submissionCount || 0) + 1,
+          updatedAt: new Date()
+        })
+        .where(eq(activationPayments.id, id))
+        .returning();
+      
+      return result[0];
+    });
   }
 
   async confirmActivationPayment(id: string, notes?: string): Promise<ActivationPayment | undefined> {
@@ -1361,11 +1406,37 @@ export class DbStorage implements IStorage {
       }
 
       console.log(`[STORAGE] Checking if all 8 payments are confirmed for activation ${confirmedPayment.activationId}`);
-      await this.checkAndCompleteActivation(confirmedPayment.activationId, confirmedPayment.payerUserId, tx);
+      
+      try {
+        await this.checkAndCompleteActivation(confirmedPayment.activationId, confirmedPayment.payerUserId, tx);
+        console.log(`[STORAGE] Activation completion check finished successfully`);
+      } catch (error) {
+        console.error(`[STORAGE] CRITICAL ERROR in checkAndCompleteActivation:`, error);
+        // Re-throw to roll back the entire transaction (prevents partial confirmations)
+        throw error;
+      }
       
       console.log(`[STORAGE] Payment confirmation complete`);
       return confirmedPayment;
     });
+  }
+
+  // ADMIN UTILITY: Manually complete a broken activation (with its own transaction)
+  // Use case: When activation has all 8 payments confirmed but completion failed
+  async manualCompleteActivation(activationId: string, userId: string): Promise<void> {
+    console.log(`[MANUAL-COMPLETE] Starting manual activation completion for ${userId}, activation ${activationId}`);
+    
+    // Run in a fresh transaction with dedicated error handling
+    try {
+      return await db.transaction(async (tx) => {
+        await this.checkAndCompleteActivation(activationId, userId, tx);
+        console.log(`[MANUAL-COMPLETE] Manual activation completion successful for ${userId}`);
+      });
+    } catch (error) {
+      console.error(`[MANUAL-COMPLETE] Failed for ${userId}, activation ${activationId}:`, error);
+      // Re-throw with context for upstream logging
+      throw new Error(`Manual completion failed for ${userId}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   async checkAndCompleteActivation(activationId: string, payerUserIdOrDbId: string, existingTx?: any): Promise<void> {
@@ -2217,48 +2288,10 @@ export class DbStorage implements IStorage {
     return JSON.stringify(backup, null, 2);
   }
   
-  /**
-   * Import database from JSON backup
-   * WARNING: This will clear all existing data and restore from backup
-   * Always create a pre-restore backup before calling this
-   * NOTE: system_config, database_backups, and password_reset_tokens are preserved
-   */
-  async importDatabaseFromJSON(backupData: any, performedBy: string): Promise<void> {
-    await db.transaction(async (tx) => {
-      // Delete existing data (in reverse order of dependencies)
-      // PRESERVE: system_config, database_backups (backup history), password_reset_tokens (transient)
-      await tx.delete(notifications);
-      await tx.delete(activationPayments);
-      await tx.delete(activations);
-      await tx.delete(reentries);
-      await tx.delete(users);
-      
-      // Insert restored data
-      if (backupData.tables.users && backupData.tables.users.length > 0) {
-        await tx.insert(users).values(backupData.tables.users);
-      }
-      
-      if (backupData.tables.activations && backupData.tables.activations.length > 0) {
-        await tx.insert(activations).values(backupData.tables.activations);
-      }
-      
-      if (backupData.tables.activation_payments && backupData.tables.activation_payments.length > 0) {
-        await tx.insert(activationPayments).values(backupData.tables.activation_payments);
-      }
-      
-      if (backupData.tables.reentries && backupData.tables.reentries.length > 0) {
-        await tx.insert(reentries).values(backupData.tables.reentries);
-      }
-      
-      if (backupData.tables.notifications && backupData.tables.notifications.length > 0) {
-        await tx.insert(notifications).values(backupData.tables.notifications);
-      }
-      
-      // Log restore operation
-      console.log(`[DB_RESTORE] Database restored by ${performedBy} from backup dated ${backupData.timestamp}`);
-      console.log(`[DB_RESTORE] Preserved tables: system_config, database_backups, password_reset_tokens`);
-    });
-  }
+  // REMOVED: importDatabaseFromJSON - Catastrophic security vulnerability
+  // This function allowed deleting ALL user data and was exposed via insecure endpoint
+  // Database restoration must be done manually via direct database access tools
+  // with proper backup procedures and administrator oversight
 }
 
 export const storage = new DbStorage();

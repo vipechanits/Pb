@@ -214,7 +214,7 @@ export const activationPayments = pgTable("activation_payments", {
   receiverType: receiverTypeEnum("receiver_type").notNull(),
   amountInr: decimal("amount_inr", { precision: 10, scale: 2 }).notNull(),
   paymentMode: paymentModeEnum("payment_mode"),
-  offlineUtrId: text("offline_utr_id"),
+  offlineUtrId: text("offline_utr_id"), // NOTE: Uniqueness enforced by backend validation (storage.submitPaymentProof)
   offlineProofUrl: text("offline_proof_url"),
   status: paymentStatusEnum("payment_status").notNull().default('pending'),
   submissionCount: integer("submission_count").notNull().default(0),
@@ -619,6 +619,11 @@ export const resetPasswordSchema = z.object({
     .regex(/[0-9]/, "Password must contain at least one number"),
 });
 
+export const manualActivationCompletionSchema = z.object({
+  activationId: z.string().min(1, "Activation ID is required"),
+  userId: z.string().min(1, "User ID is required").regex(/^PB\d+$/, "User ID must be in format PB####"),
+});
+
 // Update email schema (requires security code for verification)
 export const updateEmailSchema = z.object({
   newEmail: z.string().email("Invalid email address"),
@@ -643,6 +648,7 @@ export type ForgotPasswordRequest = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordRequest = z.infer<typeof resetPasswordSchema>;
 export type UpdateEmailRequest = z.infer<typeof updateEmailSchema>;
 export type UpdatePasswordRequest = z.infer<typeof updatePasswordSchema>;
+export type ManualActivationCompletionRequest = z.infer<typeof manualActivationCompletionSchema>;
 
 // Binary Match Queue - FIFO queue for 3:3 matched pairs
 // When user builds 3:3 pair → enters queue

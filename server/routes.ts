@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema, users, reentries, activationPayments, forgotPasswordSchema, resetPasswordSchema, updateEmailSchema, updatePasswordSchema } from "@shared/schema";
+import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema, users, reentries, activationPayments, forgotPasswordSchema, resetPasswordSchema, updateEmailSchema, updatePasswordSchema, manualActivationCompletionSchema } from "@shared/schema";
 import { hashPassword, verifyPassword, serializeUser } from "./auth";
 import { generateUserPaymentQR } from "./qrcode-generator";
 import { z } from "zod";
@@ -10,6 +10,7 @@ import { db } from "./db";
 import { eq, desc, sql, count } from "drizzle-orm";
 import crypto from "crypto";
 import { sendVerificationEmail, sendPasswordResetEmail, sendPasswordChangedEmail } from "./lib/email";
+import { IncomeService } from "./income-service";
 
 // Middleware to check if user is authenticated
 function requireAuth(req: any, res: any, next: any) {
@@ -1257,10 +1258,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Object storage route for getting upload URL
-  // Note: This endpoint is intentionally unauthenticated to allow users to upload
-  // payment proofs as part of the offline activation process. The wallet address
-  // is submitted when setting the ACL policy, linking the upload to the user.
-  app.post("/api/objects/upload", async (req, res) => {
+  // SECURITY FIX: Now requires authentication. Users must be logged in to upload files.
+  // Legacy comments about "wallet address" removed - system now uses userId-based auth.
+  app.post("/api/objects/upload", requireAuth, async (req, res) => {
     try {
       const objectStorageService = new ObjectStorageService();
       const { uploadUrl, publicUrl } = await objectStorageService.getObjectEntityUploadURLWithPublicPath();
@@ -1272,21 +1272,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Object storage route for setting payment proof metadata
-  // Note: This endpoint is intentionally unauthenticated to allow users to submit
-  // payment proofs during offline activation. Payment proofs are set to public
-  // visibility so admins can review them for verification. The owner field links
-  // the proof to the wallet address that submitted it.
-  app.put("/api/payment-proofs", async (req, res) => {
-    if (!req.body.proofUrl || !req.body.walletAddress) {
-      return res.status(400).json({ error: "proofUrl and walletAddress are required" });
+  // SECURITY FIX: Now requires authentication. Users must be logged in to submit payment proofs.
+  // Uses userId from session instead of wallet address for ownership tracking.
+  app.put("/api/payment-proofs", requireAuth, async (req, res) => {
+    if (!req.body.proofUrl) {
+      return res.status(400).json({ error: "proofUrl is required" });
     }
+    
+    // Use userId from authenticated session instead of wallet address
+    const userId = req.session.userId as string;
 
     try {
       const objectStorageService = new ObjectStorageService();
       const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
         req.body.proofUrl,
         {
-          owner: req.body.walletAddress,
+          owner: userId,
           visibility: "public",
         },
       );
@@ -1444,30 +1445,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/activations/:id/status", async (req, res) => {
-    try {
-      const validationResult = updateActivationStatusSchema.safeParse(req.body);
-      if (!validationResult.success) {
-        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
-      }
-      
-      const activation = await storage.updateActivationStatus(req.params.id, validationResult.data.status);
-      if (!activation) {
-        return res.status(404).json({ error: "Activation not found" });
-      }
-      res.json(activation);
-    } catch (error) {
-      console.error("Error updating activation status:", error);
-      res.status(500).json({ error: "Failed to update activation status" });
-    }
-  });
+  // REMOVED: /api/activations/:id/status endpoint (SECURITY FIX)
+  // This endpoint was unused by frontend and allowed anyone to change activation status
+  // Activation status changes should only happen through:
+  // 1. Payment confirmation flow (storage.confirmActivationPayment)
+  // 2. Admin manual completion (POST /api/admin/activation/manual-complete)
 
   // Activation payment routes
-  app.post("/api/activation-payments", async (req, res) => {
+  // SECURITY FIX: Now requires authentication and validates ownership
+  // Users can only create activation payments for their own activations
+  app.post("/api/activation-payments", requireAuth, async (req, res) => {
     try {
       const validationResult = insertActivationPaymentSchema.safeParse(req.body);
       if (!validationResult.success) {
         return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
+      }
+      
+      // Verify the activation belongs to the authenticated user
+      const activation = await storage.getActivation(validationResult.data.activationId);
+      if (!activation) {
+        return res.status(404).json({ error: "Activation not found" });
+      }
+      
+      const userId = req.session.userId as string;
+      const user = await storage.getUserById(userId);
+      if (!user || activation.payerWallet !== user.userId) {
+        return res.status(403).json({ error: "Forbidden - You can only create payments for your own activations" });
       }
       
       const payment = await storage.createActivationPayment(validationResult.data);
@@ -1618,6 +1621,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(payment);
     } catch (error) {
       console.error("Error submitting payment proof:", error);
+      
+      // Handle duplicate UTR error with user-friendly message
+      if (error instanceof Error && error.message.includes('UTR/Transaction ID has already been used')) {
+        return res.status(400).json({ error: error.message });
+      }
+      
       res.status(500).json({ error: "Failed to submit payment proof" });
     }
   });
@@ -1665,26 +1674,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       console.log(`[CONFIRM-ROUTE] Payment confirmed successfully:`, payment.id);
-
-      // Check if this completes all 8 payments and triggers re-entry completion
-      try {
-        const allPayments = await storage.getActivationPaymentsByActivationId(payment.activationId);
-        const confirmedCount = allPayments.filter(p => p.status === 'confirmed').length;
-        
-        if (confirmedCount === 8) {
-          // All payments confirmed - complete re-entry if in progress
-          const payerUserId = payment.payerUserId;
-          if (payerUserId) {
-            const { ReentryService } = await import('./reentry-service');
-            const reentryService = new ReentryService(db as any);
-            await reentryService.completeReentry(payerUserId);
-            console.log(`[RE-ENTRY] Completed re-entry for user ${payerUserId} after 8th payment`);
-          }
-        }
-      } catch (error) {
-        console.error('[RE-ENTRY] Error checking re-entry completion:', error);
-        // Don't fail the payment confirmation if re-entry completion fails
-      }
+      
+      // NOTE: Income distribution is handled inside storage.confirmActivationPayment() within a transaction
+      // - Immediate incomes (binary_match, creator_fee) created at payment confirmation
+      // - Deferred incomes (sponsor, matrix) created when all 8 payments confirmed
+      // See storage.ts lines 1176-1720 for complete implementation
 
       res.json(payment);
     } catch (error: any) {
@@ -1769,13 +1763,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Get system configuration
-  app.get("/api/admin/config", requireAuth, async (req, res) => {
+  app.get("/api/admin/config", requireAdmin, async (req, res) => {
     try {
-      const user = await storage.getUserById(req.session.userId as string);
-      if (!user || user.role !== 'admin') {
-        return res.status(403).json({ error: "Forbidden - Admin access required" });
-      }
-
       const config = await storage.getSystemConfig();
       res.json(config);
     } catch (error) {
@@ -1785,13 +1774,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Update system configuration
-  app.patch("/api/admin/config", requireAuth, async (req, res) => {
+  app.patch("/api/admin/config", requireAdmin, async (req, res) => {
     try {
-      const user = await storage.getUserById(req.session.userId as string);
-      if (!user || user.role !== 'admin') {
-        return res.status(403).json({ error: "Forbidden - Admin access required" });
-      }
-
       // Prevent ID changes via API
       const { id, ...configData } = req.body;
       
@@ -1804,13 +1788,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Get all confirmed payments
-  app.get("/api/admin/payments/confirmed", requireAuth, async (req, res) => {
+  app.get("/api/admin/payments/confirmed", requireAdmin, async (req, res) => {
     try {
-      const user = await storage.getUserById(req.session.userId as string);
-      if (!user || user.role !== 'admin') {
-        return res.status(403).json({ error: "Forbidden - Admin access required" });
-      }
-
       const payments = await storage.getConfirmedPaymentsWithDetails();
       res.json(payments);
     } catch (error) {
@@ -2159,7 +2138,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ========================================
 
   // GET /api/admin/database/backup - Create and download database backup
-  app.get("/api/admin/database/backup", requireAuth, async (req: any, res) => {
+  // SECURITY: Changed from requireAuth to requireAdmin - backups must be admin-only
+  app.get("/api/admin/database/backup", requireAdmin, async (req: any, res) => {
     try {
       const user = await storage.getUserById(req.session.userId as string);
       if (!user || (user.userId !== 'PB1' && user.userId !== 'PB0')) {
@@ -2193,78 +2173,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // POST /api/admin/database/restore - Restore database from uploaded backup
-  app.post("/api/admin/database/restore", requireAuth, async (req: any, res) => {
-    try {
-      const user = await storage.getUserById(req.session.userId as string);
-      if (!user || (user.userId !== 'PB1' && user.userId !== 'PB0')) {
-        return res.status(403).json({ error: "Forbidden - Admin access required (PB0 or PB1 only)" });
-      }
-
-      const { backupData, createPreBackup } = req.body;
-
-      if (!backupData) {
-        return res.status(400).json({ error: "Backup data is required" });
-      }
-
-      // Validate backup format
-      if (!backupData.version || !backupData.timestamp || !backupData.tables) {
-        return res.status(400).json({ error: "Invalid backup format" });
-      }
-
-      let preRestoreBackupJson: string | null = null;
-      let preRestoreFilename: string | null = null;
-
-      // Create pre-restore backup if requested (recommended)
-      if (createPreBackup) {
-        preRestoreBackupJson = await storage.exportDatabaseToJSON();
-        preRestoreFilename = `pre_restore_backup_${new Date().toISOString().replace(/:/g, '-')}.json`;
-        const preRestoreSize = Buffer.byteLength(preRestoreBackupJson, 'utf8');
-        
-        // Save metadata (preserved during restore since we don't delete database_backups table)
-        await storage.createDatabaseBackup(
-          preRestoreFilename,
-          preRestoreSize,
-          user.userId!,
-          'Automatic pre-restore backup'
-        );
-        console.log(`[DB_RESTORE] Pre-restore backup created: ${preRestoreFilename}`);
-      }
-
-      // Perform restore
-      await storage.importDatabaseFromJSON(backupData, user.userId!);
-
-      // Return success response with pre-restore backup (client should save it)
-      const response: any = {
-        success: true,
-        message: "Database restored successfully",
-        restoredFrom: backupData.timestamp,
-        tablesRestored: Object.keys(backupData.tables).length
-      };
-
-      // Include pre-restore backup in response so client can save it
-      if (preRestoreBackupJson && preRestoreFilename) {
-        response.preRestoreBackup = {
-          filename: preRestoreFilename,
-          data: preRestoreBackupJson
-        };
-        response.message += " (Pre-restore backup included in response - save it immediately!)";
-      }
-
-      res.json(response);
-
-      console.log(`[DB_RESTORE] Database restored by ${user.userId} (${user.email}) from backup dated ${backupData.timestamp}`);
-    } catch (error) {
-      console.error("Error restoring database:", error);
-      res.status(500).json({ error: "Failed to restore database" });
-    }
-  });
+  // REMOVED: Database restore endpoint - CATASTROPHIC SECURITY VULNERABILITY
+  // This endpoint allowed ANY logged-in user to DELETE ALL DATABASE DATA
+  // Database restoration must be done manually via direct database access
+  // by qualified database administrators with proper backup procedures
 
   // GET /api/admin/database/backups - Get backup history
-  app.get("/api/admin/database/backups", requireAuth, async (req: any, res) => {
+  // SECURITY: Changed from requireAuth to requireAdmin
+  app.get("/api/admin/database/backups", requireAdmin, async (req: any, res) => {
     try {
       const user = await storage.getUserById(req.session.userId as string);
-      if (!user || (user.userId !== 'PB1' && user.userId !== 'PB0')) {
+      if (!user || (user.userId !== 'PB0')) {
         return res.status(403).json({ error: "Forbidden - Admin access required (PB0 or PB1 only)" });
       }
 
@@ -2279,10 +2198,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // DELETE /api/admin/database/backups/:id - Delete backup metadata
-  app.delete("/api/admin/database/backups/:id", requireAuth, async (req: any, res) => {
+  // SECURITY: Changed from requireAuth to requireAdmin
+  app.delete("/api/admin/database/backups/:id", requireAdmin, async (req: any, res) => {
     try {
       const user = await storage.getUserById(req.session.userId as string);
-      if (!user || (user.userId !== 'PB1' && user.userId !== 'PB0')) {
+      if (!user || (user.userId !== 'PB0')) {
         return res.status(403).json({ error: "Forbidden - Admin access required (PB0 or PB1 only)" });
       }
 
@@ -2503,6 +2423,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================================================
   // END TEMPORARY TESTING UTILITY
   // ============================================================================
+
+  // ADMIN: Manual activation completion for broken activations
+  // Use case: When activation has all 8 payments confirmed but completion failed
+  app.post("/api/admin/activation/manual-complete", requireAdmin, async (req: any, res: any) => {
+    try {
+      // Validate request body with Zod schema
+      const validationResult = manualActivationCompletionSchema.safeParse(req.body);
+      
+      if (!validationResult.success) {
+        console.warn(`[ADMIN] Manual completion validation failed:`, validationResult.error.errors);
+        return res.status(400).json({ 
+          error: "Validation failed", 
+          details: validationResult.error.errors 
+        });
+      }
+      
+      const { activationId, userId } = validationResult.data;
+      
+      console.log(`[ADMIN] Manual activation completion requested by ${req.session.userId} for user ${userId}, activation ${activationId}`);
+      
+      // Call storage method which handles transaction and completion logic
+      await storage.manualCompleteActivation(activationId, userId);
+      
+      console.log(`[ADMIN] Manual activation completion successful for ${userId}`);
+      res.json({ 
+        success: true, 
+        message: `Activation ${activationId} completed successfully for user ${userId}`,
+        activationId,
+        userId
+      });
+    } catch (error: any) {
+      console.error("[ADMIN] Manual activation completion failed:", error);
+      console.error("[ADMIN] Error stack:", error?.stack);
+      res.status(500).json({ 
+        error: "Manual activation completion failed", 
+        details: error.message 
+      });
+    }
+  });
 
   const httpServer = createServer(app);
 

@@ -101,9 +101,9 @@ export function PaymentSubmissionDialog({
         });
 
         // Set ACL policy to make file publicly accessible
+        // SECURITY FIX: Backend now uses authenticated userId from session
         await apiRequest('PUT', '/api/payment-proofs', {
           proofUrl: uploadResponse.publicUrl,
-          walletAddress: payment.payerUserId,
         });
 
         proofUrl = uploadResponse.publicUrl;
