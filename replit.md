@@ -51,6 +51,7 @@ Preferred communication style: Simple, everyday language.
 - **Root Node Handling**: The first non-admin user to activate becomes the root of both binary tree and global matrix (matrixLevel=1, no parent).
 - **Binary Matching**: Uses entire self team (spillover + personal recruitments) for 3:3 pair counting, with initial 1+1 qualification from personal counts.
 - **Admin Role**: PB0 exists as payment receiver and system administrator only, not as network participant.
+- **Matrix Growth**: Global matrix grows infinitely (unlimited levels), accepting unlimited users. Each user earns from their 5-level downline (62 users maximum) regardless of the user's position in the matrix.
 
 #### Binary Placement Architecture
 - **Separation of Concerns**: Sponsorship (income tracking) is completely separate from binary placement (tree structure).

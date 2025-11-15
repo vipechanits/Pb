@@ -809,11 +809,11 @@ export class DbStorage implements IStorage {
       }
 
       // Matrix has existing users - find next available slot using BFS
+      // NO LEVEL LIMIT: Matrix grows infinitely, each user earns from their 5-level downline (62 users)
       const frontier = await txn.select()
         .from(users)
         .where(and(
           sql`matrix_level IS NOT NULL`,
-          sql`matrix_level < 5`,
           eq(users.isActivated, true),
           ne(users.role, 'admin')  // Exclude admin accounts from matrix
         ))
@@ -857,7 +857,8 @@ export class DbStorage implements IStorage {
         }
       }
       
-      throw new Error('Global matrix is full - no available slots');
+      // This should never happen as matrix grows infinitely
+      throw new Error('Matrix placement failed - unable to find available slot (database error)');
     };
     
     if (tx) {
