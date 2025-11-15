@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, DollarSign, GitBranch, AlertCircle, Key, Eye, EyeOff } from 'lucide-react';
+import { Users, IndianRupee, GitBranch, AlertCircle, Key, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { ReferralLinks } from '@/components/referral-links';
 import { Button } from '@/components/ui/button';
@@ -104,13 +104,13 @@ export default function AdminDashboard() {
       title: 'Pending Payments',
       value: '0',
       description: 'Awaiting approval',
-      icon: DollarSign,
+      icon: IndianRupee,
     },
     {
       title: 'Total Revenue',
       value: '₹0',
       description: 'Platform fees collected',
-      icon: DollarSign,
+      icon: IndianRupee,
     },
   ];
 
