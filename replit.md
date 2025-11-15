@@ -3,6 +3,11 @@
 ## Overview
 PAYBACK247 is a peer-to-peer income platform for network marketing, featuring binary pairing income, multi-level matrix rewards, and a manual payment tracking system with administrator approval. It allows users to activate accounts, build referral networks, monitor earnings, and manage profiles. Administrators can manage system configurations, approve payments, and access analytics for efficient operation and financial transparency.
 
+## Recent Changes
+- **Global matrix unlimited growth enabled**: Removed level 5 cap, matrix now grows infinitely while maintaining individual 5-level (62 user) downline income limit per user
+- **Automatic re-entry detection**: System automatically detects when users complete their 62-user matrix cycle and marks them eligible for re-entry
+- **Re-entry page fully implemented**: Users can view their matrix completion status, cycle history, and initiate re-entry when eligible
+
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 

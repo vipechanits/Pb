@@ -1786,6 +1786,36 @@ export class DbStorage implements IStorage {
           const matrixAncestors = await this.getMatrixAncestors(activatedUser.userId, 5, tx);
           console.log(`[MATRIX] Found ${matrixAncestors.length} matrix ancestors for ${activatedUser.userId}:`, matrixAncestors);
           
+          // AUTO-DETECT MATRIX COMPLETION: Check if any upline ancestors just completed their 62-user matrix
+          // This happens automatically when a new user activates and fills the 62nd position
+          console.log(`[REENTRY] Checking matrix completion for upline ancestors...`);
+          for (const ancestorId of matrixAncestors) {
+            try {
+              const { ReentryService } = await import('./reentry-service');
+              const reentryService = new ReentryService(tx as any);
+              
+              // Check if this ancestor's matrix is now complete (62 downline members)
+              const isComplete = await reentryService.checkMatrixCompletion(ancestorId);
+              
+              if (isComplete) {
+                // Check if they're already marked as eligible
+                const ancestor = await tx.select()
+                  .from(users)
+                  .where(eq(users.userId, ancestorId))
+                  .limit(1);
+                
+                if (ancestor.length > 0 && !ancestor[0].isEligibleForReentry) {
+                  console.log(`[REENTRY] 🎉 ${ancestorId} has completed their matrix (62 users)! Marking eligible for re-entry...`);
+                  await reentryService.markEligibleForReentry(ancestorId);
+                  console.log(`[REENTRY] ✓ ${ancestorId} is now eligible for re-entry`);
+                }
+              }
+            } catch (error) {
+              console.error(`[REENTRY] Error checking matrix completion for ${ancestorId}:`, error);
+              // Continue processing - don't fail activation if re-entry check fails
+            }
+          }
+          
           // STAGED RECEIVER ASSIGNMENT: Assign matrix payment receivers and change status from 'awaiting_assignment' to 'pending'
           // This prevents users from seeing/paying wrong receivers before matrix placement completes
           // Receivers were set to NULL with 'awaiting_assignment' status at activation creation
