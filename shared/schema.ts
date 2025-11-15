@@ -601,6 +601,7 @@ export interface BinaryTreeNode {
   personalLeftCount: number;
   personalRightCount: number;
   totalReferrals: number;
+  binaryMatchedPairs: number;
   
   // Sponsor and placement info
   sponsorId: string | null;

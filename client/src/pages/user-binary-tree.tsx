@@ -525,7 +525,7 @@ export default function UserBinaryTreePage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Left Leg</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Left Count</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="stat-left-leg">{tree?.leftLegCount || 0}</div>
@@ -537,7 +537,7 @@ export default function UserBinaryTreePage() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Right Leg</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Right Count</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="stat-right-leg">{tree?.rightLegCount || 0}</div>
@@ -549,12 +549,12 @@ export default function UserBinaryTreePage() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Total Referrals</CardTitle>
+            <CardTitle className="text-sm font-medium">Binary Matched</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="stat-total-referrals">{tree?.totalReferrals || 0}</div>
+            <div className="text-2xl font-bold" data-testid="stat-binary-matched">{tree?.binaryMatchedPairs || 0}</div>
             <p className="text-xs text-muted-foreground">
-              All time
+              3:3 pairs matched
             </p>
           </CardContent>
         </Card>

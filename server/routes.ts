@@ -836,6 +836,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           personalLeftCount: user.personalLeftCount,
           personalRightCount: user.personalRightCount,
           totalReferrals: user.totalReferrals,
+          binaryMatchedPairs: user.binaryMatchedPairs || 0,
           
           // Sponsor and placement info
           sponsorId: user.sponsorId,
@@ -914,6 +915,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           personalLeftCount: user.personalLeftCount,
           personalRightCount: user.personalRightCount,
           totalReferrals: user.totalReferrals,
+          binaryMatchedPairs: user.binaryMatchedPairs || 0,
           sponsorId: user.sponsorId,
           directSponsor: null,
           // childUserId is the parent being expanded - check if this child is directly sponsored by it
