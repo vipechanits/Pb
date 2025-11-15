@@ -2497,7 +2497,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .from(sql`income_transactions`)
         .leftJoin(sql`users u`, sql`income_transactions.source_user_id = u.user_id`)
-        .where(sql`income_transactions.user_id = ${user.userId} AND income_transactions.income_type LIKE 'matrix_%'`)
+        .where(sql`income_transactions.user_id = ${user.userId} AND income_transactions.income_type::text LIKE 'matrix_%'`)
         .orderBy(sql`income_transactions.created_at DESC`);
 
       res.json(matrixIncomeHistory);

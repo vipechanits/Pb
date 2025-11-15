@@ -198,34 +198,69 @@ export default function MatrixIncomeHistory() {
         </CardContent>
       </Card>
 
-      {/* Income Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="md:col-span-2 lg:col-span-1">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Matrix Income</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-green-600" data-testid="text-total-income">₹{totalIncome.toFixed(2)}</div>
-            <p className="text-sm text-muted-foreground mt-1">
-              {matrixHistory?.filter((i) => i.status === "confirmed").length || 0} confirmed transactions
-            </p>
+      {/* Income Summary Section */}
+      <div className="grid gap-4 md:grid-cols-1">
+        {/* Total Income - Large Prominent Card */}
+        <Card>
+          <CardContent className="p-0">
+            <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-6 rounded-lg">
+              <div className="flex items-center justify-between gap-2 mb-4">
+                <h3 className="text-base font-semibold">Total Matrix Income</h3>
+                <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
+              </div>
+              <div className="text-5xl font-bold text-green-600 dark:text-green-400 mb-2" data-testid="text-total-income">
+                ₹{totalIncome.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <p className="text-sm text-muted-foreground">
+                From {matrixHistory?.filter((i) => i.status === "confirmed").length || 0} confirmed transactions across 5 levels
+              </p>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="md:col-span-2 lg:col-span-2">
+        {/* Income by Level - Detailed Breakdown */}
+        <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Income by Level</CardTitle>
+            <CardTitle className="text-base font-semibold">Income Breakdown by Level</CardTitle>
+            <CardDescription>Earnings from each matrix level (₹500 per activation)</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-5 gap-2">
-              {[1, 2, 3, 4, 5].map((level) => (
-                <div key={level} className="text-center">
-                  <p className="text-xs text-muted-foreground mb-1">L{level}</p>
-                  <p className="font-bold text-sm" data-testid={`text-level-${level}-income`}>
-                    ₹{(incomeByLevel[level] || 0).toFixed(0)}
-                  </p>
-                </div>
-              ))}
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map((level) => {
+                const levelIncome = incomeByLevel[level] || 0;
+                const levelTransactions = matrixHistory?.filter(
+                  (i) => i.status === "confirmed" && getMatrixLevel(i.incomeType) === level
+                ).length || 0;
+                const maxCapacity = Math.pow(2, level);
+                const completionPercentage = maxCapacity > 0 ? (levelTransactions / maxCapacity) * 100 : 0;
+                
+                return (
+                  <div key={level} className="flex items-center justify-between p-3 rounded-md border">
+                    <div className="flex items-center gap-3 flex-1">
+                      <Badge variant="outline" className="font-semibold">L{level}</Badge>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium">Level {level}</span>
+                          <span className="text-lg font-bold text-green-600 dark:text-green-400" data-testid={`text-level-${level}-income`}>
+                            ₹{levelIncome.toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 bg-muted rounded-full h-1.5">
+                            <div 
+                              className="bg-primary h-1.5 rounded-full transition-all"
+                              style={{ width: `${Math.min(completionPercentage, 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">
+                            {levelTransactions} / {maxCapacity}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
