@@ -86,7 +86,15 @@ export interface IStorage {
   // REMOVED: createActivationPayments() from interface - internal use only via transaction
   getActivationPayment(id: string): Promise<ActivationPayment | undefined>;
   getActivationPaymentsByActivationId(activationId: string): Promise<ActivationPayment[]>;
-  getActivationPaymentsByPayerUserId(payerUserId: string): Promise<ActivationPayment[]>;
+  getActivationPaymentsByPayerUserId(payerUserId: string): Promise<(ActivationPayment & { 
+    receiverName?: string; 
+    receiverEmail?: string; 
+    receiverMobile?: string; 
+    receiverUpiId?: string;
+    receiverBankAccountHolder?: string;
+    receiverBankAccount?: string;
+    receiverIfscCode?: string;
+  })[]>;
   getActivationPaymentsByCycle(userId: string): Promise<Array<{
     cycleNumber: number;
     activationId: string;
@@ -1174,8 +1182,41 @@ export class DbStorage implements IStorage {
     return db.select().from(activationPayments).where(eq(activationPayments.activationId, activationId));
   }
 
-  async getActivationPaymentsByPayerUserId(payerUserId: string): Promise<ActivationPayment[]> {
-    return db.select().from(activationPayments).where(eq(activationPayments.payerUserId, payerUserId));
+  async getActivationPaymentsByPayerUserId(payerUserId: string): Promise<(ActivationPayment & { 
+    receiverName?: string; 
+    receiverEmail?: string; 
+    receiverMobile?: string; 
+    receiverUpiId?: string;
+    receiverBankAccountHolder?: string;
+    receiverBankAccount?: string;
+    receiverIfscCode?: string;
+  })[]> {
+    const payments = await db.select().from(activationPayments).where(eq(activationPayments.payerUserId, payerUserId));
+    
+    // Get unique receiver user IDs
+    const receiverUserIds = Array.from(new Set(payments.map(p => p.receiverUserId).filter(Boolean)));
+    
+    // Fetch receiver details if there are any
+    const receivers = receiverUserIds.length > 0
+      ? await db.select().from(users).where(sql`${users.userId} = ANY(${receiverUserIds})`)
+      : [];
+    
+    const receiverMap = new Map(receivers.map(u => [u.userId, u]));
+    
+    // Enrich payments with receiver metadata
+    return payments.map(p => {
+      const receiver = p.receiverUserId ? receiverMap.get(p.receiverUserId) : null;
+      return {
+        ...p,
+        receiverName: receiver?.name || undefined,
+        receiverEmail: receiver?.email || undefined,
+        receiverMobile: receiver?.mobile || undefined,
+        receiverUpiId: receiver?.upiId || undefined,
+        receiverBankAccountHolder: receiver?.bankAccountHolder || undefined,
+        receiverBankAccount: receiver?.bankAccountNumber || undefined,
+        receiverIfscCode: receiver?.ifscCode || undefined,
+      };
+    });
   }
 
   async getActivationPaymentsByCycle(userId: string): Promise<Array<{
@@ -1183,14 +1224,30 @@ export class DbStorage implements IStorage {
     activationId: string;
     activationStatus: string;
     completedAt: Date | null;
-    payments: (ActivationPayment & { receiverName?: string; receiverEmail?: string; receiverMobile?: string; receiverUpiId?: string })[];
+    payments: (ActivationPayment & { 
+      receiverName?: string; 
+      receiverEmail?: string; 
+      receiverMobile?: string; 
+      receiverUpiId?: string;
+      receiverBankAccountHolder?: string;
+      receiverBankAccount?: string;
+      receiverIfscCode?: string;
+    })[];
   }>> {
     const cycles: Array<{
       cycleNumber: number;
       activationId: string;
       activationStatus: string;
       completedAt: Date | null;
-      payments: (ActivationPayment & { receiverName?: string; receiverEmail?: string; receiverMobile?: string; receiverUpiId?: string })[];
+      payments: (ActivationPayment & { 
+        receiverName?: string; 
+        receiverEmail?: string; 
+        receiverMobile?: string; 
+        receiverUpiId?: string;
+        receiverBankAccountHolder?: string;
+        receiverBankAccount?: string;
+        receiverIfscCode?: string;
+      })[];
     }> = [];
 
     // Get all payments for this user
@@ -1209,7 +1266,7 @@ export class DbStorage implements IStorage {
     }
 
     // Get all receiver user IDs to enrich payment data
-    const receiverUserIds = [...new Set(userPayments.map(p => p.receiverUserId).filter(Boolean))];
+    const receiverUserIds = Array.from(new Set(userPayments.map(p => p.receiverUserId).filter(Boolean)));
     const receivers = receiverUserIds.length > 0
       ? await db.select().from(users).where(sql`${users.userId} = ANY(${receiverUserIds})`)
       : [];
@@ -1221,10 +1278,13 @@ export class DbStorage implements IStorage {
         const receiver = p.receiverUserId ? receiverMap.get(p.receiverUserId) : null;
         return {
           ...p,
-          receiverName: receiver?.fullName || undefined,
+          receiverName: receiver?.name || undefined,
           receiverEmail: receiver?.email || undefined,
           receiverMobile: receiver?.mobile || undefined,
           receiverUpiId: receiver?.upiId || undefined,
+          receiverBankAccountHolder: receiver?.bankAccountHolder || undefined,
+          receiverBankAccount: receiver?.bankAccountNumber || undefined,
+          receiverIfscCode: receiver?.ifscCode || undefined,
         };
       }).sort((a, b) => a.slotIndex - b.slotIndex);
     };

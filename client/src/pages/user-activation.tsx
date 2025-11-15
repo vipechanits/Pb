@@ -29,6 +29,9 @@ interface EnrichedPayment extends ActivationPayment {
   receiverEmail?: string | null;
   receiverMobile?: string | null;
   receiverUpiId?: string | null;
+  receiverBankAccountHolder?: string | null;
+  receiverBankAccount?: string | null;
+  receiverIfscCode?: string | null;
 }
 
 interface CycleData {
@@ -56,7 +59,7 @@ export default function UserActivationPage() {
   // Fetch user's activation payments
   // Use userId (PB####) if available, otherwise use database UUID for pre-activation users
   const payerIdentifier = user?.userId ?? user?.id;
-  const { data: payments, isLoading, refetch } = useQuery<ActivationPayment[]>({
+  const { data: payments, isLoading, refetch } = useQuery<EnrichedPayment[]>({
     queryKey: ['/api/activation-payments/payer', payerIdentifier],
     enabled: !!user && !!payerIdentifier,
   });
@@ -638,6 +641,48 @@ export default function UserActivationPage() {
                                   <span className="text-muted-foreground">Amount:</span>
                                   <p className="font-medium">₹{payment.amountInr}</p>
                                 </div>
+                                {/* Receiver UPI ID */}
+                                {payment.receiverType === 'admin' && adminPaymentDetails?.upiId && (
+                                  <div>
+                                    <span className="text-muted-foreground">UPI ID:</span>
+                                    <p className="font-mono text-xs font-medium">{adminPaymentDetails.upiId}</p>
+                                  </div>
+                                )}
+                                {payment.receiverType !== 'admin' && payment.receiverUpiId && (
+                                  <div>
+                                    <span className="text-muted-foreground">UPI ID:</span>
+                                    <p className="font-mono text-xs font-medium">{payment.receiverUpiId}</p>
+                                  </div>
+                                )}
+                                {/* Receiver Bank Account */}
+                                {payment.receiverType === 'admin' && adminPaymentDetails?.bankAccount && (
+                                  <div>
+                                    <span className="text-muted-foreground">Bank Account:</span>
+                                    <p className="font-mono text-xs font-medium">
+                                      {adminPaymentDetails.bankAccount}
+                                      {adminPaymentDetails.ifscCode && ` (IFSC: ${adminPaymentDetails.ifscCode})`}
+                                    </p>
+                                    {adminPaymentDetails.bankAccountHolder && (
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        A/c Holder: {adminPaymentDetails.bankAccountHolder}
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+                                {payment.receiverType !== 'admin' && payment.receiverBankAccount && (
+                                  <div>
+                                    <span className="text-muted-foreground">Bank Account:</span>
+                                    <p className="font-mono text-xs font-medium">
+                                      {payment.receiverBankAccount}
+                                      {payment.receiverIfscCode && ` (IFSC: ${payment.receiverIfscCode})`}
+                                    </p>
+                                    {payment.receiverBankAccountHolder && (
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        A/c Holder: {payment.receiverBankAccountHolder}
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
                                 {payment.offlineUtrId && (
                                   <div>
                                     <span className="text-muted-foreground">UTR/Transaction ID:</span>
@@ -812,6 +857,48 @@ export default function UserActivationPage() {
                                   <span className="text-muted-foreground">Amount:</span>
                                   <p className="font-medium">₹{payment.amountInr}</p>
                                 </div>
+                                {/* Receiver UPI ID */}
+                                {payment.receiverType === 'admin' && adminPaymentDetails?.upiId && (
+                                  <div>
+                                    <span className="text-muted-foreground">UPI ID:</span>
+                                    <p className="font-mono text-xs font-medium">{adminPaymentDetails.upiId}</p>
+                                  </div>
+                                )}
+                                {payment.receiverType !== 'admin' && payment.receiverUpiId && (
+                                  <div>
+                                    <span className="text-muted-foreground">UPI ID:</span>
+                                    <p className="font-mono text-xs font-medium">{payment.receiverUpiId}</p>
+                                  </div>
+                                )}
+                                {/* Receiver Bank Account */}
+                                {payment.receiverType === 'admin' && adminPaymentDetails?.bankAccount && (
+                                  <div>
+                                    <span className="text-muted-foreground">Bank Account:</span>
+                                    <p className="font-mono text-xs font-medium">
+                                      {adminPaymentDetails.bankAccount}
+                                      {adminPaymentDetails.ifscCode && ` (IFSC: ${adminPaymentDetails.ifscCode})`}
+                                    </p>
+                                    {adminPaymentDetails.bankAccountHolder && (
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        A/c Holder: {adminPaymentDetails.bankAccountHolder}
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+                                {payment.receiverType !== 'admin' && payment.receiverBankAccount && (
+                                  <div>
+                                    <span className="text-muted-foreground">Bank Account:</span>
+                                    <p className="font-mono text-xs font-medium">
+                                      {payment.receiverBankAccount}
+                                      {payment.receiverIfscCode && ` (IFSC: ${payment.receiverIfscCode})`}
+                                    </p>
+                                    {payment.receiverBankAccountHolder && (
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        A/c Holder: {payment.receiverBankAccountHolder}
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
                                 {payment.offlineUtrId && (
                                   <div>
                                     <span className="text-muted-foreground">UTR/Transaction ID:</span>
