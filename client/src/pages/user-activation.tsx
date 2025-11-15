@@ -212,11 +212,23 @@ export default function UserActivationPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold">Account Activation</h1>
-        <p className="text-muted-foreground">
-          Complete 8 payments to activate your account and start earning
-        </p>
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold">Account Activation</h1>
+          <p className="text-muted-foreground">
+            Complete 8 payments to activate your account and start earning
+          </p>
+        </div>
+        <Button 
+          onClick={() => refetch()} 
+          variant="outline" 
+          size="default"
+          data-testid="button-refresh-activation"
+          disabled={isLoading}
+        >
+          <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
 
       <Alert>

@@ -227,7 +227,7 @@ export default function AdminPayments() {
                       <div className="flex gap-2">
                         <Button
                           size="sm"
-                          variant="default"
+                          className="bg-yellow-500 hover:bg-yellow-600 text-white"
                           onClick={() => handleOpenDialog(payment, 'confirm')}
                           data-testid={`button-confirm-${payment.id}`}
                         >
