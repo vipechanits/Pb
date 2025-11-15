@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
-import { Upload, AlertCircle, Copy, CheckCircle } from 'lucide-react';
+import { AlertCircle, Copy, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 
@@ -46,8 +46,7 @@ export function PaymentSubmissionDialog({
 }: PaymentSubmissionDialogProps) {
   const { toast } = useToast();
   const [utrId, setUtrId] = useState('');
-  const [proofFile, setProofFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // Fetch receiver details (user or admin)
@@ -78,62 +77,32 @@ export function PaymentSubmissionDialog({
       return;
     }
 
-    setUploading(true);
+    setSubmitting(true);
 
     try {
-      let proofUrl = '';
-
-      // Upload proof file if provided
-      if (proofFile) {
-        const response = await apiRequest('POST', '/api/objects/upload', {
-          filename: proofFile.name,
-          contentType: proofFile.type,
-        });
-        const uploadResponse = (await response.json()) as { uploadUrl: string; publicUrl: string };
-
-        // Upload file to presigned URL
-        await fetch(uploadResponse.uploadUrl, {
-          method: 'PUT',
-          body: proofFile,
-          headers: {
-            'Content-Type': proofFile.type,
-          },
-        });
-
-        // Set ACL policy to make file publicly accessible
-        // SECURITY FIX: Backend now uses authenticated userId from session
-        await apiRequest('PUT', '/api/payment-proofs', {
-          proofUrl: uploadResponse.publicUrl,
-        });
-
-        proofUrl = uploadResponse.publicUrl;
-      }
-
-      // Submit payment proof
+      // Submit payment with UTR ID only
       await apiRequest('PATCH', `/api/activation-payments/${payment.id}/submit`, {
         offlineUtrId: utrId,
-        offlineProofUrl: proofUrl || undefined,
       });
 
       toast({
         title: 'Success',
-        description: 'Payment proof submitted successfully',
+        description: 'Payment submitted successfully',
       });
 
       queryClient.invalidateQueries({ queryKey: ['/api/activation-payments'] });
       onSuccess();
       onOpenChange(false);
       setUtrId('');
-      setProofFile(null);
     } catch (error) {
       console.error('Error submitting payment:', error);
       toast({
         title: 'Error',
-        description: 'Failed to submit payment proof',
+        description: 'Failed to submit payment',
         variant: 'destructive',
       });
     } finally {
-      setUploading(false);
+      setSubmitting(false);
     }
   };
 
@@ -303,41 +272,22 @@ export function PaymentSubmissionDialog({
               Enter the UTR or transaction ID from your payment app
             </p>
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="proof">Payment Screenshot (Optional)</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                id="proof"
-                type="file"
-                accept="image/*,.pdf"
-                onChange={(e) => setProofFile(e.target.files?.[0] || null)}
-                data-testid="input-proof-file"
-              />
-              {proofFile && (
-                <Upload className="h-4 w-4 text-green-600" />
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Upload payment screenshot or PDF (max 10MB)
-            </p>
-          </div>
         </div>
 
         <DialogFooter className="flex gap-2">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
-            disabled={uploading}
+            disabled={submitting}
           >
             Cancel
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={uploading || !utrId.trim()}
+            disabled={submitting || !utrId.trim()}
             data-testid="button-submit-payment"
           >
-            {uploading ? 'Submitting...' : 'Submit Payment'}
+            {submitting ? 'Submitting...' : 'Submit Payment'}
           </Button>
         </DialogFooter>
       </DialogContent>
