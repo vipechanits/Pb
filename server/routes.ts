@@ -168,8 +168,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/signup", 
     applyRateLimit({
       keyFn: (req) => getClientIp(req),
-      limit: 20,
-      windowMs: 60 * 60 * 1000, // 20 signups per hour per IP (increased for testing)
+      limit: 100,
+      windowMs: 60 * 60 * 1000, // 100 signups per hour per IP
       name: 'Signup'
     }),
     async (req, res) => {
@@ -2504,6 +2504,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching matrix income history:", error);
       res.status(500).json({ error: "Failed to fetch matrix income history" });
+    }
+  });
+
+  // Get matrix downline users organized by level (for Matrix Income History page)
+  app.get("/api/user/matrix-downline-details", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user || !user.userId) {
+        return res.status(404).json({ error: "User not found or not activated" });
+      }
+
+      // If user is not placed in matrix yet, return empty
+      if (!user.matrixParentId && user.userId !== 'PB10000') {
+        return res.json({
+          currentCycle: user.currentCycleNumber || 1,
+          isEligibleForReentry: user.isEligibleForReentry || false,
+          reentryCount: user.reentryCount || 0,
+          levels: [],
+          totalDownlineCount: 0,
+          matrixCompleteCount: 0,
+        });
+      }
+
+      // Get all users in this user's 5-level matrix downline
+      // Use materialized path for efficient querying
+      const matrixPath = user.matrixPath || user.userId;
+      
+      const downlineUsers = await db
+        .select({
+          userId: users.userId,
+          name: users.name,
+          email: users.email,
+          mobile: users.mobile,
+          matrixLevel: users.matrixLevel,
+          matrixPath: users.matrixPath,
+          matrixPosition: users.matrixPosition,
+          isActivated: users.isActivated,
+          currentCycleNumber: users.currentCycleNumber,
+          reentryCount: users.reentryCount,
+          isEligibleForReentry: users.isEligibleForReentry,
+          createdAt: users.createdAt,
+        })
+        .from(users)
+        .where(
+          and(
+            sql`${users.matrixPath} LIKE ${matrixPath + '.%'}`,
+            sql`${users.userId} != 'PB0'`,
+            sql`${users.matrixLevel} <= ${(user.matrixLevel || 1) + 5}` // Only 5 levels deep
+          )
+        )
+        .orderBy(users.matrixPath);
+
+      // Organize users by their relative level to this user
+      const usersByLevel: Record<number, any[]> = {
+        1: [],
+        2: [],
+        3: [],
+        4: [],
+        5: [],
+      };
+
+      const currentUserLevel = user.matrixLevel || 1;
+      
+      downlineUsers.forEach(downlineUser => {
+        const relativeLevel = (downlineUser.matrixLevel || 1) - currentUserLevel;
+        if (relativeLevel > 0 && relativeLevel <= 5) {
+          usersByLevel[relativeLevel].push({
+            userId: downlineUser.userId,
+            name: downlineUser.name,
+            email: downlineUser.email,
+            mobile: downlineUser.mobile,
+            position: downlineUser.matrixPosition === 0 ? 'Left' : 'Right',
+            matrixPath: downlineUser.matrixPath,
+            isActivated: downlineUser.isActivated,
+            currentCycleNumber: downlineUser.currentCycleNumber,
+            reentryCount: downlineUser.reentryCount,
+            isEligibleForReentry: downlineUser.isEligibleForReentry,
+            joinedAt: downlineUser.createdAt,
+          });
+        }
+      });
+
+      // Calculate matrix completion stats
+      const totalDownlineCount = downlineUsers.filter(u => u.isActivated).length;
+      const matrixCompleteCount = 62; // 2+4+8+16+32 = 62 total positions
+      const currentFilled = totalDownlineCount;
+      const isMatrixComplete = currentFilled >= matrixCompleteCount;
+
+      res.json({
+        currentCycle: user.currentCycleNumber || 1,
+        isEligibleForReentry: user.isEligibleForReentry || false,
+        reentryCount: user.reentryCount || 0,
+        levels: [
+          { level: 1, users: usersByLevel[1], maxCapacity: 2, currentCount: usersByLevel[1].length },
+          { level: 2, users: usersByLevel[2], maxCapacity: 4, currentCount: usersByLevel[2].length },
+          { level: 3, users: usersByLevel[3], maxCapacity: 8, currentCount: usersByLevel[3].length },
+          { level: 4, users: usersByLevel[4], maxCapacity: 16, currentCount: usersByLevel[4].length },
+          { level: 5, users: usersByLevel[5], maxCapacity: 32, currentCount: usersByLevel[5].length },
+        ],
+        totalDownlineCount: currentFilled,
+        matrixCompleteCount,
+        isMatrixComplete,
+      });
+    } catch (error) {
+      console.error("Error fetching matrix downline details:", error);
+      res.status(500).json({ error: "Failed to fetch matrix downline details" });
     }
   });
 
