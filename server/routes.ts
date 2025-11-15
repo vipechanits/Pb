@@ -2438,14 +2438,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "New password must be at least 8 characters long" });
       }
       
-      // Get current admin user
-      const user = await storage.getUserById(req.session.userId as string);
+      // Get current admin user by internal database ID (stored in session)
+      // req.session.userId is the numeric database ID (users.id column)
+      const user = await storage.getUserById(String(req.session.userId));
       if (!user) {
+        console.error(`[ADMIN] User not found for session ID: ${req.session.userId}`);
         return res.status(404).json({ error: "User not found" });
       }
       
       // Verify user is actually admin
       if (user.role !== 'admin') {
+        console.warn(`[ADMIN] Non-admin user ${user.userId} attempted to use admin password change`);
         return res.status(403).json({ error: "Only administrators can use this endpoint" });
       }
       
@@ -2459,11 +2462,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Hash new password
       const hashedPassword = await hashPassword(newPassword);
       
-      // Update password
+      // Update password using string userId (e.g., "PB0")
+      // updateUserPassword expects the string userId, not the numeric id
       await storage.updateUserPassword(user.userId!, hashedPassword);
       
       // Invalidate all other sessions for security
-      await invalidateOtherSessions(user.id.toString(), req.session.id);
+      await invalidateOtherSessions(String(user.id), req.session.id);
       
       console.log(`[ADMIN] Password changed successfully for ${user.userId}`);
       
@@ -2473,9 +2477,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("[ADMIN] Password change failed:", error);
+      console.error("[ADMIN] Error stack:", error?.stack);
+      // Return generic error message to client, details logged server-side
       res.status(500).json({ 
-        error: "Failed to change password", 
-        details: error.message 
+        error: "Failed to change password" 
       });
     }
   });
