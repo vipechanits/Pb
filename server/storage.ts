@@ -1563,10 +1563,41 @@ export class DbStorage implements IStorage {
             throw new Error(`User ${payerUserIdOrDbId} missing PB#### ID - signup may have failed`);
           }
           
-          // DEFENSIVE: Check if user already has matrix placement (race condition guard)
-          if (activatedUser.matrixParentId && activatedUser.matrixPath) {
-            console.log(`[ACTIVATION] User ${activatedUser.userId} already placed in matrix at ${activatedUser.matrixPath} - activation already completed by another transaction`);
+          // DEFENSIVE: Check if BOTH user AND activation are fully completed (race condition guard)
+          // Partial activations must continue to completion even if some steps already done
+          // CRITICAL: Must check lockedActivation.status (not just user.isActivated) to handle all partial states
+          if (activatedUser.isActivated && lockedActivation.status === 'completed') {
+            console.log(`[ACTIVATION] User ${activatedUser.userId} already fully activated (user.isActivated=true AND activation.status='completed') - skipping duplicate run`);
             return; // Exit gracefully - another transaction already completed this
+          }
+          
+          // RECOVERY MODE: Detect partial activation from historical bug
+          const hasMatrixPlacement = !!(activatedUser.matrixParentId && activatedUser.matrixPath);
+          const hasBinaryLeg = !!activatedUser.binaryLeg;
+          const isPartialActivation = hasMatrixPlacement && !activatedUser.isActivated;
+          if (isPartialActivation) {
+            console.log(`[ACTIVATION-RECOVERY] User ${activatedUser.userId} has matrix placement (${activatedUser.matrixPath}) but isActivated=false - recovering from partial activation`);
+          }
+          
+          // EDGE CASE RECOVERY: Activation marked 'completed' but user.isActivated still false
+          // This inconsistency can occur from historical bugs - resync user flag and exit
+          if (lockedActivation.status === 'completed' && !activatedUser.isActivated) {
+            const now = new Date();
+            console.warn(`[ACTIVATION-RECOVERY] INCONSISTENCY DETECTED: Activation ${activationId} status='completed' but user ${activatedUser.userId} isActivated=false - resyncing user flag`);
+            
+            // Resync user isActivated flag to match activation.status='completed'
+            // Preserve existing binary leg and matrix placement
+            await tx.update(users)
+              .set({ 
+                isActivated: true,
+                activatedAt: now,
+                requiresPostActivationProfileUpdate: true,
+                updatedAt: now
+              })
+              .where(eq(users.userId, payerUserIdOrDbId));
+            
+            console.log(`[ACTIVATION-RECOVERY] User ${activatedUser.userId} isActivated flag resynced to true - activation already marked completed`);
+            return; // Exit after resyncing - activation already processed
           }
           
           const now = new Date();
@@ -1574,11 +1605,14 @@ export class DbStorage implements IStorage {
           console.log(`[ACTIVATION] Activating user ${activatedUser.userId}...`);
           
           // Determine binary leg placement (tree placement happens at activation)
-          let assignedBinaryLeg = activatedUser.binaryLeg; // May be pre-specified from signup
+          // RECOVERY-SAFE: If binary leg already assigned (partial activation), preserve it
+          let assignedBinaryLeg = activatedUser.binaryLeg; // May be pre-specified from signup OR from prior partial run
           if (activatedUser.sponsorId && !assignedBinaryLeg) {
-            // Auto-assign to the leg with fewer members
+            // Auto-assign to the leg with fewer members (only when not already set)
             assignedBinaryLeg = await this.determineBestLeg(activatedUser.sponsorId);
             console.log(`[ACTIVATION] Auto-assigned ${activatedUser.userId} to ${assignedBinaryLeg} leg under sponsor ${activatedUser.sponsorId}`);
+          } else if (hasBinaryLeg) {
+            console.log(`[ACTIVATION-RECOVERY] Binary leg already assigned: ${assignedBinaryLeg} - preserving existing assignment`);
           }
           
           console.log(`[ACTIVATION] Binary placement: Sponsor=${activatedUser.sponsorId}, Leg=${assignedBinaryLeg}`);
