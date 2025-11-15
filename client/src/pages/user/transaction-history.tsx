@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, AlertCircle, DollarSign, TrendingUp, Calendar, FileText, Download } from 'lucide-react';
+import { Loader2, AlertCircle, DollarSign, TrendingUp, Calendar, FileText, Download, User } from 'lucide-react';
 import { format } from 'date-fns';
 import { useState } from 'react';
 
@@ -255,6 +255,14 @@ export default function TransactionHistoryPage() {
                         {format(new Date(tx.createdAt), 'PPp')}
                       </span>
                     </div>
+                    {tx.sourceUserId && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <User className="w-3 h-3" />
+                        <span data-testid={`text-source-user-${tx.id}`}>
+                          From: {tx.sourceUserId}
+                        </span>
+                      </div>
+                    )}
                     {tx.notes && (
                       <p className="text-sm text-muted-foreground mt-1">{tx.notes}</p>
                     )}
