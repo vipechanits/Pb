@@ -87,12 +87,28 @@ export interface IStorage {
   getActivationPayment(id: string): Promise<ActivationPayment | undefined>;
   getActivationPaymentsByActivationId(activationId: string): Promise<ActivationPayment[]>;
   getActivationPaymentsByPayerUserId(payerUserId: string): Promise<ActivationPayment[]>;
+  getActivationPaymentsByCycle(userId: string): Promise<Array<{
+    cycleNumber: number;
+    activationId: string;
+    activationStatus: string;
+    completedAt: Date | null;
+    payments: ActivationPayment[];
+  }>>;
   getActivationPaymentsByReceiverUserId(receiverUserId: string): Promise<ActivationPayment[]>;
   getActivationPaymentsPendingConfirmation(receiverUserId: string): Promise<ActivationPayment[]>;
   getAdminPendingConfirmations(adminUserId: string): Promise<ActivationPayment[]>;
   getAllPendingConfirmationsCount(): Promise<number>;
   getAllConfirmedPayments(): Promise<ActivationPayment[]>;
-  getConfirmedPaymentsWithDetails(): Promise<Array<ActivationPayment & { payerName: string | null, receiverName: string | null }>>;
+  getConfirmedPaymentsWithDetails(): Promise<Array<ActivationPayment & { 
+    payerName: string | null,
+    payerEmail: string | null,
+    payerMobile: string | null,
+    payerUpiId: string | null,
+    receiverName: string | null,
+    receiverEmail: string | null,
+    receiverMobile: string | null,
+    receiverUpiId: string | null
+  }>>;
   submitPaymentProof(id: string, utrId: string, proofUrl?: string): Promise<ActivationPayment | undefined>;
   confirmActivationPayment(id: string, notes?: string): Promise<ActivationPayment | undefined>;
   rejectActivationPayment(id: string, rejectionReason: string): Promise<ActivationPayment | undefined>;
@@ -1162,6 +1178,167 @@ export class DbStorage implements IStorage {
     return db.select().from(activationPayments).where(eq(activationPayments.payerUserId, payerUserId));
   }
 
+  async getActivationPaymentsByCycle(userId: string): Promise<Array<{
+    cycleNumber: number;
+    activationId: string;
+    activationStatus: string;
+    completedAt: Date | null;
+    payments: (ActivationPayment & { receiverName?: string; receiverEmail?: string; receiverMobile?: string; receiverUpiId?: string })[];
+  }>> {
+    const cycles: Array<{
+      cycleNumber: number;
+      activationId: string;
+      activationStatus: string;
+      completedAt: Date | null;
+      payments: (ActivationPayment & { receiverName?: string; receiverEmail?: string; receiverMobile?: string; receiverUpiId?: string })[];
+    }> = [];
+
+    // Get all payments for this user
+    const userPayments = await db.select()
+      .from(activationPayments)
+      .where(eq(activationPayments.payerUserId, userId))
+      .orderBy(activationPayments.createdAt);
+
+    // Group payments by activationId
+    const paymentsByActivation = new Map<string, ActivationPayment[]>();
+    for (const payment of userPayments) {
+      if (!paymentsByActivation.has(payment.activationId)) {
+        paymentsByActivation.set(payment.activationId, []);
+      }
+      paymentsByActivation.get(payment.activationId)!.push(payment);
+    }
+
+    // Get all receiver user IDs to enrich payment data
+    const receiverUserIds = [...new Set(userPayments.map(p => p.receiverUserId).filter(Boolean))];
+    const receivers = receiverUserIds.length > 0
+      ? await db.select().from(users).where(sql`${users.userId} = ANY(${receiverUserIds})`)
+      : [];
+    const receiverMap = new Map(receivers.map(u => [u.userId, u]));
+
+    // Helper to enrich payments with receiver metadata
+    const enrichPayments = (payments: ActivationPayment[]) => {
+      return payments.map(p => {
+        const receiver = p.receiverUserId ? receiverMap.get(p.receiverUserId) : null;
+        return {
+          ...p,
+          receiverName: receiver?.fullName || undefined,
+          receiverEmail: receiver?.email || undefined,
+          receiverMobile: receiver?.mobile || undefined,
+          receiverUpiId: receiver?.upiId || undefined,
+        };
+      }).sort((a, b) => a.slotIndex - b.slotIndex);
+    };
+
+    // Find first activation (Cycle 1)
+    if (paymentsByActivation.size > 0) {
+      const activationIds = Array.from(paymentsByActivation.keys());
+      const allActivations = await db.select()
+        .from(activations)
+        .where(sql`${activations.id} = ANY(${activationIds})`);
+      
+      // Find earliest activation
+      let firstActivation = allActivations[0];
+      for (const activation of allActivations) {
+        if (activation.createdAt < firstActivation.createdAt) {
+          firstActivation = activation;
+        }
+      }
+
+      if (firstActivation) {
+        const payments = paymentsByActivation.get(firstActivation.id) || [];
+        cycles.push({
+          cycleNumber: 1,
+          activationId: firstActivation.id,
+          activationStatus: firstActivation.status,
+          completedAt: firstActivation.completedAt,
+          payments: enrichPayments(payments),
+        });
+      }
+    } else {
+      // No payments yet - add pending Cycle 1
+      cycles.push({
+        cycleNumber: 1,
+        activationId: 'PENDING',
+        activationStatus: 'pending',
+        completedAt: null,
+        payments: [],
+      });
+    }
+
+    // Get re-entry activations (Cycle 2+)
+    const userReentries = await db.select()
+      .from(reentries)
+      .where(eq(reentries.userId, userId))
+      .orderBy(reentries.cycleNumber);
+    
+    for (const reentry of userReentries) {
+      if (reentry.newActivationId) {
+        // Verify activation exists and belongs to this user via payments
+        if (paymentsByActivation.has(reentry.newActivationId)) {
+          const activation = await db.select()
+            .from(activations)
+            .where(eq(activations.id, reentry.newActivationId))
+            .limit(1);
+          
+          if (activation.length > 0) {
+            // Double-check: ensure at least one payment from this activation belongs to user
+            const payments = paymentsByActivation.get(reentry.newActivationId) || [];
+            const userOwnsActivation = payments.some(p => p.payerUserId === userId);
+            
+            if (userOwnsActivation) {
+              cycles.push({
+                cycleNumber: reentry.cycleNumber,
+                activationId: activation[0].id,
+                activationStatus: activation[0].status,
+                completedAt: activation[0].completedAt,
+                payments: enrichPayments(payments),
+              });
+            } else {
+              // Activation exists but doesn't belong to user - mark as pending
+              cycles.push({
+                cycleNumber: reentry.cycleNumber,
+                activationId: 'PENDING',
+                activationStatus: 'pending',
+                completedAt: null,
+                payments: [],
+              });
+            }
+          } else {
+            // Activation ID exists but activation not found - mark as pending
+            cycles.push({
+              cycleNumber: reentry.cycleNumber,
+              activationId: 'PENDING',
+              activationStatus: 'pending',
+              completedAt: null,
+              payments: [],
+            });
+          }
+        } else {
+          // newActivationId exists but no payments yet - mark as pending
+          cycles.push({
+            cycleNumber: reentry.cycleNumber,
+            activationId: 'PENDING',
+            activationStatus: 'pending',
+            completedAt: null,
+            payments: [],
+          });
+        }
+      } else {
+        // Re-entry exists but no activation created yet
+        cycles.push({
+          cycleNumber: reentry.cycleNumber,
+          activationId: 'PENDING',
+          activationStatus: 'pending',
+          completedAt: null,
+          payments: [],
+        });
+      }
+    }
+
+    // Ensure cycles are sorted by cycle number
+    return cycles.sort((a, b) => a.cycleNumber - b.cycleNumber);
+  }
+
   async getActivationPaymentsByReceiverUserId(receiverUserId: string): Promise<ActivationPayment[]> {
     return db.select().from(activationPayments).where(eq(activationPayments.receiverUserId, receiverUserId));
   }
@@ -1205,17 +1382,29 @@ export class DbStorage implements IStorage {
   }
 
   async getConfirmedPaymentsWithDetails(): Promise<Array<ActivationPayment & { 
-    payerName: string | null, 
-    receiverName: string | null 
+    payerName: string | null,
+    payerEmail: string | null,
+    payerMobile: string | null,
+    payerUpiId: string | null,
+    receiverName: string | null,
+    receiverEmail: string | null,
+    receiverMobile: string | null,
+    receiverUpiId: string | null
   }>> {
-    // Get all confirmed payments with payer and receiver details for admin report
+    // Get all confirmed payments with comprehensive payer and receiver details for admin report
     const payer = alias(users, 'payer');
     const receiver = alias(users, 'receiver');
     
     const results = await db.select({
       payment: activationPayments,
       payerName: payer.name,
+      payerEmail: payer.email,
+      payerMobile: payer.mobile,
+      payerUpiId: payer.upiId,
       receiverName: receiver.name,
+      receiverEmail: receiver.email,
+      receiverMobile: receiver.mobile,
+      receiverUpiId: receiver.upiId,
     })
     .from(activationPayments)
     .leftJoin(payer, eq(activationPayments.payerUserId, payer.userId))
@@ -1227,7 +1416,13 @@ export class DbStorage implements IStorage {
     return results.map(r => ({
       ...r.payment,
       payerName: r.payerName,
+      payerEmail: r.payerEmail,
+      payerMobile: r.payerMobile,
+      payerUpiId: r.payerUpiId,
       receiverName: r.receiverName,
+      receiverEmail: r.receiverEmail,
+      receiverMobile: r.receiverMobile,
+      receiverUpiId: r.receiverUpiId,
     }));
   }
 

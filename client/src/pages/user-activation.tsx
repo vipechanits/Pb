@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, Circle, Clock, Info, AlertCircle, RefreshCw, Copy, CheckCircle2, UserCheck, ArrowLeft, ArrowRight } from 'lucide-react';
+import { CheckCircle, Circle, Clock, Info, AlertCircle, RefreshCw, Copy, CheckCircle2, UserCheck, ArrowLeft, ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { PaymentSubmissionDialog } from '@/components/payment-submission-dialog';
@@ -30,6 +30,7 @@ export default function UserActivationPage() {
   const [selectedPayment, setSelectedPayment] = useState<ActivationPayment | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [expandedPayments, setExpandedPayments] = useState<Set<string>>(new Set());
 
   // Fetch user's activation payments
   // Use userId (PB####) if available, otherwise use database UUID for pre-activation users
@@ -147,6 +148,27 @@ export default function UserActivationPage() {
   const handlePayClick = (payment: ActivationPayment) => {
     setSelectedPayment(payment);
     setDialogOpen(true);
+  };
+
+  const togglePaymentDetails = (paymentId: string) => {
+    setExpandedPayments(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(paymentId)) {
+        newSet.delete(paymentId);
+      } else {
+        newSet.add(paymentId);
+      }
+      return newSet;
+    });
+  };
+
+  const formatDate = (date: Date | string | null | undefined) => {
+    if (!date) return 'N/A';
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    return dateObj.toLocaleString('en-IN', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
   };
 
   const hasPayments = payments && payments.length > 0;
@@ -484,53 +506,163 @@ export default function UserActivationPage() {
                 {/* First 3 payments (always visible) */}
                 {payments
                   .filter(p => p.slotIndex < 3)
-                  .map((payment) => (
-                    <div
-                      key={payment.id}
-                      className="flex items-center justify-between p-4 border rounded-lg hover-elevate"
-                      data-testid={`payment-slot-${payment.slotIndex}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        {getStatusIcon(payment.status)}
-                        <div>
-                          <p className="font-medium">{getPaymentSlotLabel(payment.slotIndex)}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {payment.receiverType === 'admin' ? 'Admin Account (PB0)' : payment.receiverUserId}
-                          </p>
-                          {payment.status === 'submitted' && payment.offlineUtrId && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              UTR: {payment.offlineUtrId}
-                            </p>
-                          )}
-                          {payment.status === 'rejected' && payment.rejectionReason && (
-                            <p className="text-xs text-red-600 mt-1">
-                              Reason: {payment.rejectionReason}
-                            </p>
-                          )}
+                  .map((payment) => {
+                    const isExpanded = expandedPayments.has(payment.id);
+                    return (
+                      <div
+                        key={payment.id}
+                        className="border rounded-lg"
+                        data-testid={`payment-slot-${payment.slotIndex}`}
+                      >
+                        <div className="flex items-center justify-between p-4 hover-elevate cursor-pointer" onClick={() => togglePaymentDetails(payment.id)}>
+                          <div className="flex items-center gap-3">
+                            {getStatusIcon(payment.status)}
+                            <div>
+                              <p className="font-medium">{getPaymentSlotLabel(payment.slotIndex)}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {payment.receiverType === 'admin' ? 'Admin Account (PB0)' : payment.receiverUserId}
+                              </p>
+                              {payment.status === 'submitted' && payment.offlineUtrId && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  UTR: {payment.offlineUtrId}
+                                </p>
+                              )}
+                              {payment.status === 'rejected' && payment.rejectionReason && (
+                                <p className="text-xs text-red-600 mt-1">
+                                  Reason: {payment.rejectionReason}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="text-right">
+                              <p className="font-bold">₹{payment.amountInr}</p>
+                              {getStatusBadge(payment.status, payment.slotIndex)}
+                              {payment.submissionCount > 0 && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Attempts: {payment.submissionCount}
+                                </p>
+                              )}
+                            </div>
+                            {(payment.status === 'pending' || payment.status === 'rejected') && (
+                              <Button
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePayClick(payment);
+                                }}
+                                data-testid={`button-pay-${payment.slotIndex}`}
+                              >
+                                {payment.status === 'rejected' ? 'Resubmit' : 'Pay Now'}
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="flex-shrink-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                togglePaymentDetails(payment.id);
+                              }}
+                              data-testid={`button-toggle-details-${payment.slotIndex}`}
+                            >
+                              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <p className="font-bold">₹{payment.amountInr}</p>
-                          {getStatusBadge(payment.status, payment.slotIndex)}
-                          {payment.submissionCount > 0 && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Attempts: {payment.submissionCount}
-                            </p>
-                          )}
-                        </div>
-                        {(payment.status === 'pending' || payment.status === 'rejected') && (
-                          <Button
-                            size="sm"
-                            onClick={() => handlePayClick(payment)}
-                            data-testid={`button-pay-${payment.slotIndex}`}
-                          >
-                            {payment.status === 'rejected' ? 'Resubmit' : 'Pay Now'}
-                          </Button>
+
+                        {/* Expandable Payment Details */}
+                        {isExpanded && (payment.status === 'submitted' || payment.status === 'confirmed' || payment.status === 'rejected') && (
+                          <div className="border-t bg-muted/30 p-4 space-y-4">
+                            <h4 className="font-semibold text-sm">Payment Details</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                              {/* Payment Information */}
+                              <div className="space-y-2">
+                                <div>
+                                  <span className="text-muted-foreground">Payment To:</span>
+                                  <p className="font-medium">{payment.receiverType === 'admin' ? 'Admin Account (PB0)' : payment.receiverUserId}</p>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Amount:</span>
+                                  <p className="font-medium">₹{payment.amountInr}</p>
+                                </div>
+                                {payment.offlineUtrId && (
+                                  <div>
+                                    <span className="text-muted-foreground">UTR/Transaction ID:</span>
+                                    <p className="font-mono text-xs font-medium">{payment.offlineUtrId}</p>
+                                  </div>
+                                )}
+                                {payment.submissionCount > 0 && (
+                                  <div>
+                                    <span className="text-muted-foreground">Submission Count:</span>
+                                    <p className="font-medium">{payment.submissionCount}</p>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Timeline */}
+                              <div className="space-y-2">
+                                <div>
+                                  <span className="text-muted-foreground">Created:</span>
+                                  <p className="text-xs">{formatDate(payment.createdAt)}</p>
+                                </div>
+                                {payment.confirmedAt && (
+                                  <div>
+                                    <span className="text-muted-foreground">Confirmed:</span>
+                                    <p className="text-xs text-green-600 font-medium">{formatDate(payment.confirmedAt)}</p>
+                                  </div>
+                                )}
+                                {payment.rejectedAt && (
+                                  <div>
+                                    <span className="text-muted-foreground">Rejected:</span>
+                                    <p className="text-xs text-red-600 font-medium">{formatDate(payment.rejectedAt)}</p>
+                                  </div>
+                                )}
+                                {payment.updatedAt && (
+                                  <div>
+                                    <span className="text-muted-foreground">Last Updated:</span>
+                                    <p className="text-xs">{formatDate(payment.updatedAt)}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Additional Information */}
+                            {(payment.rejectionReason || payment.notes || payment.offlineProofUrl) && (
+                              <div className="space-y-2 pt-2 border-t">
+                                {payment.rejectionReason && (
+                                  <div>
+                                    <span className="text-muted-foreground text-sm">Rejection Reason:</span>
+                                    <p className="text-sm text-red-600 mt-1">{payment.rejectionReason}</p>
+                                  </div>
+                                )}
+                                {payment.notes && (
+                                  <div>
+                                    <span className="text-muted-foreground text-sm">Notes:</span>
+                                    <p className="text-sm mt-1">{payment.notes}</p>
+                                  </div>
+                                )}
+                                {payment.offlineProofUrl && (
+                                  <div>
+                                    <span className="text-muted-foreground text-sm">Payment Proof:</span>
+                                    <a 
+                                      href={payment.offlineProofUrl} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      className="text-sm text-primary hover:underline block mt-1"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      View Proof
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 
                 {/* Matrix payments notice (shown when first 3 not all confirmed) */}
                 {!firstThreeConfirmed && (
@@ -548,53 +680,163 @@ export default function UserActivationPage() {
                 {/* Matrix payments (slots 3-7, shown only after first 3 confirmed) */}
                 {firstThreeConfirmed && payments
                   .filter(p => p.slotIndex >= 3)
-                  .map((payment) => (
-                    <div
-                      key={payment.id}
-                      className="flex items-center justify-between p-4 border rounded-lg hover-elevate"
-                      data-testid={`payment-slot-${payment.slotIndex}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        {getStatusIcon(payment.status)}
-                        <div>
-                          <p className="font-medium">{getPaymentSlotLabel(payment.slotIndex)}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {payment.receiverType === 'admin' ? 'Admin Account (PB0)' : payment.receiverUserId || 'Assigning...'}
-                          </p>
-                          {payment.status === 'submitted' && payment.offlineUtrId && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              UTR: {payment.offlineUtrId}
-                            </p>
-                          )}
-                          {payment.status === 'rejected' && payment.rejectionReason && (
-                            <p className="text-xs text-red-600 mt-1">
-                              Reason: {payment.rejectionReason}
-                            </p>
-                          )}
+                  .map((payment) => {
+                    const isExpanded = expandedPayments.has(payment.id);
+                    return (
+                      <div
+                        key={payment.id}
+                        className="border rounded-lg"
+                        data-testid={`payment-slot-${payment.slotIndex}`}
+                      >
+                        <div className="flex items-center justify-between p-4 hover-elevate cursor-pointer" onClick={() => togglePaymentDetails(payment.id)}>
+                          <div className="flex items-center gap-3">
+                            {getStatusIcon(payment.status)}
+                            <div>
+                              <p className="font-medium">{getPaymentSlotLabel(payment.slotIndex)}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {payment.receiverType === 'admin' ? 'Admin Account (PB0)' : payment.receiverUserId || 'Assigning...'}
+                              </p>
+                              {payment.status === 'submitted' && payment.offlineUtrId && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  UTR: {payment.offlineUtrId}
+                                </p>
+                              )}
+                              {payment.status === 'rejected' && payment.rejectionReason && (
+                                <p className="text-xs text-red-600 mt-1">
+                                  Reason: {payment.rejectionReason}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="text-right">
+                              <p className="font-bold">₹{payment.amountInr}</p>
+                              {getStatusBadge(payment.status, payment.slotIndex)}
+                              {payment.submissionCount > 0 && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Attempts: {payment.submissionCount}
+                                </p>
+                              )}
+                            </div>
+                            {(payment.status === 'pending' || payment.status === 'rejected') && (
+                              <Button
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePayClick(payment);
+                                }}
+                                data-testid={`button-pay-${payment.slotIndex}`}
+                              >
+                                {payment.status === 'rejected' ? 'Resubmit' : 'Pay Now'}
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="flex-shrink-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                togglePaymentDetails(payment.id);
+                              }}
+                              data-testid={`button-toggle-details-${payment.slotIndex}`}
+                            >
+                              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <p className="font-bold">₹{payment.amountInr}</p>
-                          {getStatusBadge(payment.status, payment.slotIndex)}
-                          {payment.submissionCount > 0 && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Attempts: {payment.submissionCount}
-                            </p>
-                          )}
-                        </div>
-                        {(payment.status === 'pending' || payment.status === 'rejected') && (
-                          <Button
-                            size="sm"
-                            onClick={() => handlePayClick(payment)}
-                            data-testid={`button-pay-${payment.slotIndex}`}
-                          >
-                            {payment.status === 'rejected' ? 'Resubmit' : 'Pay Now'}
-                          </Button>
+
+                        {/* Expandable Payment Details */}
+                        {isExpanded && (payment.status === 'submitted' || payment.status === 'confirmed' || payment.status === 'rejected') && (
+                          <div className="border-t bg-muted/30 p-4 space-y-4">
+                            <h4 className="font-semibold text-sm">Payment Details</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                              {/* Payment Information */}
+                              <div className="space-y-2">
+                                <div>
+                                  <span className="text-muted-foreground">Payment To:</span>
+                                  <p className="font-medium">{payment.receiverType === 'admin' ? 'Admin Account (PB0)' : payment.receiverUserId || 'Assigning...'}</p>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Amount:</span>
+                                  <p className="font-medium">₹{payment.amountInr}</p>
+                                </div>
+                                {payment.offlineUtrId && (
+                                  <div>
+                                    <span className="text-muted-foreground">UTR/Transaction ID:</span>
+                                    <p className="font-mono text-xs font-medium">{payment.offlineUtrId}</p>
+                                  </div>
+                                )}
+                                {payment.submissionCount > 0 && (
+                                  <div>
+                                    <span className="text-muted-foreground">Submission Count:</span>
+                                    <p className="font-medium">{payment.submissionCount}</p>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Timeline */}
+                              <div className="space-y-2">
+                                <div>
+                                  <span className="text-muted-foreground">Created:</span>
+                                  <p className="text-xs">{formatDate(payment.createdAt)}</p>
+                                </div>
+                                {payment.confirmedAt && (
+                                  <div>
+                                    <span className="text-muted-foreground">Confirmed:</span>
+                                    <p className="text-xs text-green-600 font-medium">{formatDate(payment.confirmedAt)}</p>
+                                  </div>
+                                )}
+                                {payment.rejectedAt && (
+                                  <div>
+                                    <span className="text-muted-foreground">Rejected:</span>
+                                    <p className="text-xs text-red-600 font-medium">{formatDate(payment.rejectedAt)}</p>
+                                  </div>
+                                )}
+                                {payment.updatedAt && (
+                                  <div>
+                                    <span className="text-muted-foreground">Last Updated:</span>
+                                    <p className="text-xs">{formatDate(payment.updatedAt)}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Additional Information */}
+                            {(payment.rejectionReason || payment.notes || payment.offlineProofUrl) && (
+                              <div className="space-y-2 pt-2 border-t">
+                                {payment.rejectionReason && (
+                                  <div>
+                                    <span className="text-muted-foreground text-sm">Rejection Reason:</span>
+                                    <p className="text-sm text-red-600 mt-1">{payment.rejectionReason}</p>
+                                  </div>
+                                )}
+                                {payment.notes && (
+                                  <div>
+                                    <span className="text-muted-foreground text-sm">Notes:</span>
+                                    <p className="text-sm mt-1">{payment.notes}</p>
+                                  </div>
+                                )}
+                                {payment.offlineProofUrl && (
+                                  <div>
+                                    <span className="text-muted-foreground text-sm">Payment Proof:</span>
+                                    <a 
+                                      href={payment.offlineProofUrl} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      className="text-sm text-primary hover:underline block mt-1"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      View Proof
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
               </>
             ) : (
               <div className="text-center py-8">

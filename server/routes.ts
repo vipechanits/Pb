@@ -7,7 +7,7 @@ import { hashPassword, verifyPassword, serializeUser } from "./auth";
 import { generateUserPaymentQR } from "./qrcode-generator";
 import { z } from "zod";
 import { db } from "./db";
-import { eq, desc, sql, count } from "drizzle-orm";
+import { eq, desc, sql, count, or, and } from "drizzle-orm";
 import crypto from "crypto";
 import { sendVerificationEmail, sendPasswordResetEmail, sendPasswordChangedEmail } from "./lib/email";
 import { IncomeService } from "./income-service";
@@ -1494,6 +1494,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get payment archive by cycle - only for logged-in user's own payments
+  app.get("/api/activation-payments/archive/:userId", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Users can only view their own archive, admins can view any
+      if (user.userId !== req.params.userId && user.role !== 'admin') {
+        return res.status(403).json({ error: "Forbidden - You can only view your own payment archive" });
+      }
+
+      const cycles = await storage.getActivationPaymentsByCycle(req.params.userId);
+      res.json(cycles);
+    } catch (error: any) {
+      console.error('[API] Error fetching payment archive:', error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Get payments by payer user ID - only for logged-in user's own payments
   app.get("/api/activation-payments/payer/:userId", requireAuth, async (req, res) => {
     try {
@@ -1798,6 +1819,139 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching confirmed payments:", error);
       res.status(500).json({ error: "Failed to fetch confirmed payments" });
+    }
+  });
+
+  // Admin: Get all users with comprehensive filtering
+  app.get("/api/admin/users", requireAdmin, async (req, res) => {
+    try {
+      const {
+        search,
+        activationStatus,
+        role,
+        binaryLeg,
+        sponsorId,
+        matrixLevel,
+        reentryEligible,
+        binaryQualified,
+      } = req.query;
+
+      // Start with all users
+      let query = db.select().from(users).$dynamic();
+
+      // Apply filters
+      const conditions = [];
+
+      // Search filter (userId, email, name, mobile)
+      if (search && typeof search === 'string') {
+        const searchTerm = search.toLowerCase();
+        conditions.push(
+          or(
+            sql`LOWER(${users.userId}) LIKE ${`%${searchTerm}%`}`,
+            sql`LOWER(${users.email}) LIKE ${`%${searchTerm}%`}`,
+            sql`LOWER(${users.name}) LIKE ${`%${searchTerm}%`}`,
+            sql`LOWER(${users.mobile}) LIKE ${`%${searchTerm}%`}`
+          )!
+        );
+      }
+
+      // Activation status filter
+      if (activationStatus === 'activated') {
+        conditions.push(eq(users.isActivated, true));
+      } else if (activationStatus === 'pending') {
+        conditions.push(eq(users.isActivated, false));
+      }
+
+      // Role filter
+      if (role === 'admin' || role === 'user') {
+        conditions.push(eq(users.role, role));
+      }
+
+      // Binary leg filter (sponsor requested leg)
+      if (binaryLeg === 'left' || binaryLeg === 'right') {
+        conditions.push(eq(users.sponsorRequestedLeg, binaryLeg));
+      }
+
+      // Sponsor ID filter
+      if (sponsorId && typeof sponsorId === 'string') {
+        conditions.push(eq(users.sponsorId, sponsorId.toUpperCase()));
+      }
+
+      // Matrix level filter
+      if (matrixLevel && typeof matrixLevel === 'string') {
+        if (matrixLevel === '6') {
+          // Level 6+ means level >= 6
+          conditions.push(sql`${users.matrixLevel} >= 6`);
+        } else {
+          const level = parseInt(matrixLevel);
+          if (!isNaN(level)) {
+            conditions.push(eq(users.matrixLevel, level));
+          }
+        }
+      }
+
+      // Re-entry eligibility filter
+      if (reentryEligible === 'true') {
+        conditions.push(eq(users.isEligibleForReentry, true));
+      } else if (reentryEligible === 'false') {
+        conditions.push(eq(users.isEligibleForReentry, false));
+      }
+
+      // Binary qualified filter
+      if (binaryQualified === 'true') {
+        conditions.push(eq(users.binaryQualified, true));
+      } else if (binaryQualified === 'false') {
+        conditions.push(eq(users.binaryQualified, false));
+      }
+
+      // Apply all conditions
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions));
+      }
+
+      // Order by creation date (newest first)
+      const allUsers = await query.orderBy(desc(users.createdAt));
+
+      // Remove sensitive data
+      const sanitizedUsers = allUsers.map(user => ({
+        id: user.id,
+        userId: user.userId,
+        email: user.email,
+        role: user.role,
+        name: user.name,
+        mobile: user.mobile,
+        upiId: user.upiId,
+        sponsorId: user.sponsorId,
+        sponsorRequestedLeg: user.sponsorRequestedLeg,
+        binaryParentId: user.binaryParentId,
+        binaryPlacementLeg: user.binaryPlacementLeg,
+        leftLegCount: user.leftLegCount,
+        rightLegCount: user.rightLegCount,
+        personalLeftCount: user.personalLeftCount,
+        personalRightCount: user.personalRightCount,
+        totalReferrals: user.totalReferrals,
+        binaryQualified: user.binaryQualified,
+        binaryMatchedPairs: user.binaryMatchedPairs,
+        matrixParentId: user.matrixParentId,
+        matrixPosition: user.matrixPosition,
+        matrixLevel: user.matrixLevel,
+        matrixPath: user.matrixPath,
+        isProfileComplete: user.isProfileComplete,
+        isActivated: user.isActivated,
+        activatedAt: user.activatedAt,
+        reentryCount: user.reentryCount,
+        currentCycleNumber: user.currentCycleNumber,
+        isEligibleForReentry: user.isEligibleForReentry,
+        lastReentryAt: user.lastReentryAt,
+        emailVerified: user.emailVerified,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      }));
+
+      res.json(sanitizedUsers);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ error: "Failed to fetch users" });
     }
   });
 

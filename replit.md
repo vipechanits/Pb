@@ -4,6 +4,10 @@
 PAYBACK247 is a peer-to-peer income platform for network marketing, featuring binary pairing income, multi-level matrix rewards, and a manual payment tracking system with administrator approval. It allows users to activate accounts, build referral networks, monitor earnings, and manage profiles. Administrators can manage system configurations, approve payments, and access analytics for efficient operation and financial transparency.
 
 ## Recent Changes
+- **Payment Archive Feature**: Complete cycle-wise payment history display showing all activations (first + re-entries) with enriched receiver metadata (name, email, mobile, UPI ID), expandable payment details, proper ownership validation, and graceful pending cycle handling
+- **Expandable Payment Details in User Activation Page**: Users can now click to expand each payment card to see comprehensive details including receiver information, UTR/Transaction ID, submission count, payment timeline (created, confirmed, rejected dates), rejection reasons, admin notes, and payment proof links
+- **Enhanced Confirmed Payments Report**: Comprehensive payment details with advanced filtering (search, slot type, receiver type), slot breakdown statistics, and full payer/receiver information including email, mobile, UPI ID
+- **Admin User Management Page**: Advanced filtering by activation status, role, binary leg, sponsor, matrix level, re-entry eligibility, and binary qualification
 - **Global matrix unlimited growth enabled**: Removed level 5 cap, matrix now grows infinitely while maintaining individual 5-level (62 user) downline income limit per user
 - **Automatic re-entry detection**: System automatically detects when users complete their 62-user matrix cycle and marks them eligible for re-entry
 - **Re-entry page fully implemented**: Users can view their matrix completion status, cycle history, and initiate re-entry when eligible
@@ -81,7 +85,7 @@ Preferred communication style: Simple, everyday language.
 - **Legacy Income Cleanup**: Activation completion automatically detects and removes any prematurely created sponsor income records, then recreates them correctly with proper summary adjustments.
 
 ### Key Application Pages
-- **User Pages**: Dashboard, Activation, Confirmation, Binary Tree, Global Matrix, Profile, Re-entry, Unified Income Details, Binary Match Queue History, Binary Pair Matching History, Matrix Income History, Direct Sponsoring.
+- **User Pages**: Dashboard, Activation, Confirmation, Payment Archive, Binary Tree, Global Matrix, Profile, Re-entry, Unified Income Details, Binary Match Queue History, Binary Pair Matching History, Matrix Income History, Direct Sponsoring.
 - **Admin Pages**: Admin Dashboard, Payment Confirmations, Payments Report, System Configuration, User Management, Database Backup/Restore.
 
 ## External Dependencies
