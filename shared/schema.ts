@@ -214,6 +214,30 @@ export const insertActivationSchema = createInsertSchema(activations).omit({
 export type InsertActivation = z.infer<typeof insertActivationSchema>;
 export type Activation = typeof activations.$inferSelect;
 
+// Activation-scoped matrix positions (one position per activation/cycle)
+export const activationMatrixPositions = pgTable("activation_matrix_positions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  activationId: varchar("activation_id", { length: 100 }).notNull().unique(), // One matrix position per activation
+  matrixParentActivationId: varchar("matrix_parent_activation_id", { length: 100 }), // Parent activation in matrix (null for root)
+  matrixPosition: integer("matrix_position"), // 0 = left, 1 = right (null for root)
+  matrixLevel: integer("matrix_level").notNull(), // Level in global matrix: 1, 2, 3, ... (unlimited)
+  matrixPath: text("matrix_path").notNull().unique(), // Materialized path (e.g., "act123.L.R") for efficient querying
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  // Ensure each position (parent + side) is unique
+  uniquePosition: unique("activation_matrix_unique_position").on(table.matrixParentActivationId, table.matrixPosition),
+}));
+
+export const insertActivationMatrixPositionSchema = createInsertSchema(activationMatrixPositions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertActivationMatrixPosition = z.infer<typeof insertActivationMatrixPositionSchema>;
+export type ActivationMatrixPosition = typeof activationMatrixPositions.$inferSelect;
+
 export const activationPayments = pgTable("activation_payments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   activationId: varchar("activation_id", { length: 100 }).notNull(),

@@ -70,41 +70,43 @@ export function DashboardIncomeCards({
   ];
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-2xl font-bold">Income Summary</h2>
-        <p className="text-sm text-muted-foreground">
+    <Card data-testid="card-income-summary">
+      <CardHeader>
+        <CardTitle className="text-2xl font-bold">Income Summary</CardTitle>
+        <CardDescription>
           Click on any card to view detailed income breakdown
-        </p>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {incomeCards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <Link key={card.title} href={card.link}>
-              <Card 
-                className={`hover-elevate active-elevate-2 cursor-pointer transition-all border-2 ${card.borderColor} ${card.bgColor}`}
-                data-testid={`card-income-${card.title.toLowerCase().replace(/\s+/g, '-')}`}
-              >
-                <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    {card.title}
-                  </CardTitle>
-                  <Icon className={`w-4 h-4 ${card.color}`} />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold" data-testid={`text-income-${card.title.toLowerCase().replace(/\s+/g, '-')}`}>
-                    {card.value}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {card.description}
-                  </p>
-                </CardContent>
-              </Card>
-            </Link>
-          );
-        })}
-      </div>
-    </div>
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {incomeCards.map((card) => {
+            const Icon = card.icon;
+            return (
+              <Link key={card.title} href={card.link}>
+                <Card 
+                  className={`hover-elevate active-elevate-2 cursor-pointer transition-all border-2 ${card.borderColor} ${card.bgColor}`}
+                  data-testid={`card-income-${card.title.toLowerCase().replace(/\s+/g, '-')}`}
+                >
+                  <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      {card.title}
+                    </CardTitle>
+                    <Icon className={`w-4 h-4 ${card.color}`} />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold" data-testid={`text-income-${card.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                      {card.value}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {card.description}
+                    </p>
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

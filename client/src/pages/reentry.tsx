@@ -324,51 +324,42 @@ export default function ReentryPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {status?.currentReentry && status.currentReentry.status === 'in_progress' && (
+          {status?.currentReentry && status.currentReentry.status === 'in_progress' ? (
             <Alert>
               <Clock className="h-4 w-4" />
               <AlertDescription>
                 Cycle {status.currentReentry.cycleNumber} re-entry is in progress. 
-                Please complete your activation payments before initiating a new re-entry.
+                Please complete your activation payments in the Activation page. The "Initiate Re-entry" button will reappear once you complete the next matrix cycle (62 users).
               </AlertDescription>
             </Alert>
+          ) : (
+            <>
+              <Button 
+                disabled={!status?.isEligibleForReentry || initiateMutation.isPending}
+                onClick={handleInitiateReentry}
+                className="w-full"
+                data-testid="button-initiate-reentry"
+              >
+                {initiateMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Initiating...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    {status?.isEligibleForReentry ? 'Initiate Re-entry' : 'Re-entry Not Available'}
+                  </>
+                )}
+              </Button>
+              <p className="text-xs text-muted-foreground text-center mt-2">
+                {status?.isEligibleForReentry 
+                  ? `Re-entry fee: ${formatINR(config.totalActivationCost)}`
+                  : 'Complete your current matrix cycle (62 users) to enable re-entry'
+                }
+              </p>
+            </>
           )}
-          
-          <Button 
-            disabled={
-              !status?.isEligibleForReentry || 
-              initiateMutation.isPending || 
-              (status?.currentReentry && status.currentReentry.status === 'in_progress')
-            }
-            onClick={handleInitiateReentry}
-            className="w-full"
-            data-testid="button-initiate-reentry"
-          >
-            {initiateMutation.isPending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Initiating...
-              </>
-            ) : (status?.currentReentry && status.currentReentry.status === 'in_progress') ? (
-              <>
-                <XCircle className="mr-2 h-4 w-4" />
-                Re-entry In Progress
-              </>
-            ) : (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                {status?.isEligibleForReentry ? 'Initiate Re-entry' : 'Re-entry Not Available'}
-              </>
-            )}
-          </Button>
-          <p className="text-xs text-muted-foreground text-center mt-2">
-            {status?.currentReentry && status.currentReentry.status === 'in_progress'
-              ? 'Complete your current cycle payments in the Activation page'
-              : status?.isEligibleForReentry 
-                ? `Re-entry fee: ${formatINR(config.totalActivationCost)}`
-                : 'Complete your current matrix cycle to enable re-entry'
-            }
-          </p>
         </CardContent>
       </Card>
     </div>

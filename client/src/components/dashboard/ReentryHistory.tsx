@@ -3,11 +3,11 @@ import { Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface ReentryCycle {
-  id: number;
+  id: string;
   cycleNumber: number;
   status: string;
-  completedAt?: string;
-  initiatedAt?: string;
+  completedAt?: string | null;
+  initiatedAt?: string | null;
 }
 
 interface ReentryHistoryProps {

@@ -1095,9 +1095,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get user's activation list (for cycle tabs)
+  app.get("/api/users/:userId/activations", requireAuth, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const requestingUser = await storage.getUserById(req.session.userId!);
+      
+      if (requestingUser?.userId !== userId && requestingUser?.role !== 'admin') {
+        return res.status(403).json({ error: "Forbidden - You can only view your own activations" });
+      }
+      
+      const activations = await storage.getUserActivationsList(userId);
+      res.json(activations);
+    } catch (error) {
+      console.error("Error fetching user activations:", error);
+      res.status(500).json({ error: "Failed to fetch user activations" });
+    }
+  });
+
   app.get("/api/users/:userId/global-matrix", requireAuth, async (req, res) => {
     try {
       const { userId } = req.params;
+      const { activationId } = req.query; // Optional activation ID for cycle-specific view
       const requestingUser = await storage.getUserById(req.session.userId!);
       
       if (requestingUser?.userId !== userId && requestingUser?.role !== 'admin') {
@@ -1109,19 +1128,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "User not found" });
       }
       
-      console.log(`[GLOBAL-MATRIX] Fetching matrix for ${userId}`);
-      console.log(`[GLOBAL-MATRIX] Root user data:`, JSON.stringify({
-        userId: rootUser.userId,
-        matrixLevel: rootUser.matrixLevel,
-        matrixPath: rootUser.matrixPath,
-        matrixPosition: rootUser.matrixPosition
-      }, null, 2));
-      
-      const tree = await storage.getMatrixSubtree(userId, 5);
-      
-      console.log(`[GLOBAL-MATRIX] Tree result:`, JSON.stringify(tree, null, 2));
-      
-      res.json(tree);
+      // Activation-scoped matrix (new): Show matrix for specific activation/cycle
+      if (activationId && typeof activationId === 'string') {
+        console.log(`[ACTIVATION-MATRIX] Fetching matrix for activation ${activationId} (user ${userId})`);
+        
+        // Verify this activation belongs to this user
+        const activation = await storage.getActivation(activationId);
+        if (!activation || activation.payerWallet !== rootUser.id) {
+          return res.status(403).json({ error: "Forbidden - This activation does not belong to you" });
+        }
+        
+        const tree = await storage.getActivationMatrixSubtree(activationId, 5);
+        console.log(`[ACTIVATION-MATRIX] Tree result for activation ${activationId}:`, JSON.stringify(tree, null, 2));
+        
+        res.json(tree);
+      } else {
+        // Legacy user-scoped matrix (fallback for backward compatibility)
+        console.log(`[GLOBAL-MATRIX] Fetching legacy user-scoped matrix for ${userId}`);
+        console.log(`[GLOBAL-MATRIX] Root user data:`, JSON.stringify({
+          userId: rootUser.userId,
+          matrixLevel: rootUser.matrixLevel,
+          matrixPath: rootUser.matrixPath,
+          matrixPosition: rootUser.matrixPosition
+        }, null, 2));
+        
+        const tree = await storage.getMatrixSubtree(userId, 5);
+        console.log(`[GLOBAL-MATRIX] Tree result:`, JSON.stringify(tree, null, 2));
+        
+        res.json(tree);
+      }
     } catch (error) {
       console.error("Error fetching global matrix:", error);
       res.status(500).json({ error: "Failed to fetch global matrix" });

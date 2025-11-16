@@ -425,15 +425,16 @@ export default function UserActivationPage() {
         </Tabs>
       )}
 
+      {/* Payment Content Section - Shows for active cycle only */}
       <div className="space-y-6">
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertDescription>
-              <strong>Activation Fee: ₹{totalAmount.toLocaleString()}</strong>
-              <br />
-              Complete 8 payments to designated members below. Payment amounts vary by slot type. All payments are direct peer-to-peer transfers using Google Pay, Paytm, or PhonePe.
-            </AlertDescription>
-          </Alert>
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Activation Fee: ₹{totalAmount.toLocaleString()}</strong>
+            <br />
+            Complete 8 payments to designated members below. Payment amounts vary by slot type. All payments are direct peer-to-peer transfers using Google Pay, Paytm, or PhonePe.
+          </AlertDescription>
+        </Alert>
 
       {/* Sponsor Information */}
       {user?.sponsorId && (
@@ -666,15 +667,15 @@ export default function UserActivationPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Payment Checklist</CardTitle>
-          <CardDescription>Complete all 8 payments to activate your account</CardDescription>
+          <CardTitle>Payment Checklist - Cycle {currentCycle?.cycleNumber || 1}</CardTitle>
+          <CardDescription>Complete all 8 payments for this cycle to activate</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {payments && payments.length > 0 ? (
+            {cyclePayments && cyclePayments.length > 0 ? (
               <>
                 {/* First 3 payments (always visible) */}
-                {payments
+                {cyclePayments
                   .filter(p => p.slotIndex < 3)
                   .map((payment) => {
                     const isExpanded = expandedPayments.has(payment.id);
@@ -890,7 +891,7 @@ export default function UserActivationPage() {
                 )}
 
                 {/* Matrix payments (slots 3-7, shown only after first 3 confirmed) */}
-                {firstThreeConfirmed && payments
+                {firstThreeConfirmed && cyclePayments
                   .filter(p => p.slotIndex >= 3)
                   .map((payment) => {
                     const isExpanded = expandedPayments.has(payment.id);

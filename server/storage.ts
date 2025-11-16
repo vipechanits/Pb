@@ -55,9 +55,23 @@ export interface IStorage {
   // Binary match queue methods
   releaseAbandonedQueueReservations(hoursOld?: number): Promise<number>;
   
-  // Global matrix methods
+  // Global matrix methods (legacy - user-scoped)
   findAndAssignMatrixSlot(userId: string): Promise<User | undefined>;
   getMatrixSubtree(userId: string, maxDepth: number): Promise<MatrixNode | null>;
+  
+  // Activation-scoped matrix methods (new)
+  findAndAssignActivationMatrixSlot(activationId: string, tx?: any): Promise<void>;
+  getActivationMatrixSubtree(activationId: string, maxDepth: number): Promise<MatrixNode | null>;
+  getActivationMatrixAncestors(activationId: string, maxDepth: number, tx?: any): Promise<Array<{activationId: string; payerUserId: string}>>;
+  getUserActivationsList(userId: string): Promise<Array<{
+    activationId: string;
+    cycleNumber: number;
+    status: string;
+    matrixLevel: number | null;
+    matrixPath: string | null;
+    createdAt: Date;
+    completedAt: Date | null;
+  }>>;
   
   // Income methods
   getUserIncomeSummary(userId: string): Promise<any>;
@@ -1012,6 +1026,360 @@ export class DbStorage implements IStorage {
     });
 
     return nodeMap.get(userId) || null;
+  }
+
+  // Activation-scoped matrix methods (new)
+  async findAndAssignActivationMatrixSlot(activationId: string, tx?: any): Promise<void> {
+    const executeInTx = async (txContext: any) => {
+      // Import the new schema
+      const { activationMatrixPositions } = await import('@shared/schema');
+      
+      // Check if this activation already has a matrix position
+      const existingPosition = await txContext
+        .select()
+        .from(activationMatrixPositions)
+        .where(eq(activationMatrixPositions.activationId, activationId))
+        .limit(1);
+
+      if (existingPosition.length > 0) {
+        console.log(`[ACTIVATION-MATRIX] Activation ${activationId} already has matrix position`);
+        return;
+      }
+
+      // Find the next available slot using breadth-first search
+      // Start from level 1 and search for first available position
+      let currentLevel = 1;
+      const maxSearchLevels = 100; // Safety limit
+      
+      while (currentLevel <= maxSearchLevels) {
+        // Get all positions at this level
+        const levelPositions = await txContext
+          .select()
+          .from(activationMatrixPositions)
+          .where(eq(activationMatrixPositions.matrixLevel, currentLevel))
+          .orderBy(asc(activationMatrixPositions.createdAt));
+
+        // If this is level 1 and empty, this is the root
+        if (currentLevel === 1 && levelPositions.length === 0) {
+          await txContext.insert(activationMatrixPositions).values({
+            activationId: activationId,
+            matrixParentActivationId: null,
+            matrixPosition: null,
+            matrixLevel: 1,
+            matrixPath: activationId, // Root path is just the activation ID
+          });
+          console.log(`[ACTIVATION-MATRIX] Assigned ${activationId} as matrix root (level 1)`);
+          return;
+        }
+
+        // Check each position at this level for available children
+        for (const position of levelPositions) {
+          // Check left child (position 0)
+          const leftChild = await txContext
+            .select()
+            .from(activationMatrixPositions)
+            .where(
+              and(
+                eq(activationMatrixPositions.matrixParentActivationId, position.activationId),
+                eq(activationMatrixPositions.matrixPosition, 0)
+              )
+            )
+            .limit(1);
+
+          if (leftChild.length === 0) {
+            // Left slot available!
+            const newPath = `${position.matrixPath}.L`;
+            await txContext.insert(activationMatrixPositions).values({
+              activationId: activationId,
+              matrixParentActivationId: position.activationId,
+              matrixPosition: 0,
+              matrixLevel: currentLevel + 1,
+              matrixPath: newPath,
+            });
+            console.log(`[ACTIVATION-MATRIX] Assigned ${activationId} to left of ${position.activationId} at level ${currentLevel + 1}`);
+            return;
+          }
+
+          // Check right child (position 1)
+          const rightChild = await txContext
+            .select()
+            .from(activationMatrixPositions)
+            .where(
+              and(
+                eq(activationMatrixPositions.matrixParentActivationId, position.activationId),
+                eq(activationMatrixPositions.matrixPosition, 1)
+              )
+            )
+            .limit(1);
+
+          if (rightChild.length === 0) {
+            // Right slot available!
+            const newPath = `${position.matrixPath}.R`;
+            await txContext.insert(activationMatrixPositions).values({
+              activationId: activationId,
+              matrixParentActivationId: position.activationId,
+              matrixPosition: 1,
+              matrixLevel: currentLevel + 1,
+              matrixPath: newPath,
+            });
+            console.log(`[ACTIVATION-MATRIX] Assigned ${activationId} to right of ${position.activationId} at level ${currentLevel + 1}`);
+            return;
+          }
+        }
+
+        // No slots at this level, move to next
+        currentLevel++;
+      }
+
+      throw new Error('Matrix placement failed - reached maximum search depth');
+    };
+
+    if (tx) {
+      return await executeInTx(tx);
+    } else {
+      return await db.transaction(executeInTx);
+    }
+  }
+
+  async getActivationMatrixSubtree(activationId: string, maxDepth: number): Promise<MatrixNode | null> {
+    const { activationMatrixPositions, activations } = await import('@shared/schema');
+    
+    // Get the root position for this activation
+    const rootPosition = await db
+      .select()
+      .from(activationMatrixPositions)
+      .where(eq(activationMatrixPositions.activationId, activationId))
+      .limit(1);
+
+    if (rootPosition.length === 0) {
+      console.log(`[ACTIVATION-MATRIX] Activation ${activationId} has no matrix position`);
+      return null;
+    }
+
+    const root = rootPosition[0];
+    
+    interface ActivationMatrixTreeRow {
+      activation_id: string;
+      payer_wallet: string;
+      user_id: string | null;
+      name: string | null;
+      email: string | null;
+      is_activated: boolean;
+      matrix_level: number;
+      matrix_position: number | null;
+      matrix_path: string;
+      matrix_parent_activation_id: string | null;
+      depth: number;
+    }
+
+    // Recursively fetch subtree
+    const maxLevel = root.matrixLevel + maxDepth;
+    const rows = await db.execute(sql`
+      WITH RECURSIVE matrix_tree AS (
+        SELECT 
+          amp.activation_id,
+          a.payer_wallet,
+          u.user_id,
+          u.name,
+          u.email,
+          u.is_activated,
+          amp.matrix_level,
+          amp.matrix_position,
+          amp.matrix_path,
+          amp.matrix_parent_activation_id,
+          0 as depth
+        FROM activation_matrix_positions amp
+        INNER JOIN activations a ON amp.activation_id = a.id
+        LEFT JOIN users u ON a.payer_wallet = u.id
+        WHERE amp.activation_id = ${activationId}
+        
+        UNION ALL
+        
+        SELECT 
+          amp.activation_id,
+          a.payer_wallet,
+          u.user_id,
+          u.name,
+          u.email,
+          u.is_activated,
+          amp.matrix_level,
+          amp.matrix_position,
+          amp.matrix_path,
+          amp.matrix_parent_activation_id,
+          mt.depth + 1
+        FROM activation_matrix_positions amp
+        INNER JOIN activations a ON amp.activation_id = a.id
+        LEFT JOIN users u ON a.payer_wallet = u.id
+        INNER JOIN matrix_tree mt ON amp.matrix_parent_activation_id = mt.activation_id
+        WHERE amp.matrix_level <= ${maxLevel}
+          AND mt.depth < ${maxDepth}
+      )
+      SELECT * FROM matrix_tree;
+    `);
+
+    if (rows.rows.length === 0) {
+      return null;
+    }
+
+    const typedRows = rows.rows as unknown as ActivationMatrixTreeRow[];
+    const nodeMap = new Map<string, any>();
+    
+    typedRows.forEach((row) => {
+      nodeMap.set(row.activation_id, {
+        userId: row.user_id || row.payer_wallet, // Use PB#### if available, else UUID
+        name: row.name,
+        email: row.email || 'Unknown',
+        isActivated: row.is_activated,
+        matrixLevel: row.matrix_level,
+        matrixPosition: row.matrix_position,
+        matrixPath: row.matrix_path,
+        leftChild: null,
+        rightChild: null,
+      });
+    });
+
+    // Build tree structure
+    nodeMap.forEach((node, activationId) => {
+      const row = typedRows.find((r) => r.activation_id === activationId);
+      if (row && row.matrix_parent_activation_id) {
+        const parent = nodeMap.get(row.matrix_parent_activation_id);
+        if (parent) {
+          if (row.matrix_position === 0) {
+            parent.leftChild = node;
+          } else {
+            parent.rightChild = node;
+          }
+        }
+      }
+    });
+
+    return nodeMap.get(activationId) || null;
+  }
+
+  async getUserActivationsList(userId: string): Promise<Array<{
+    activationId: string;
+    cycleNumber: number;
+    status: string;
+    matrixLevel: number | null;
+    matrixPath: string | null;
+    createdAt: Date;
+    completedAt: Date | null;
+  }>> {
+    const { activations, activationMatrixPositions, reentries } = await import('@shared/schema');
+    
+    // Get user's database ID
+    const user = await this.getUserByUserId(userId);
+    if (!user) {
+      return [];
+    }
+
+    // Get all activations for this user
+    const userActivations = await db
+      .select({
+        activationId: activations.id,
+        status: activations.status,
+        createdAt: activations.createdAt,
+        completedAt: activations.completedAt,
+        reentryId: reentries.id,
+        cycleNumber: reentries.cycleNumber,
+      })
+      .from(activations)
+      .leftJoin(reentries, eq(reentries.newActivationId, activations.id))
+      .where(eq(activations.payerWallet, user.id))
+      .orderBy(asc(activations.createdAt));
+
+    // Enrich with matrix position data
+    const result = await Promise.all(
+      userActivations.map(async (activation) => {
+        const matrixPosition = await db
+          .select()
+          .from(activationMatrixPositions)
+          .where(eq(activationMatrixPositions.activationId, activation.activationId))
+          .limit(1);
+
+        return {
+          activationId: activation.activationId,
+          cycleNumber: activation.cycleNumber || 1, // First activation is Cycle 1
+          status: activation.status,
+          matrixLevel: matrixPosition[0]?.matrixLevel || null,
+          matrixPath: matrixPosition[0]?.matrixPath || null,
+          createdAt: activation.createdAt,
+          completedAt: activation.completedAt,
+        };
+      })
+    );
+
+    return result;
+  }
+
+  async getActivationMatrixAncestors(activationId: string, maxDepth: number, tx?: any): Promise<Array<{activationId: string; payerUserId: string}>> {
+    const executeInTx = async (txContext: any) => {
+      const { activationMatrixPositions, activations } = await import('@shared/schema');
+      
+      // Get the current activation's matrix position
+      const currentPosition = await txContext
+        .select()
+        .from(activationMatrixPositions)
+        .where(eq(activationMatrixPositions.activationId, activationId))
+        .limit(1);
+
+      if (currentPosition.length === 0 || !currentPosition[0].matrixPath) {
+        console.log(`[ACTIVATION-MATRIX] Activation ${activationId} has no matrix position yet`);
+        return [];
+      }
+
+      const position = currentPosition[0];
+      
+      // Walk up the matrix tree to find ancestors
+      const ancestors: Array<{activationId: string; payerUserId: string}> = [];
+      let currentParentId = position.matrixParentActivationId;
+      let level = 0;
+
+      while (currentParentId && level < maxDepth) {
+        // Get parent activation position
+        const parentPosition = await txContext
+          .select({
+            activationId: activationMatrixPositions.activationId,
+            matrixParentActivationId: activationMatrixPositions.matrixParentActivationId,
+            payerWallet: activations.payerWallet,
+          })
+          .from(activationMatrixPositions)
+          .innerJoin(activations, eq(activations.id, activationMatrixPositions.activationId))
+          .where(eq(activationMatrixPositions.activationId, currentParentId))
+          .limit(1);
+
+        if (parentPosition.length === 0) {
+          break; // No more ancestors
+        }
+
+        const parent = parentPosition[0];
+        
+        // Get user's PB#### ID from the activation's payer_wallet (which is users.id UUID)
+        const userRecord = await txContext
+          .select({ userId: users.userId })
+          .from(users)
+          .where(eq(users.id, parent.payerWallet))
+          .limit(1);
+
+        if (userRecord.length > 0 && userRecord[0].userId) {
+          ancestors.push({
+            activationId: parent.activationId,
+            payerUserId: userRecord[0].userId, // PB#### format
+          });
+        }
+
+        currentParentId = parent.matrixParentActivationId;
+        level++;
+      }
+
+      return ancestors;
+    };
+
+    if (tx) {
+      return await executeInTx(tx);
+    } else {
+      return await db.transaction(executeInTx);
+    }
   }
 
   // System configuration methods
@@ -2054,70 +2422,45 @@ export class DbStorage implements IStorage {
           
           console.log(`[ACTIVATION] User ${activatedUser.userId} activated with binary leg: ${assignedBinaryLeg}`);
           
-          // Assign user to next available global matrix slot
+          // ACTIVATION-SCOPED MATRIX: Assign this activation to next available matrix slot
+          // Each activation gets a unique matrix position, enabling multi-cycle re-entry
           // This happens atomically within the activation transaction
-          // If matrix is full or placement fails, entire activation rolls back
-          console.log(`[MATRIX] Placing ${activatedUser.userId} in global matrix...`);
-          const placedUser = await this.findAndAssignMatrixSlot(activatedUser.userId, tx);
+          console.log(`[ACTIVATION-MATRIX] Placing activation ${activationId} (user ${activatedUser.userId}) in global matrix...`);
+          await this.findAndAssignActivationMatrixSlot(activationId, tx);
           
-          // CRITICAL: Verify matrix placement succeeded before continuing
-          // Matrix root (level 1) has no parent - this is expected and valid
-          const isMatrixRoot = placedUser?.matrixLevel === 1;
-          const hasValidParent = isMatrixRoot ? true : !!placedUser?.matrixParentId;
+          // Verify activation matrix placement succeeded
+          const { activationMatrixPositions } = await import('@shared/schema');
+          const matrixPosition = await tx.select()
+            .from(activationMatrixPositions)
+            .where(eq(activationMatrixPositions.activationId, activationId))
+            .limit(1);
           
-          if (!placedUser || !hasValidParent || !placedUser.matrixLevel || !placedUser.matrixPath) {
+          if (matrixPosition.length === 0 || !matrixPosition[0].matrixLevel || !matrixPosition[0].matrixPath) {
             // Matrix placement failed - mark activation as failed before rolling back
-            // This allows us to track and potentially retry failed activations
             await tx.update(activations)
               .set({ 
                 status: 'failed',
                 completedAt: now,
-                notes: 'Matrix placement failed - matrix may be saturated or placement logic error'
+                notes: 'Activation-scoped matrix placement failed - placement logic error'
               })
               .where(eq(activations.id, activationId));
             
-            // Log critical error for manual investigation
-            console.error(`[ACTIVATION] CRITICAL: Matrix placement failed for ${activatedUser.userId} - activation marked as FAILED`);
-            console.error(`[ACTIVATION] Admin must investigate: ${activationId}`);
-            
-            throw new Error(`Matrix placement failed for user ${activatedUser.userId} - activation marked as FAILED for manual investigation`);
+            console.error(`[ACTIVATION-MATRIX] CRITICAL: Matrix placement failed for activation ${activationId} - activation marked as FAILED`);
+            throw new Error(`Matrix placement failed for activation ${activationId} - activation marked as FAILED for manual investigation`);
           }
           
-          console.log(`[MATRIX] ✓ User ${activatedUser.userId} successfully placed in matrix at ${placedUser.matrixPath} (Level ${placedUser.matrixLevel})`);
+          const placedPosition = matrixPosition[0];
+          console.log(`[ACTIVATION-MATRIX] ✓ Activation ${activationId} placed in matrix at ${placedPosition.matrixPath} (Level ${placedPosition.matrixLevel})`);
           
-          // Get matrix ancestors (up to 5 levels) for payment routing
-          const matrixAncestors = await this.getMatrixAncestors(activatedUser.userId, 5, tx);
-          console.log(`[MATRIX] Found ${matrixAncestors.length} matrix ancestors for ${activatedUser.userId}:`, matrixAncestors);
+          // Get activation matrix ancestors (up to 5 levels) for payment routing
+          const matrixAncestorActivations = await this.getActivationMatrixAncestors(activationId, 5, tx);
+          console.log(`[ACTIVATION-MATRIX] Found ${matrixAncestorActivations.length} ancestor activations for ${activationId}:`, matrixAncestorActivations.map(a => a.activationId));
           
           // AUTO-DETECT MATRIX COMPLETION: Check if any upline ancestors just completed their 62-user matrix
-          // This happens automatically when a new user activates and fills the 62nd position
-          console.log(`[REENTRY] Checking matrix completion for upline ancestors...`);
-          for (const ancestorId of matrixAncestors) {
-            try {
-              const { ReentryService } = await import('./reentry-service');
-              const reentryService = new ReentryService(tx as any);
-              
-              // Check if this ancestor's matrix is now complete (62 downline members)
-              const isComplete = await reentryService.checkMatrixCompletion(ancestorId);
-              
-              if (isComplete) {
-                // Check if they're already marked as eligible
-                const ancestor = await tx.select()
-                  .from(users)
-                  .where(eq(users.userId, ancestorId))
-                  .limit(1);
-                
-                if (ancestor.length > 0 && !ancestor[0].isEligibleForReentry) {
-                  console.log(`[REENTRY] 🎉 ${ancestorId} has completed their matrix (62 users)! Marking eligible for re-entry...`);
-                  await reentryService.markEligibleForReentry(ancestorId);
-                  console.log(`[REENTRY] ✓ ${ancestorId} is now eligible for re-entry`);
-                }
-              }
-            } catch (error) {
-              console.error(`[REENTRY] Error checking matrix completion for ${ancestorId}:`, error);
-              // Continue processing - don't fail activation if re-entry check fails
-            }
-          }
+          // NOTE: Re-entry eligibility is now per-activation, not per-user. Matrix completion is checked
+          // against the activation's matrix downline (each cycle has separate 62-user requirement).
+          // For now, we skip this auto-detection and rely on manual re-entry page checks.
+          console.log(`[REENTRY] Skipping auto-completion check (now activation-scoped, handled on re-entry page)`);
           
           // STAGED RECEIVER ASSIGNMENT: Assign matrix payment receivers and change status from 'awaiting_assignment' to 'pending'
           // This prevents users from seeing/paying wrong receivers before matrix placement completes
@@ -2126,7 +2469,7 @@ export class DbStorage implements IStorage {
           const matrixUplines: Record<string, string> = {};
           for (let level = 1; level <= 5; level++) {
             const ancestorIndex = level - 1;
-            const receiverUserId = ancestorIndex < matrixAncestors.length ? matrixAncestors[ancestorIndex] : 'PB0';
+            const receiverUserId = ancestorIndex < matrixAncestorActivations.length ? matrixAncestorActivations[ancestorIndex].payerUserId : 'PB0';
             const slotIndex = level + 2; // Slot 3 = level 1, Slot 4 = level 2, etc.
             
             // Update payment receiver AND change status from 'awaiting_assignment' to 'pending'

@@ -7,21 +7,27 @@ import { Link } from 'wouter';
 import { ReentryHistory } from './ReentryHistory';
 
 interface ReentryStatus {
-  currentReentry?: {
+  currentReentry: {
+    id: string;
+    userId: string;
     cycleNumber: number;
     status: string;
-    activationId?: number;
-  };
+    initiatedAt: string | null;
+    completedAt: string | null;
+    activationId: string | null;
+  } | null;
   isMatrixComplete: boolean;
   isEligibleForReentry: boolean;
 }
 
 interface ReentryCycle {
-  id: number;
+  id: string;
+  userId: string;
   cycleNumber: number;
   status: string;
-  completedAt?: string;
-  initiatedAt?: string;
+  completedAt?: string | null;
+  initiatedAt?: string | null;
+  activationId?: string | null;
 }
 
 interface DashboardReentryProps {

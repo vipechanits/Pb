@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/lib/auth-context';
 import { Network, CheckCircle, XCircle, AlertCircle, Loader2, TrendingUp, Users, Layers } from 'lucide-react';
 
@@ -187,11 +189,50 @@ function MatrixFillingStatus() {
   );
 }
 
+interface UserActivation {
+  activationId: string;
+  cycleNumber: number;
+  status: string;
+  matrixLevel: number | null;
+  matrixPath: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
 export default function UserGlobalMatrixPage() {
   const { user } = useAuth();
-
+  const [selectedActivationId, setSelectedActivationId] = useState<string | undefined>();
+  
+  // Fetch user's activations list (for cycle tabs)
+  const { data: activations, isLoading: isLoadingActivations } = useQuery<UserActivation[]>({
+    queryKey: ['/api/users', user?.userId, 'activations'],
+    enabled: !!user?.userId,
+  });
+  
+  // Auto-select first activation when loaded (using useEffect to avoid render-phase mutation)
+  useEffect(() => {
+    if (activations && activations.length > 0 && !selectedActivationId) {
+      setSelectedActivationId(activations[0].activationId);
+    }
+  }, [activations, selectedActivationId]);
+  
+  // Fetch matrix tree for selected activation
   const { data: matrix, isLoading, error } = useQuery<MatrixNode>({
-    queryKey: ['/api/users', user?.userId, 'global-matrix'],
+    queryKey: selectedActivationId 
+      ? ['/api/users', user?.userId, 'global-matrix', selectedActivationId]
+      : ['/api/users', user?.userId, 'global-matrix'],
+    queryFn: async () => {
+      const baseUrl = `/api/users/${user?.userId}/global-matrix`;
+      const url = selectedActivationId 
+        ? `${baseUrl}?activationId=${selectedActivationId}`
+        : baseUrl;
+      
+      const res = await fetch(url, { credentials: 'include' });
+      if (!res.ok) {
+        throw new Error('Failed to load global matrix');
+      }
+      return await res.json();
+    },
     enabled: !!user?.userId,
   });
 
@@ -307,27 +348,83 @@ export default function UserGlobalMatrixPage() {
         <Network className="h-4 w-4" />
         <AlertDescription>
           <strong>Global Matrix System:</strong> All activated users are placed in an unlimited global 2×∞ matrix (2 positions per level, infinite levels).
-          Placement is automatic and follows breadth-first order, independent of your binary sponsorship tree. You earn from your 5-level downline (62 members max) regardless of matrix depth.
+          Placement is automatic and follows breadth-first order, independent of your binary sponsorship tree. Each re-entry cycle creates a separate matrix position, allowing unlimited matrix participation.
         </AlertDescription>
       </Alert>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Your Matrix Position</CardTitle>
-          <CardDescription>Visual representation of your matrix team (up to 5 levels deep)</CardDescription>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <div className="flex justify-center min-w-max p-6">
-            {matrix ? (
-              <MatrixNodeComponent node={matrix} position="root" depth={0} />
-            ) : (
-              <div className="text-center text-muted-foreground py-12">
-                <p>No matrix data available. Activate your account to be placed in the global matrix.</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      {activations && activations.length > 0 ? (
+        <Tabs value={selectedActivationId} onValueChange={setSelectedActivationId} className="w-full">
+          <TabsList className="grid w-full" style={{ gridTemplateColumns: `repeat(${activations.length}, minmax(0, 1fr))` }}>
+            {activations.map((activation) => (
+              <TabsTrigger
+                key={activation.activationId}
+                value={activation.activationId}
+                data-testid={`tab-cycle-${activation.cycleNumber}`}
+                className="gap-2"
+              >
+                <span>Cycle {activation.cycleNumber}</span>
+                {activation.status === 'completed' && <CheckCircle className="w-3 h-3" />}
+                {activation.matrixLevel && <Badge variant="outline" className="text-xs">{activation.matrixLevel}</Badge>}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          
+          {activations.map((activation) => (
+            <TabsContent key={activation.activationId} value={activation.activationId} className="mt-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Your Matrix Position - Cycle {activation.cycleNumber}</CardTitle>
+                  <CardDescription>
+                    {activation.status === 'completed' 
+                      ? `Matrix tree for Cycle ${activation.cycleNumber} (completed ${new Date(activation.completedAt!).toLocaleDateString()})`
+                      : `Matrix tree for Cycle ${activation.cycleNumber} (${activation.status})`
+                    }
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="overflow-x-auto">
+                  {activation.matrixLevel === null ? (
+                    <Alert className="my-4">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        <strong>Matrix Placement Pending:</strong> Complete all 8 payments for this cycle to be placed in the global matrix.
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <div className="flex justify-center min-w-max p-6">
+                      {matrix ? (
+                        <MatrixNodeComponent node={matrix} position="root" depth={0} />
+                      ) : (
+                        <div className="text-center text-muted-foreground py-12">
+                          <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                          <p>Loading matrix data for Cycle {activation.cycleNumber}...</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          ))}
+        </Tabs>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Your Matrix Position</CardTitle>
+            <CardDescription>Visual representation of your matrix team (up to 5 levels deep)</CardDescription>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <div className="flex justify-center min-w-max p-6">
+              {matrix ? (
+                <MatrixNodeComponent node={matrix} position="root" depth={0} />
+              ) : (
+                <div className="text-center text-muted-foreground py-12">
+                  <p>No matrix data available. Activate your account to be placed in the global matrix.</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex items-center gap-4 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">

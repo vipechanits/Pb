@@ -104,7 +104,7 @@ export class ReentryService {
 
       await tx.insert(reentries).values({
         userId,
-        cycleNumber: userData.currentCycleNumber + 1,
+        cycleNumber: userData.currentCycleNumber, // Fixed: represents the COMPLETED cycle, not the next one
         previousActivationId,
         completedMatrixLevel: userData.matrixLevel || 5,
         completedMatrixPath: userData.matrixPath || null,
@@ -159,7 +159,7 @@ export class ReentryService {
         and(
           eq(reentries.userId, userId),
           eq(reentries.status, 'pending'),
-          eq(reentries.cycleNumber, userData.currentCycleNumber + 1)
+          eq(reentries.cycleNumber, userData.currentCycleNumber) // Fixed: matches completed cycle number
         )
       )
       .limit(1);

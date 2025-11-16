@@ -15,10 +15,8 @@ import { format } from 'date-fns';
 import MiniBinaryTree from '@/components/MiniBinaryTree';
 import MiniMatrixTree from '@/components/MiniMatrixTree';
 import { DashboardHeader } from '@/components/dashboard/DashboardHeader';
-import { DashboardSponsorInfo } from '@/components/dashboard/DashboardSponsorInfo';
 import { DashboardIncomeCards } from '@/components/dashboard/DashboardIncomeCards';
 import { DashboardReferralLinks } from '@/components/dashboard/DashboardReferralLinks';
-import { DashboardReentry } from '@/components/dashboard/DashboardReentry';
 import { DashboardTreePreviews } from '@/components/dashboard/DashboardTreePreviews';
 import { useSystemConfig } from '@/hooks/use-system-config';
 
@@ -205,14 +203,6 @@ export default function UserDashboard() {
         reentryStatus={reentryStatus}
       />
 
-      {/* Sponsorship & Placement Information */}
-      <DashboardSponsorInfo
-        sponsorId={user?.sponsorId}
-        sponsorData={sponsorData}
-        sponsorLoading={sponsorLoading}
-        binaryLeg={user?.binaryLeg}
-      />
-
       {/* Activation Status Alert */}
       {!isActivated && (
         <Alert className="border-primary/20 bg-primary/5">
@@ -241,30 +231,17 @@ export default function UserDashboard() {
         />
       )}
 
-      {/* Re-entry System - Only shown after activation */}
+      {/* Income Summary & Tree Previews - Side by Side */}
       {isActivated && (
-        <DashboardReentry
-          reentryStatus={reentryStatus}
-          reentryStatusLoading={reentryStatusLoading}
-          reentryHistory={reentryHistory}
-          onInitiateReentry={() => setShowReentryDialog(true)}
-          initiateReentryPending={initiateReentryMutation.isPending}
-        />
-      )}
-
-      {/* Income Summary - Only shown after activation */}
-      {isActivated && (
-        <DashboardIncomeCards
-          totalEarnings={totalEarnings}
-          sponsorIncome={sponsorIncome}
-          binaryIncome={binaryIncome}
-          matrixIncome={matrixIncome}
-        />
-      )}
-
-      {/* Team Tree Previews - Only shown after activation */}
-      {isActivated && (
-        <DashboardTreePreviews binaryTree={binaryTree} matrixTree={matrixTree} />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <DashboardIncomeCards
+            totalEarnings={totalEarnings}
+            sponsorIncome={sponsorIncome}
+            binaryIncome={binaryIncome}
+            matrixIncome={matrixIncome}
+          />
+          <DashboardTreePreviews binaryTree={binaryTree} matrixTree={matrixTree} />
+        </div>
       )}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
