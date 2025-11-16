@@ -486,9 +486,11 @@ export class DbStorage implements IStorage {
     return sponsor.leftLegCount <= sponsor.rightLegCount ? 'left' : 'right';
   }
 
-  async findFirstAvailableBinarySlot(preferredParentId?: string): Promise<{ parentId: string | null; leg: 'left' | 'right' | null } | null> {
-    // Find first available position in binary PLACEMENT tree using breadth-first search
-    // If preferredParentId is provided, try to place under that parent first
+  async findFirstAvailableBinarySlot(preferredParentId?: string, requestedLeg?: 'left' | 'right'): Promise<{ parentId: string | null; leg: 'left' | 'right' | null } | null> {
+    // URL-BASED PLACEMENT WITH SPILLOVER:
+    // 1. Try exact placement: sponsor + requested leg
+    // 2. If taken, search sponsor's entire downline for first available slot (spillover)
+    // 3. If sponsor's downline is full, fall back to global tree search
     
     // Find binary tree root (first activated regular user with no binary parent)
     const rootUser = await db.select({
@@ -504,28 +506,43 @@ export class DbStorage implements IStorage {
     if (!rootUser || rootUser.length === 0) {
       // Empty tree - caller becomes the binary tree root
       // This handles first-ever activation in fresh deployment
+      console.log('[BINARY-PLACEMENT] Empty tree - user becomes root');
       return { parentId: null, leg: null };
     }
 
     const root = rootUser[0].userId;
 
-    // If preferredParentId provided, try it first
-    if (preferredParentId && preferredParentId !== 'PB0') {
+    // PRIORITY 1: Try exact placement (sponsor + requested leg)
+    if (preferredParentId && preferredParentId !== 'PB0' && requestedLeg) {
       const preferredParent = await this.getUserByUserId(preferredParentId);
       if (preferredParent && preferredParent.isActivated) {
-        // Check if preferred parent has available slots
-        const leftChild = await this.getUsersByBinaryParentAndLeg(preferredParentId, 'left');
-        if (leftChild.length === 0) {
-          return { parentId: preferredParentId, leg: 'left' };
-        }
-        const rightChild = await this.getUsersByBinaryParentAndLeg(preferredParentId, 'right');
-        if (rightChild.length === 0) {
-          return { parentId: preferredParentId, leg: 'right' };
+        const requestedLegChildren = await this.getUsersByBinaryParentAndLeg(preferredParentId, requestedLeg);
+        if (requestedLegChildren.length === 0) {
+          console.log(`[BINARY-PLACEMENT] Exact placement successful: ${preferredParentId}-${requestedLeg}`);
+          return { parentId: preferredParentId, leg: requestedLeg };
+        } else {
+          console.log(`[BINARY-PLACEMENT] Requested ${preferredParentId}-${requestedLeg} is taken, searching sponsor's downline for spillover...`);
         }
       }
     }
 
-    // Breadth-first search for first available slot
+    // PRIORITY 2: Spillover within sponsor's downline (if sponsor specified)
+    if (preferredParentId && preferredParentId !== 'PB0') {
+      const preferredParent = await this.getUserByUserId(preferredParentId);
+      if (preferredParent && preferredParent.isActivated) {
+        console.log(`[BINARY-PLACEMENT] Searching ${preferredParentId}'s downline for first available slot...`);
+        const sponsorSlot = await this.findFirstSlotInSubtree(preferredParentId);
+        if (sponsorSlot) {
+          console.log(`[BINARY-PLACEMENT] Spillover placement in sponsor's downline: ${sponsorSlot.parentId}-${sponsorSlot.leg}`);
+          return sponsorSlot;
+        } else {
+          console.log(`[BINARY-PLACEMENT] Sponsor's downline is full, falling back to global tree search...`);
+        }
+      }
+    }
+
+    // PRIORITY 3: Global tree search (fallback)
+    console.log('[BINARY-PLACEMENT] Searching global tree for first available slot...');
     const queue: string[] = [root];
     const visited = new Set<string>();
 
@@ -537,6 +554,7 @@ export class DbStorage implements IStorage {
       // Check left leg
       const leftChildren = await this.getUsersByBinaryParentAndLeg(currentParentId, 'left');
       if (leftChildren.length === 0) {
+        console.log(`[BINARY-PLACEMENT] Global placement: ${currentParentId}-left`);
         return { parentId: currentParentId, leg: 'left' };
       } else {
         // Add left child to queue for deeper search
@@ -546,6 +564,7 @@ export class DbStorage implements IStorage {
       // Check right leg
       const rightChildren = await this.getUsersByBinaryParentAndLeg(currentParentId, 'right');
       if (rightChildren.length === 0) {
+        console.log(`[BINARY-PLACEMENT] Global placement: ${currentParentId}-right`);
         return { parentId: currentParentId, leg: 'right' };
       } else {
         // Add right child to queue for deeper search
@@ -554,6 +573,44 @@ export class DbStorage implements IStorage {
     }
 
     // No available slot found (tree is full - shouldn't happen in practice)
+    console.error('[BINARY-PLACEMENT] ERROR: No available slot found in entire tree');
+    return null;
+  }
+
+  // Helper: Find first available slot within a user's downline (subtree)
+  // DEPTH-FIRST SEARCH: Goes deep down left side first, then right side
+  private async findFirstSlotInSubtree(rootUserId: string, visited = new Set<string>()): Promise<{ parentId: string; leg: 'left' | 'right' } | null> {
+    // Prevent infinite loops
+    if (visited.has(rootUserId)) return null;
+    visited.add(rootUserId);
+
+    // Check current node's left slot
+    const leftChildren = await this.getUsersByBinaryParentAndLeg(rootUserId, 'left');
+    if (leftChildren.length === 0) {
+      // Left slot empty - place here!
+      return { parentId: rootUserId, leg: 'left' };
+    }
+
+    // Left slot taken - GO DEEP DOWN into left child's subtree
+    const leftSubtreeSlot = await this.findFirstSlotInSubtree(leftChildren[0].userId, visited);
+    if (leftSubtreeSlot) {
+      return leftSubtreeSlot; // Found slot deep in left subtree
+    }
+
+    // Left subtree full - check current node's right slot
+    const rightChildren = await this.getUsersByBinaryParentAndLeg(rootUserId, 'right');
+    if (rightChildren.length === 0) {
+      // Right slot empty - place here!
+      return { parentId: rootUserId, leg: 'right' };
+    }
+
+    // Right slot taken - GO DEEP DOWN into right child's subtree
+    const rightSubtreeSlot = await this.findFirstSlotInSubtree(rightChildren[0].userId, visited);
+    if (rightSubtreeSlot) {
+      return rightSubtreeSlot; // Found slot deep in right subtree
+    }
+
+    // Both subtrees completely full
     return null;
   }
 
@@ -2358,10 +2415,19 @@ export class DbStorage implements IStorage {
           
           console.log(`[ACTIVATION] Activating user ${activatedUser.userId}...`);
           
-          // Determine binary PLACEMENT using new placement-based logic
-          // Separate from sponsorship: sponsor relationship is for income, placement is for tree structure
-          // findFirstAvailableBinarySlot() handles both empty tree (returns {null, null}) and populated tree
-          const placement = await this.findFirstAvailableBinarySlot(activatedUser.sponsorId || undefined);
+          // Keep legacy binaryLeg for audit trail (sponsorRequestedLeg stored during signup from referral link)
+          let assignedBinaryLeg = activatedUser.binaryLeg || activatedUser.sponsorRequestedLeg;
+          if (!assignedBinaryLeg && activatedUser.sponsorId) {
+            assignedBinaryLeg = await this.determineBestLeg(activatedUser.sponsorId);
+          }
+          
+          // Determine binary PLACEMENT using URL-based placement with spillover
+          // Priority: sponsor + requested leg → sponsor's downline → global tree
+          // sponsorRequestedLeg comes from referral link (?ref=PB10000&leg=left)
+          const placement = await this.findFirstAvailableBinarySlot(
+            activatedUser.sponsorId || undefined,
+            activatedUser.sponsorRequestedLeg || undefined
+          );
           
           if (!placement) {
             throw new Error(`Binary placement logic error - cannot activate ${activatedUser.userId}`);
@@ -2374,12 +2440,6 @@ export class DbStorage implements IStorage {
             console.log(`[ACTIVATION] ${activatedUser.userId} becomes BINARY TREE ROOT (first activated user)`);
           } else {
             console.log(`[ACTIVATION] Binary PLACEMENT: ${activatedUser.userId} placed in ${binaryPlacementParent}-${binaryPlacementLeg}`);
-          }
-          
-          // Keep legacy binaryLeg for audit trail (sponsorRequestedLeg also set during signup)
-          let assignedBinaryLeg = activatedUser.binaryLeg || activatedUser.sponsorRequestedLeg;
-          if (!assignedBinaryLeg && activatedUser.sponsorId) {
-            assignedBinaryLeg = await this.determineBestLeg(activatedUser.sponsorId);
           }
           
           console.log(`[ACTIVATION] Sponsor=${activatedUser.sponsorId}, RequestedLeg=${assignedBinaryLeg}, ActualPlacement=${binaryPlacementParent}-${binaryPlacementLeg}`);

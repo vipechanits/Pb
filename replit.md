@@ -7,6 +7,7 @@ PAYBACK247 is a peer-to-peer income platform for network marketing. It features 
 Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
+- **URL-Based Binary Placement with Spillover (2025-11-16)**: Implemented 3-tier placement strategy: (1) Try exact placement at sponsor's requested leg, (2) If taken, search sponsor's entire downline for first available slot (spillover), (3) If sponsor's downline full, search global tree. Users must sign up via referral links (?ref=PB10000&leg=left) which specify sponsor and placement preference.
 - **Removed Manual Sponsor ID Input (2025-11-16)**: Removed the manual sponsor ID input field from signup page. Users can now only register through referral links with sponsor IDs in the URL (?ref=PB10000&leg=left). This ensures all registrations are properly tracked and prevents orphaned users.
 - **Global Matrix Authorization Fix (2025-11-16)**: Fixed 403 Forbidden error when loading activation-scoped matrix trees. Changed authorization check from comparing `activation.payerWallet` to `rootUser.userId` (incompatible types) to comparing `activation.payerWallet` to `rootUser.id` (both UUIDs).
 - **Activation List Query Fix (2025-11-16)**: Fixed critical bug in `getUserActivationsList()` where activations were not being fetched because the query was comparing `payer_wallet` to `userId` (PB10000) instead of `user.id` (UUID). Changed to use UUID for proper activation retrieval, enabling Global Matrix page cycle tabs to display correctly.
@@ -63,8 +64,11 @@ Preferred communication style: Simple, everyday language.
 ### Binary Placement Architecture
 - **Separation of Concerns**: Sponsorship (income tracking) is separate from binary placement (tree structure).
 - **Unique Position Constraint**: Database enforces `UNIQUE(binaryParentId, binaryPlacementLeg)`.
-- **Breadth-First Placement**: New activations use breadth-first search for the first available slot.
-- **Spillover Handling**: Users are automatically placed in the first available position.
+- **URL-Based Placement with Spillover**: 3-tier priority system:
+  1. **Exact Placement**: Try placing user at sponsor's requested leg (from referral link)
+  2. **Sponsor Spillover (DEEP DOWN)**: If exact slot taken, use depth-first search in sponsor's downline - goes deep down left side first, then right side
+  3. **Global Spillover (BFS)**: If sponsor's downline full, use breadth-first search across entire global tree
+- **Referral Link Required**: Users must sign up via `?ref=PB10000&leg=left` URLs specifying sponsor and preferred leg.
 
 ### Payment Processing
 - **8-Payment Activation System**: Each user activation requires 8 payments: Direct Sponsor (Slot 0), Binary Match (Slot 1), Top Reward Payment (Slot 2), Matrix Levels 1-5 (Slots 3-7).
