@@ -1268,13 +1268,14 @@ export class DbStorage implements IStorage {
   }>> {
     const { activations, activationMatrixPositions, reentries } = await import('@shared/schema');
     
-    // Get user's database ID
+    // Get user's database ID (UUID)
     const user = await this.getUserByUserId(userId);
     if (!user) {
       return [];
     }
 
     // Get all activations for this user
+    // CRITICAL: payerWallet stores user.id (UUID), not userId (PB10000)
     const userActivations = await db
       .select({
         activationId: activations.id,
@@ -1286,7 +1287,7 @@ export class DbStorage implements IStorage {
       })
       .from(activations)
       .leftJoin(reentries, eq(reentries.newActivationId, activations.id))
-      .where(eq(activations.payerWallet, userId)) // FIXED: Use userId directly, not user.id (UUID)
+      .where(eq(activations.payerWallet, user.id)) // Use UUID (user.id), not userId (PB10000)
       .orderBy(asc(activations.createdAt));
 
     // Enrich with matrix position data
@@ -1481,9 +1482,9 @@ export class DbStorage implements IStorage {
             receiverUserId = sponsorUserId;
             receiverType = 'user';
           } else {
-            // No sponsor - PB0 confirms as receiver user
+            // No sponsor - payment goes to PB0 (admin)
             receiverUserId = 'PB0';
-            receiverType = 'user';
+            receiverType = 'admin'; // PB0 is admin, not user
           }
         } else if (paymentType === 'binary_match') {
           // Binary match pays FIRST person in queue (fallback to PB0 if empty)
@@ -1512,21 +1513,21 @@ export class DbStorage implements IStorage {
               })
               .where(eq(binaryMatchQueue.id, firstInQueue[0].id));
           } else {
-            // Queue empty - fallback to PB0 (receiver confirms as user, not as admin)
+            // Queue empty - fallback to PB0 (admin)
             receiverUserId = 'PB0';
-            receiverType = 'user';
-            console.log(`[ACTIVATION] Binary match queue empty - payment goes to PB0 (user confirmation)`);
+            receiverType = 'admin'; // PB0 is admin, not user
+            console.log(`[ACTIVATION] Binary match queue empty - payment goes to PB0 (admin)`);
           }
         } else if (paymentType === 'top_reward') {
-          // Top reward goes to PB0, who confirms as receiver user
+          // Top reward goes to PB0 (admin)
           receiverUserId = 'PB0';
-          receiverType = 'user';
+          receiverType = 'admin'; // PB0 is admin, not user
         } else if (paymentType.startsWith('matrix_level_')) {
           // Matrix payments: receivers will be assigned AFTER matrix placement during activation completion
           // Use NULL receiver and 'awaiting_assignment' status to prevent premature payment submission
           // This fixes the issue where users see PB0 as receiver before actual uplines are determined
           receiverUserId = null;
-          receiverType = 'user'; // Will be user (either actual upline or PB0 fallback)
+          receiverType = 'user'; // Will be user (either actual upline or PB0 fallback to admin)
           console.log(`[ACTIVATION] Matrix Level ${paymentType} receiver will be assigned after matrix placement`);
         }
         
@@ -1831,11 +1832,11 @@ export class DbStorage implements IStorage {
   }
   
   async getAdminPendingConfirmations(adminUserId: string): Promise<ActivationPayment[]> {
-    // All payments now use receiverType='user', so admins only see payments where they are the receiver
-    // This includes sponsor payments, binary fallback, matrix fallback, and top reward where receiverUserId=adminUserId
+    // Admin sees ALL payments where receiverUserId = 'PB0' (regardless of receiverType)
+    // This includes: sponsor fallback, binary match fallback, top reward, and matrix level fallback
+    // Payments to PB0 use receiverType='admin' (after recent fix)
     return db.select().from(activationPayments).where(
       and(
-        eq(activationPayments.receiverType, 'user'),
         eq(activationPayments.receiverUserId, adminUserId),
         eq(activationPayments.status, 'submitted')
       )
@@ -2473,13 +2474,15 @@ export class DbStorage implements IStorage {
             const receiverUserId = ancestorIndex < matrixAncestorActivations.length ? matrixAncestorActivations[ancestorIndex].payerUserId : 'PB0';
             const slotIndex = level + 2; // Slot 3 = level 1, Slot 4 = level 2, etc.
             
+            // Determine receiver type: 'admin' for PB0, 'user' for actual uplines
+            const receiverType = receiverUserId === 'PB0' ? 'admin' : 'user';
+            
             // Update payment receiver AND change status from 'awaiting_assignment' to 'pending'
             // This atomically assigns receiver and enables payment submission
-            // Matrix payments always use receiverType='user' so receiver (even if PB0) confirms as user
             await tx.update(activationPayments)
               .set({
                 receiverUserId,
-                receiverType: 'user',
+                receiverType,
                 status: 'pending', // Change from 'awaiting_assignment' to 'pending' (ready for payment)
                 updatedAt: now
               })
@@ -2492,7 +2495,7 @@ export class DbStorage implements IStorage {
             // Track for activation record update
             matrixUplines[`matrixUpline${level}`] = receiverUserId;
             
-            console.log(`[MATRIX] Slot ${slotIndex} (Level ${level}) receiver assigned: ${receiverUserId} (status → pending)`);
+            console.log(`[MATRIX] Slot ${slotIndex} (Level ${level}) receiver assigned: ${receiverUserId} as ${receiverType} (status → pending)`);
           }
           
           // Update activation record with matrix uplines

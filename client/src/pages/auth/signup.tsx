@@ -189,24 +189,20 @@ export default function SignupPage() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="sponsorId">Sponsor ID {binaryLeg ? '(From Referral Link)' : '(Optional)'}</Label>
-              <Input
-                id="sponsorId"
-                type="text"
-                placeholder="PB10000 (if you have a referral)"
-                value={sponsorId}
-                onChange={(e) => setSponsorId(e.target.value)}
-                data-testid="input-sponsor-id"
-                readOnly={!!binaryLeg}
-                className={binaryLeg ? 'bg-secondary/50 cursor-not-allowed' : ''}
-              />
-              {binaryLeg && (
-                <p className="text-xs text-muted-foreground">
-                  You'll be placed on the <strong className="text-foreground">{binaryLeg.toUpperCase()}</strong> leg of {sponsorId}'s binary tree
-                </p>
-              )}
-            </div>
+            {/* Show sponsor info if coming from referral link */}
+            {sponsorId && (
+              <Alert data-testid="alert-sponsor-info">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Sponsor:</strong> {sponsorId}
+                  {binaryLeg && (
+                    <span className="ml-2">
+                      • <strong>Placement:</strong> {binaryLeg.toUpperCase()} leg
+                    </span>
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
 
             {/* reCAPTCHA Widget */}
             {isEnabled && (

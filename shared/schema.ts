@@ -322,6 +322,7 @@ export const systemConfig = pgTable("system_config", {
   adminName: text("admin_name"), // Admin name for payment QR codes
   adminUpiId: text("admin_upi_id"),
   adminBankAccount: text("admin_bank_account"),
+  adminBankHolderName: text("admin_bank_holder_name"), // Bank account holder name
   adminIfscCode: text("admin_ifsc_code"),
   adminMobile: text("admin_mobile"),
   adminQrCodeUrl: text("admin_qr_code_url"),

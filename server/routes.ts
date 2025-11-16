@@ -208,9 +208,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Hash password
       const hashedPassword = await hashPassword(password);
       
-      // Auto-assign PB0 as sponsor if no sponsor provided
-      // ALL admin fees and fallback payments go to PB0
-      let finalSponsorId = sponsorId ? sponsorId.toUpperCase() : 'PB0';
+      // Auto-assign PB10000 as sponsor if no sponsor provided
+      // All new users join under PB10000 (first regular user), NOT PB0 (admin)
+      let finalSponsorId = sponsorId ? sponsorId.toUpperCase() : 'PB10000';
       let finalBinaryLeg = binaryLeg;
       
       // Validate sponsor exists
@@ -232,7 +232,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         password: hashedPassword,
         role: 'user',
         // userId auto-generated from sequence (PB10000+)
-        sponsorId: finalSponsorId, // Auto-assign PB0 if not provided (all admin fees go to PB0)
+        sponsorId: finalSponsorId, // Auto-assign PB10000 if not provided (all users join under PB10000)
         binaryLeg: finalBinaryLeg, // DEPRECATED: kept for backward compatibility
         sponsorRequestedLeg: finalBinaryLeg, // Requested leg preference (actual placement at activation)
         isActivated: false,
@@ -1171,7 +1171,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Verify this activation belongs to this user
         const activation = await storage.getActivation(activationId);
-        if (!activation || activation.payerWallet !== rootUser.userId) { // FIXED: Compare to userId, not UUID
+        if (!activation || activation.payerWallet !== rootUser.id) { // Compare to user UUID, not userId
           return res.status(403).json({ error: "Forbidden - This activation does not belong to you" });
         }
         
@@ -1282,6 +1282,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get user payment details by userId
   app.get("/api/users/payment-details/:userId", requireAuth, async (req, res) => {
     try {
+      // ALL PAYMENTS TO PB0 FETCH FROM SYSTEM CONFIG
+      if (req.params.userId === 'PB0') {
+        const config = await storage.getSystemConfig();
+        
+        const adminPaymentInfo = {
+          userId: 'PB0',
+          name: config.adminName || 'Admin',
+          mobile: config.adminMobile,
+          upiId: config.adminUpiId,
+          bankAccountHolder: config.adminBankHolderName || config.adminName || 'Admin',
+          bankAccount: config.adminBankAccount,
+          ifscCode: config.adminIfscCode,
+          paymentQrUrl: config.adminQrCodeUrl,
+        };
+        
+        return res.json(adminPaymentInfo);
+      }
+      
+      // For regular users, fetch from user profile
       const user = await storage.getUserByUserId(req.params.userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
@@ -1324,10 +1343,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Return only payment-related information
       const adminPaymentInfo = {
         userId: 'PB0',
-        name: 'Admin',
+        name: config.adminName || 'Admin',
         mobile: config.adminMobile,
         upiId: config.adminUpiId,
-        bankAccountHolder: 'Admin',
+        bankAccountHolder: config.adminBankHolderName || config.adminName || 'Admin',
         bankAccount: config.adminBankAccount,
         ifscCode: config.adminIfscCode,
         paymentQrUrl: config.adminQrCodeUrl,
@@ -1782,14 +1801,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Payment not found" });
       }
       
-      // All payments use receiverType='user' - only the receiver can confirm
-      if (existingPayment.receiverType !== 'user') {
+      // Payments can have receiverType='user' or 'admin'
+      // For 'admin' type: PB0 admin confirms these payments
+      // For 'user' type: The specific user confirms their own payments
+      if (existingPayment.receiverType === 'admin') {
+        // Admin payments (sponsor fallback, binary fallback, top reward, matrix fallback to PB0)
+        if (user.role !== 'admin' || existingPayment.receiverUserId !== 'PB0') {
+          return res.status(403).json({ error: "Forbidden - Only PB0 admin can confirm admin payments" });
+        }
+      } else if (existingPayment.receiverType === 'user') {
+        // Regular user-to-user payments
+        if (existingPayment.receiverUserId !== user.userId) {
+          return res.status(403).json({ error: "Forbidden - Only the receiver can confirm this payment" });
+        }
+      } else {
         return res.status(400).json({ error: "Invalid receiver type" });
-      }
-      
-      // Only the specific receiver user can confirm this payment
-      if (existingPayment.receiverUserId !== user.userId) {
-        return res.status(403).json({ error: "Forbidden - Only the receiver can confirm this payment" });
       }
       
       console.log(`[CONFIRM-ROUTE] Attempting to confirm payment ${req.params.id}`);
@@ -1834,14 +1860,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Payment not found" });
       }
       
-      // All payments use receiverType='user' - only the receiver can reject
-      if (existingPayment.receiverType !== 'user') {
+      // Payments can have receiverType='user' or 'admin'
+      // For 'admin' type: PB0 admin rejects these payments
+      // For 'user' type: The specific user rejects their own payments
+      if (existingPayment.receiverType === 'admin') {
+        // Admin payments (sponsor fallback, binary fallback, top reward, matrix fallback to PB0)
+        if (user.role !== 'admin' || existingPayment.receiverUserId !== 'PB0') {
+          return res.status(403).json({ error: "Forbidden - Only PB0 admin can reject admin payments" });
+        }
+      } else if (existingPayment.receiverType === 'user') {
+        // Regular user-to-user payments
+        if (existingPayment.receiverUserId !== user.userId) {
+          return res.status(403).json({ error: "Forbidden - Only the receiver can reject this payment" });
+        }
+      } else {
         return res.status(400).json({ error: "Invalid receiver type" });
-      }
-      
-      // Only the specific receiver user can reject this payment
-      if (existingPayment.receiverUserId !== user.userId) {
-        return res.status(403).json({ error: "Forbidden - Only the receiver can reject this payment" });
       }
       
       const payment = await storage.rejectActivationPayment(req.params.id, validationResult.data.rejectionReason);

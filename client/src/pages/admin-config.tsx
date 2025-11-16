@@ -26,6 +26,7 @@ type SystemConfig = {
   adminName: string | null;
   adminUpiId: string | null;
   adminBankAccount: string | null;
+  adminBankHolderName: string | null;
   adminIfscCode: string | null;
   adminMobile: string | null;
   adminQrCodeUrl: string | null;
@@ -426,6 +427,18 @@ export default function AdminConfig() {
                   value={getValue('adminBankAccount')}
                   onChange={(e) => handleChange('adminBankAccount', e.target.value)}
                   data-testid="input-admin-bank"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="adminBankHolderName">Bank Account Holder Name</Label>
+                <Input
+                  id="adminBankHolderName"
+                  type="text"
+                  placeholder="Name as per bank account"
+                  value={getValue('adminBankHolderName')}
+                  onChange={(e) => handleChange('adminBankHolderName', e.target.value)}
+                  data-testid="input-admin-bank-holder-name"
                 />
               </div>
 
