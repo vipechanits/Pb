@@ -132,8 +132,14 @@ export class ReentryService {
 
     const userData = user[0];
 
+    // CRITICAL: STRICT MATRIX COMPLETION CHECK - Must have 62 downline members
+    const isMatrixComplete = await this.checkMatrixCompletion(userId);
+    if (!isMatrixComplete) {
+      throw new Error('Your matrix is not complete. You need 62 active downline members before you can re-enter.');
+    }
+
     if (!userData.isEligibleForReentry) {
-      throw new Error('User is not eligible for re-entry');
+      throw new Error('User is not eligible for re-entry. Complete your current matrix first.');
     }
 
     // CRITICAL: Check if there's already an in-progress re-entry (prevent duplicates)

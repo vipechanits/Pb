@@ -38,7 +38,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth-context';
 import { useQuery } from '@tanstack/react-query';
-import logoUrl from '@assets/payback247-logo.png';
+import logoUrl from '@assets/payback247-logo_1763267164811.png';
 
 interface AppSidebarProps {
   isAdmin?: boolean;
@@ -195,8 +195,8 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     <Sidebar>
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="space-y-2">
-          <div className="flex items-center justify-center">
-            <img src={logoUrl} alt="PAYBACK247" className="w-40 h-40" />
+          <div className="flex items-center justify-between">
+            <img src={logoUrl} alt="PAYBACK247" className="w-32 h-32 my-3" />
           </div>
           {user && (
             <div className="pt-2 border-t border-sidebar-border">

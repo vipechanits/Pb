@@ -6,6 +6,15 @@ PAYBACK247 is a peer-to-peer income platform for network marketing, featuring bi
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+- **Re-entry System Lockdown (2025-11-16)**: Implemented strict 62-user matrix completion check before allowing re-entry. Users cannot initiate re-entry until their matrix has exactly 62 active downline members. This prevents duplicate activations and ensures proper cycle progression.
+- **Activation Page Auto-Cycle Selection (2025-11-16)**: Activation page now automatically selects and displays the active/current cycle by default instead of Cycle #1, improving UX for users with multiple cycles.
+- **Cycle Number Correction (2025-11-16)**: Fixed re-entry cycle numbering to display correctly as Cycle 2, Cycle 3, etc. Previously showed duplicate Cycle #1 tabs due to incorrect mapping of re-entry cycle numbers.
+- **Logo Update (2025-11-16)**: Replaced old logo with new handshake design across all pages (landing header/footer, sidebar). Updated sizing to w-32 h-32 with proper margins (my-2/my-3) and justify-between alignment.
+- **Activation Page Cycle Filtering Fix (2025-11-16)**: Fixed critical bug where Cycle #2 tab was showing Cycle #1 payments. Changed cyclePayments logic from `currentCycle?.payments || payments || []` to `currentCycle?.payments || []` to prevent fallback to all payments when a cycle doesn't exist yet.
+- **Re-entry Section Removed from Dashboard**: "Initiate Re-entry" button section completely removed from dashboard - users can only initiate re-entry from the dedicated Re-entry page.
+- **Referral Links Restored**: Yellow affiliate referral links bar (Left Leg/Right Leg) restored on dashboard after activation.
+
 ## System Architecture
 
 ### Frontend

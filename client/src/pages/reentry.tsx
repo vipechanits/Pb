@@ -96,8 +96,17 @@ export default function ReentryPage() {
     if (!status?.isEligibleForReentry) {
       toast({
         variant: 'destructive',
-        title: 'Not Eligible',
-        description: 'You must complete your current matrix cycle first.',
+        title: 'Matrix Not Complete',
+        description: 'You need 62 active downline members in your matrix before you can re-enter.',
+      });
+      return;
+    }
+    
+    if (!status?.isMatrixComplete) {
+      toast({
+        variant: 'destructive',
+        title: 'Matrix Not Complete',
+        description: 'Your matrix must have 62 active members before re-entry is allowed.',
       });
       return;
     }
@@ -354,8 +363,8 @@ export default function ReentryPage() {
               </Button>
               <p className="text-xs text-muted-foreground text-center mt-2">
                 {status?.isEligibleForReentry 
-                  ? `Re-entry fee: ${formatINR(config.totalActivationCost)}`
-                  : 'Complete your current matrix cycle (62 users) to enable re-entry'
+                  ? `Re-entry fee: ${formatINR(config.totalActivationCost)} (8 payments × ₹500 each)`
+                  : 'Your matrix must be complete (62 active downline members) before you can re-enter'
                 }
               </p>
             </>

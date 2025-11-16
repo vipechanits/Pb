@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Shield, Users, TrendingUp, Zap, GitBranch, Grid3x3, ArrowRight, Check } from 'lucide-react';
-import logoUrl from '@assets/payback247-logo.png';
+import logoUrl from '@assets/payback247-logo_1763267164811.png';
 import { useSystemConfig, formatINR } from '@/hooks/use-system-config';
 
 export default function Landing() {
@@ -97,9 +97,9 @@ export default function Landing() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50">
-        <div className="container mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src={logoUrl} alt="PAYBACK247" className="w-40 h-40" />
+        <div className="container mx-auto px-4 sm:px-6 py-2 flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-3">
+            <img src={logoUrl} alt="PAYBACK247" className="w-32 h-32 my-2" />
             <span className="font-bold text-xl sm:text-2xl">PAYBACK247</span>
           </div>
           <div className="flex items-center gap-2">
@@ -316,8 +316,8 @@ export default function Landing() {
         <div className="container mx-auto px-4 sm:px-6">
           <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-8 mb-8">
             <div className="col-span-2">
-              <div className="flex items-center gap-2 mb-4">
-                <img src={logoUrl} alt="PAYBACK247" className="w-40 h-40" />
+              <div className="flex items-center justify-between gap-2 mb-4">
+                <img src={logoUrl} alt="PAYBACK247" className="w-32 h-32 my-2" />
                 <span className="font-bold text-lg">PAYBACK247</span>
               </div>
               <p className="text-sm text-muted-foreground max-w-sm">

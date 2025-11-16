@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -67,7 +67,7 @@ export default function UserActivationPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [expandedPayments, setExpandedPayments] = useState<Set<string>>(new Set());
-  const [activeTab, setActiveTab] = useState<string>('cycle-1');
+  const [activeTab, setActiveTab] = useState<string>('');
 
   // Fetch user's activation payments
   // Use userId (PB####) if available, otherwise use database UUID for pre-activation users
@@ -231,12 +231,13 @@ export default function UserActivationPage() {
     }
 
     // Add re-entry cycles
+    // CRITICAL: re.cycleNumber is the COMPLETED cycle, so new activation is cycleNumber + 1
     reentryHistory
       .filter(re => re.newActivationId && paymentsByActivation[re.newActivationId])
       .forEach(re => {
         const cyclePayments = paymentsByActivation[re.newActivationId!];
         cycles.push({
-          cycleNumber: re.cycleNumber,
+          cycleNumber: re.cycleNumber + 1, // Show as NEXT cycle (completed cycle + 1)
           activationId: re.newActivationId!,
           status: cyclePayments.every(p => p.status === 'confirmed') ? 'completed' : 'active',
           payments: cyclePayments,
@@ -253,8 +254,25 @@ export default function UserActivationPage() {
   };
 
   const cycles = groupPaymentsByCycle();
-  const currentCycle = cycles.find(c => c.cycleNumber === Number(activeTab.split('-')[1])) || cycles[0];
-  const cyclePayments = currentCycle?.payments || payments || [];
+  
+  // Compute the default active cycle (highest/current cycle)
+  const defaultActiveCycle = cycles.length > 0 
+    ? (cycles.find(c => c.status === 'active') || cycles[cycles.length - 1])
+    : null;
+  const defaultCycleId = defaultActiveCycle ? `cycle-${defaultActiveCycle.cycleNumber}` : '';
+  
+  // Set active tab to the highest/current cycle by default (only once when data loads)
+  React.useEffect(() => {
+    if (cycles.length > 0 && !activeTab) {
+      setActiveTab(defaultCycleId);
+    }
+  }, [cycles.length, activeTab, defaultCycleId]);
+  
+  // Use activeTab or default to the current cycle
+  const effectiveTab = activeTab || defaultCycleId;
+  const currentCycle = cycles.find(c => c.cycleNumber === Number(effectiveTab.split('-')[1])) || cycles[0];
+  // CRITICAL: Only show payments for the current cycle, NOT all payments as fallback
+  const cyclePayments = currentCycle?.payments || [];
 
   const confirmedCount = cyclePayments?.filter(p => p.status === 'confirmed').length || 0;
   const submittedCount = cyclePayments?.filter(p => p.status === 'submitted').length || 0;
@@ -385,7 +403,7 @@ export default function UserActivationPage() {
 
       {/* Cycle Tabs - Organized Payment Lists */}
       {cycles.length > 0 && (
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={effectiveTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full mb-4" style={{ gridTemplateColumns: `repeat(${cycles.length}, 1fr)` }}>
             {cycles.map((cycle) => {
               const isCompleted = cycle.status === 'completed';
@@ -667,12 +685,19 @@ export default function UserActivationPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Payment Checklist - Cycle {currentCycle?.cycleNumber || 1}</CardTitle>
+          <CardTitle>Payment Checklist - Cycle {Number(effectiveTab.split('-')[1]) || 1}</CardTitle>
           <CardDescription>Complete all 8 payments for this cycle to activate</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {cyclePayments && cyclePayments.length > 0 ? (
+            {!currentCycle ? (
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  This cycle hasn't started yet. Complete your current cycle first.
+                </AlertDescription>
+              </Alert>
+            ) : cyclePayments && cyclePayments.length > 0 ? (
               <>
                 {/* First 3 payments (always visible) */}
                 {cyclePayments
