@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema, users, reentries, activationPayments, forgotPasswordSchema, resetPasswordSchema, updateEmailSchema, updatePasswordSchema, manualActivationCompletionSchema } from "@shared/schema";
+import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema, users, reentries, activationPayments, activations, activationMatrixPositions, binaryMatchQueue, notifications, incomeTransactions, userIncomeSummaries, passwordResetTokens, forgotPasswordSchema, resetPasswordSchema, updateEmailSchema, updatePasswordSchema, manualActivationCompletionSchema } from "@shared/schema";
 import { hashPassword, verifyPassword, serializeUser } from "./auth";
 import { generateUserPaymentQR } from "./qrcode-generator";
 import { z } from "zod";
@@ -1266,18 +1266,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "User not found" });
       }
       
-      if (!user.upiId || !user.name || !user.mobile) {
-        return res.status(400).json({ error: "UPI ID, name, and mobile number are required" });
+      if (!user.upiId) {
+        return res.status(400).json({ error: "UPI ID is required" });
       }
       
-      const { amount } = req.body;
-      
-      const qrCode = await generateUserPaymentQR(
-        user.upiId,
-        user.name,
-        user.mobile,
-        amount
-      );
+      const qrCode = await generateUserPaymentQR(user.upiId);
       
       res.json({ qrCode });
     } catch (error) {
@@ -1294,15 +1287,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "User not found" });
       }
       
-      // Generate QR code if user has UPI details
+      // Generate QR code if user has UPI ID
       let paymentQrUrl = null;
-      if (user.upiId && user.name && user.mobile) {
+      if (user.upiId) {
         try {
-          paymentQrUrl = await generateUserPaymentQR(
-            user.upiId,
-            user.name,
-            user.mobile
-          );
+          paymentQrUrl = await generateUserPaymentQR(user.upiId);
         } catch (error) {
           console.error("Error generating QR code:", error);
           // Continue without QR code if generation fails
@@ -1916,11 +1905,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Prevent ID changes via API
       const { id, ...configData } = req.body;
       
-      const config = await storage.updateSystemConfig(configData);
-      res.json(config);
+      await storage.updateSystemConfig(configData);
+      
+      // Always refetch complete config after update to ensure all fields are present
+      const fullConfig = await storage.getSystemConfig();
+      
+      // Reinitialize email service with complete configuration from database
+      const { initializeEmailService } = await import('./lib/email');
+      initializeEmailService({
+        host: fullConfig.emailHost || undefined,
+        port: fullConfig.emailPort || undefined,
+        user: fullConfig.emailUser || undefined,
+        password: fullConfig.emailPassword || undefined,
+        from: fullConfig.emailFrom || undefined,
+        secure: fullConfig.emailSecure,
+        enabled: fullConfig.emailEnabled,
+      });
+      
+      res.json(fullConfig);
     } catch (error) {
       console.error("Error updating system config:", error);
       res.status(500).json({ error: "Failed to update system configuration" });
+    }
+  });
+
+  // Admin: Test email configuration
+  app.post("/api/admin/test-email", requireAdmin, async (req, res) => {
+    try {
+      const { to } = req.body;
+      
+      if (!to) {
+        return res.status(400).json({ error: "Email recipient is required" });
+      }
+
+      const { sendEmail } = await import('./lib/email');
+      
+      await sendEmail({
+        to,
+        subject: 'PAYBACK247 - Email Test',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">Email Configuration Test</h2>
+            <p>This is a test email from your PAYBACK247 platform.</p>
+            <p>If you're receiving this email, your SMTP configuration is working correctly!</p>
+            <hr style="border: 1px solid #eee; margin: 20px 0;">
+            <p style="color: #666; font-size: 12px;">
+              Sent from PAYBACK247 Email Service<br>
+              ${new Date().toLocaleString()}
+            </p>
+          </div>
+        `,
+        text: 'This is a test email from your PAYBACK247 platform. If you are receiving this email, your SMTP configuration is working correctly!',
+      });
+
+      res.json({ 
+        success: true, 
+        message: `Test email sent successfully to ${to}` 
+      });
+    } catch (error) {
+      console.error("Error sending test email:", error);
+      res.status(500).json({ 
+        error: "Failed to send test email",
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Admin: Generate UPI QR code for admin payment details
+  app.post("/api/admin/generate-qr", requireAdmin, async (req, res) => {
+    try {
+      const config = await storage.getSystemConfig();
+      
+      // Validate required field for UPI QR code
+      if (!config.adminUpiId) {
+        return res.status(400).json({ 
+          error: 'Admin UPI ID is required. Please configure it in System Configuration.'
+        });
+      }
+      
+      console.log(`[ADMIN-QR] Generating admin QR code - UPI: ${config.adminUpiId}`);
+      
+      const qrCode = await generateUserPaymentQR(config.adminUpiId);
+      
+      res.json({ qrCode });
+    } catch (error) {
+      console.error("[ADMIN-QR] Error generating admin QR code:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ 
+        error: "Failed to generate QR code",
+        details: errorMessage
+      });
     }
   });
 
@@ -2514,6 +2588,121 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting backup:", error);
       res.status(500).json({ error: "Failed to delete backup" });
+    }
+  });
+
+  // DELETE /api/admin/database/reset-users - Reset all user data (PB0 only)
+  // SECURITY: Super admin (PB0) only - removes all users except admin accounts
+  app.delete("/api/admin/database/reset-users", requireAdmin, async (req: any, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user || user.userId !== 'PB0') {
+        return res.status(403).json({ error: "Forbidden - Super Admin (PB0) access required" });
+      }
+
+      console.log(`[DB_RESET] User data reset initiated by ${user.userId}`);
+
+      // Delete all user data in correct order (foreign key dependencies)
+      await db.transaction(async (tx) => {
+        // Get UUIDs of admin accounts to preserve (for tables that use UUID foreign keys)
+        const adminUUIDs = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(sql`${users.userId} IN ('PB0', 'PB1')`);
+        
+        const adminIdList = adminUUIDs.map(u => u.id);
+        console.log(`[DB_RESET] Preserving admin UUIDs: ${adminIdList.join(', ')}`);
+
+        // 1. Delete income transactions (user_id is marketing ID varchar(20))
+        const incomeDeleted = await tx.delete(incomeTransactions)
+          .where(sql`user_id NOT IN ('PB0', 'PB1')`)
+          .execute();
+        console.log(`[DB_RESET] Deleted ${incomeDeleted.rowCount} income transactions`);
+
+        // 2. Delete user income summaries (user_id is marketing ID varchar(20))
+        const summariesDeleted = await tx.delete(userIncomeSummaries)
+          .where(sql`user_id NOT IN ('PB0', 'PB1')`)
+          .execute();
+        console.log(`[DB_RESET] Deleted ${summariesDeleted.rowCount} income summaries`);
+
+        // 3. Delete password reset tokens (user_id is marketing ID varchar(20))
+        const tokensDeleted = await tx.delete(passwordResetTokens)
+          .where(sql`user_id NOT IN ('PB0', 'PB1')`)
+          .execute();
+        console.log(`[DB_RESET] Deleted ${tokensDeleted.rowCount} password reset tokens`);
+
+        // 4. Delete activation matrix positions (via non-admin activations)
+        await tx.execute(sql`
+          DELETE FROM activation_matrix_positions
+          WHERE activation_id IN (
+            SELECT id FROM activations
+            WHERE payer_user_id NOT IN (${sql.join(adminIdList.map(id => sql`${id}`), sql`, `)})
+          )
+        `);
+        console.log(`[DB_RESET] Deleted matrix positions for non-admin activations`);
+
+        // 5. Delete activation payments (via non-admin activations)
+        await tx.execute(sql`
+          DELETE FROM activation_payments
+          WHERE activation_id IN (
+            SELECT id FROM activations
+            WHERE payer_user_id NOT IN (${sql.join(adminIdList.map(id => sql`${id}`), sql`, `)})
+          )
+        `);
+        console.log(`[DB_RESET] Deleted activation payments for non-admin activations`);
+
+        // 6. Delete activations (payer_user_id is UUID)
+        const activationsDeleted = await tx.delete(activations)
+          .where(sql`payer_user_id NOT IN (${sql.join(adminIdList.map(id => sql`${id}`), sql`, `)})`)
+          .execute();
+        console.log(`[DB_RESET] Deleted ${activationsDeleted.rowCount} activations`);
+
+        // 7. Delete re-entries (user_id is marketing ID varchar(20))
+        const reentriesDeleted = await tx.delete(reentries)
+          .where(sql`user_id NOT IN ('PB0', 'PB1')`)
+          .execute();
+        console.log(`[DB_RESET] Deleted ${reentriesDeleted.rowCount} re-entries`);
+
+        // 8. Delete binary match queue (user_id is marketing ID varchar(20))
+        const queueDeleted = await tx.delete(binaryMatchQueue)
+          .where(sql`user_id NOT IN ('PB0', 'PB1')`)
+          .execute();
+        console.log(`[DB_RESET] Deleted ${queueDeleted.rowCount} queue entries`);
+
+        // 9. Delete notifications (user_id is marketing ID varchar(20))
+        const notificationsDeleted = await tx.delete(notifications)
+          .where(sql`user_id NOT IN ('PB0', 'PB1')`)
+          .execute();
+        console.log(`[DB_RESET] Deleted ${notificationsDeleted.rowCount} notifications`);
+
+        // 10. Delete user sessions (PostgreSQL session store - userId is UUID stored as text in JSON)
+        await tx.execute(sql`
+          DELETE FROM session
+          WHERE sess::jsonb->>'userId' NOT IN (${sql.join(adminIdList.map(id => sql`'${sql.raw(id)}'`), sql`, `)})
+        `);
+        console.log(`[DB_RESET] Deleted user sessions`);
+
+        // 11. Delete users (user_id is marketing ID varchar(20))
+        const usersDeleted = await tx.delete(users)
+          .where(sql`user_id NOT IN ('PB0', 'PB1')`)
+          .execute();
+        console.log(`[DB_RESET] Deleted ${usersDeleted.rowCount} users`);
+
+        // 12. Reset user ID sequence to start from PB10000
+        await tx.execute(sql`
+          SELECT setval('pb_user_id_seq', 10000, false)
+        `);
+        console.log(`[DB_RESET] Reset user ID sequence to PB10000`);
+      });
+
+      console.log(`[DB_RESET] User data reset completed successfully by ${user.userId}`);
+      res.json({ 
+        success: true, 
+        message: "All user data has been reset. Admin accounts and system configuration preserved." 
+      });
+    } catch (error) {
+      console.error("[DB_RESET] Error resetting user data:", error);
+      res.status(500).json({ error: "Failed to reset user data" });
     }
   });
 

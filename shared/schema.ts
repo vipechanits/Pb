@@ -319,6 +319,7 @@ export const systemConfig = pgTable("system_config", {
   binaryMatchingRatioRight: integer("binary_matching_ratio_right").notNull().default(3),
   
   // Admin payment methods (single values)
+  adminName: text("admin_name"), // Admin name for payment QR codes
   adminUpiId: text("admin_upi_id"),
   adminBankAccount: text("admin_bank_account"),
   adminIfscCode: text("admin_ifsc_code"),
@@ -329,6 +330,15 @@ export const systemConfig = pgTable("system_config", {
   recaptchaSiteKey: text("recaptcha_site_key"), // Google reCAPTCHA v2 site key
   recaptchaSecretKey: text("recaptcha_secret_key"), // Google reCAPTCHA v2 secret key
   recaptchaEnabled: boolean("recaptcha_enabled").notNull().default(false),
+  
+  // Email/SMTP configuration
+  emailHost: text("email_host"), // SMTP server hostname (e.g., smtp.gmail.com)
+  emailPort: integer("email_port").default(587), // SMTP port (587 for TLS, 465 for SSL)
+  emailUser: text("email_user"), // SMTP username
+  emailPassword: text("email_password"), // SMTP password (encrypted)
+  emailFrom: text("email_from"), // From email address
+  emailSecure: boolean("email_secure").notNull().default(false), // true for SSL (port 465), false for TLS (port 587)
+  emailEnabled: boolean("email_enabled").notNull().default(false), // Enable/disable email sending
   
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

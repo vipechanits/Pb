@@ -135,7 +135,7 @@ export default function UserActivationPage() {
         });
         // Redirect to profile page after a short delay
         setTimeout(() => {
-          setLocation('/profile');
+          setLocation('/user/profile');
         }, 1500);
       } else {
         toast({

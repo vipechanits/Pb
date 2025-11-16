@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { Settings, Save, Loader2, Upload, X, Shield } from 'lucide-react';
+import { Settings, Save, Loader2, Upload, X, Shield, Mail, QrCode } from 'lucide-react';
 
 type SystemConfig = {
   id: string;
@@ -23,6 +23,7 @@ type SystemConfig = {
   binaryRightQualification: number;
   binaryMatchingRatioLeft: number;
   binaryMatchingRatioRight: number;
+  adminName: string | null;
   adminUpiId: string | null;
   adminBankAccount: string | null;
   adminIfscCode: string | null;
@@ -31,6 +32,13 @@ type SystemConfig = {
   recaptchaSiteKey: string | null;
   recaptchaSecretKey: string | null;
   recaptchaEnabled: boolean;
+  emailHost: string | null;
+  emailPort: number | null;
+  emailUser: string | null;
+  emailPassword: string | null;
+  emailFrom: string | null;
+  emailSecure: boolean;
+  emailEnabled: boolean;
   updatedAt: string;
 };
 
@@ -38,6 +46,9 @@ export default function AdminConfig() {
   const { toast } = useToast();
   const [qrFile, setQrFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [testEmail, setTestEmail] = useState('');
+  const [generatedQrCode, setGeneratedQrCode] = useState<string | null>(null);
+  const [showGeneratedQR, setShowGeneratedQR] = useState(false);
 
   // Fetch system configuration
   const { data: config, isLoading } = useQuery<SystemConfig>({
@@ -72,9 +83,74 @@ export default function AdminConfig() {
     },
   });
 
-  const getValue = (key: keyof SystemConfig) => {
+  // Test email mutation
+  const testEmailMutation = useMutation({
+    mutationFn: async (to: string) => {
+      return await apiRequest('POST', '/api/admin/test-email', { to });
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Test Email Sent',
+        description: 'Check your inbox! If nothing arrives, verify your SMTP settings.',
+      });
+      setTestEmail('');
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Test Email Failed',
+        description: error.details || 'Failed to send test email. Check your SMTP configuration.',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Generate QR code mutation
+  const generateQRMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', '/api/admin/generate-qr', {});
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      setGeneratedQrCode(data.qrCode);
+      setShowGeneratedQR(true);
+      toast({
+        title: 'QR Code Generated',
+        description: 'Admin UPI QR code has been generated successfully',
+      });
+    },
+    onError: (error: any) => {
+      const errorMessage = error.details || error.error || 'Failed to generate QR code';
+      toast({
+        title: 'Generation Failed',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const getValue = (key: keyof SystemConfig): string | number | boolean => {
     const value = formData[key] !== undefined ? formData[key] : config?.[key];
-    return value === null ? '' : value || '';
+    // Handle boolean values separately
+    if (typeof value === 'boolean') return value;
+    // Handle null/undefined as empty string for text inputs
+    if (value === null || value === undefined) return '';
+    return value;
+  };
+
+  // Type-safe getters for specific value types
+  const getStringValue = (key: keyof SystemConfig): string => {
+    const val = getValue(key);
+    return typeof val === 'string' ? val : String(val || '');
+  };
+
+  const getNumberValue = (key: keyof SystemConfig): number => {
+    const val = getValue(key);
+    return typeof val === 'number' ? val : 0;
+  };
+
+  const getBooleanValue = (key: keyof SystemConfig): boolean => {
+    const val = getValue(key);
+    return Boolean(val);
   };
 
   const handleChange = (key: keyof SystemConfig, value: string | number | boolean) => {
@@ -302,7 +378,7 @@ export default function AdminConfig() {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="adminUpiId">UPI ID</Label>
+                <Label htmlFor="adminUpiId">UPI ID *</Label>
                 <Input
                   id="adminUpiId"
                   type="text"
@@ -310,6 +386,21 @@ export default function AdminConfig() {
                   value={getValue('adminUpiId')}
                   onChange={(e) => handleChange('adminUpiId', e.target.value)}
                   data-testid="input-admin-upi"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Required for generating QR codes
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="adminName">Admin Name</Label>
+                <Input
+                  id="adminName"
+                  type="text"
+                  placeholder="Admin full name"
+                  value={getValue('adminName')}
+                  onChange={(e) => handleChange('adminName', e.target.value)}
+                  data-testid="input-admin-name"
                 />
               </div>
 
@@ -393,6 +484,55 @@ export default function AdminConfig() {
                 </div>
               )}
             </div>
+
+            {/* Generate QR Code Section */}
+            {getValue('adminUpiId') && (
+              <div className="pt-4 border-t">
+                <div className="space-y-4">
+                  <div>
+                    <Label className="text-base font-medium">Generate UPI QR Code</Label>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Generate a UPI QR code with only your UPI ID (no additional details)
+                    </p>
+                  </div>
+                  
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => generateQRMutation.mutate()}
+                    disabled={generateQRMutation.isPending}
+                    data-testid="button-generate-admin-qr"
+                  >
+                    {generateQRMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <QrCode className="mr-2 h-4 w-4" />
+                        Generate QR Code
+                      </>
+                    )}
+                  </Button>
+
+                  {showGeneratedQR && generatedQrCode && (
+                    <div className="p-4 border rounded-lg bg-muted/30">
+                      <p className="text-sm font-medium mb-2">Generated UPI QR Code:</p>
+                      <img 
+                        src={generatedQrCode} 
+                        alt="Generated UPI QR Code" 
+                        className="mx-auto border-2 border-white rounded-lg shadow-sm" 
+                        data-testid="img-generated-admin-qr" 
+                      />
+                      <p className="text-xs text-muted-foreground text-center mt-2">
+                        Users can scan this to pay admin • UPI: {getValue('adminUpiId')}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -463,6 +603,188 @@ export default function AdminConfig() {
               </div>
             </div>
 
+          </CardContent>
+        </Card>
+
+        {/* Email Configuration */}
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              Email/SMTP Configuration
+            </CardTitle>
+            <CardDescription>
+              Configure email server settings for sending notifications and alerts
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-4 p-4 border rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label htmlFor="emailEnabled" className="text-base font-medium">
+                    Enable Email Service
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Send emails for notifications, password resets, and alerts
+                  </p>
+                </div>
+                <Switch
+                  id="emailEnabled"
+                  checked={!!getValue('emailEnabled')}
+                  onCheckedChange={(checked) => handleChange('emailEnabled', checked)}
+                  data-testid="switch-email-enabled"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div className="space-y-2">
+                  <Label htmlFor="emailHost">
+                    SMTP Server Host
+                  </Label>
+                  <Input
+                    id="emailHost"
+                    type="text"
+                    placeholder="smtp.gmail.com"
+                    value={getValue('emailHost')}
+                    onChange={(e) => handleChange('emailHost', e.target.value)}
+                    data-testid="input-email-host"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    SMTP server hostname (e.g., smtp.gmail.com, smtp.sendgrid.net)
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="emailPort">
+                    SMTP Port
+                  </Label>
+                  <Input
+                    id="emailPort"
+                    type="number"
+                    placeholder="587"
+                    value={getValue('emailPort')}
+                    onChange={(e) => handleChange('emailPort', parseInt(e.target.value) || 587)}
+                    data-testid="input-email-port"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    587 for TLS, 465 for SSL
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="emailUser">
+                    SMTP Username
+                  </Label>
+                  <Input
+                    id="emailUser"
+                    type="text"
+                    placeholder="your-email@example.com"
+                    value={getValue('emailUser')}
+                    onChange={(e) => handleChange('emailUser', e.target.value)}
+                    data-testid="input-email-user"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Usually your email address
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="emailPassword">
+                    SMTP Password
+                  </Label>
+                  <Input
+                    id="emailPassword"
+                    type="password"
+                    placeholder="••••••••"
+                    value={getValue('emailPassword')}
+                    onChange={(e) => handleChange('emailPassword', e.target.value)}
+                    data-testid="input-email-password"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Use app-specific password for Gmail
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="emailFrom">
+                    From Email Address
+                  </Label>
+                  <Input
+                    id="emailFrom"
+                    type="email"
+                    placeholder="noreply@payback247.com"
+                    value={getValue('emailFrom')}
+                    onChange={(e) => handleChange('emailFrom', e.target.value)}
+                    data-testid="input-email-from"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Email address shown as sender
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between pt-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="emailSecure" className="text-sm font-medium">
+                        Use SSL/TLS
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Enable for port 465 (SSL), disable for port 587 (TLS)
+                      </p>
+                    </div>
+                    <Switch
+                      id="emailSecure"
+                      checked={!!getValue('emailSecure')}
+                      onCheckedChange={(checked) => handleChange('emailSecure', checked)}
+                      data-testid="switch-email-secure"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Test Email Section */}
+            {getValue('emailEnabled') && (
+              <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                <div className="space-y-2">
+                  <Label htmlFor="testEmail" className="text-base font-medium">
+                    Test Email Configuration
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Send a test email to verify your SMTP settings are working correctly
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    id="testEmail"
+                    type="email"
+                    placeholder="test@example.com"
+                    value={testEmail}
+                    onChange={(e) => setTestEmail(e.target.value)}
+                    data-testid="input-test-email"
+                    disabled={testEmailMutation.isPending}
+                  />
+                  <Button
+                    type="button"
+                    onClick={() => testEmail && testEmailMutation.mutate(testEmail)}
+                    disabled={!testEmail || testEmailMutation.isPending}
+                    data-testid="button-send-test-email"
+                  >
+                    {testEmailMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="mr-2 h-4 w-4" />
+                        Send Test
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

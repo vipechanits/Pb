@@ -4,42 +4,113 @@ import nodemailer from 'nodemailer';
  * Email Service
  * Sends transactional emails (verification, password reset, etc.)
  * 
- * SETUP: Add these environment variables to use real email sending:
- * - EMAIL_HOST (e.g., smtp.gmail.com, smtp.sendgrid.net)
- * - EMAIL_PORT (e.g., 587 for TLS, 465 for SSL)
- * - EMAIL_USER (SMTP username/email)
- * - EMAIL_PASS (SMTP password/API key)
- * - EMAIL_FROM (sender email, e.g., noreply@payback247.com)
+ * Configuration priority:
+ * 1. Database system configuration (set via Admin panel)
+ * 2. Environment variables (fallback)
  * 
- * If not configured, emails will be logged to console (development mode)
+ * If neither is configured, emails will be logged to console (development mode)
  */
 
-const EMAIL_HOST = process.env.EMAIL_HOST;
-const EMAIL_PORT = process.env.EMAIL_PORT ? parseInt(process.env.EMAIL_PORT) : 587;
-const EMAIL_USER = process.env.EMAIL_USER;
-const EMAIL_PASS = process.env.EMAIL_PASS;
-const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@payback247.com';
+export interface EmailConfig {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  from: string;
+  secure: boolean;
+  enabled: boolean;
+}
 
-const isDevelopment = process.env.NODE_ENV === 'development';
-const isEmailConfigured = EMAIL_HOST && EMAIL_USER && EMAIL_PASS;
-
+// Store active email configuration
+let currentEmailConfig: EmailConfig | null = null;
 let transporter: nodemailer.Transporter | null = null;
 
-if (isEmailConfigured) {
-  transporter = nodemailer.createTransport({
-    host: EMAIL_HOST,
-    port: EMAIL_PORT,
-    secure: EMAIL_PORT === 465, // true for 465 (SSL), false for other ports (TLS)
-    auth: {
-      user: EMAIL_USER,
-      pass: EMAIL_PASS,
-    },
-  });
+/**
+ * Initialize email service with configuration from database or environment
+ */
+export function initializeEmailService(dbConfig?: Partial<EmailConfig> | null): void {
+  const hasDbConfig = dbConfig && typeof dbConfig.enabled !== 'undefined';
   
-  console.log('[EMAIL] ✓ Email service configured (SMTP)');
-} else {
-  console.log('[EMAIL] ⚠ Email service running in CONSOLE MODE (no SMTP configured)');
-  console.log('[EMAIL] Configure EMAIL_HOST, EMAIL_USER, EMAIL_PASS to send real emails');
+  // Priority 1: Database configuration (if database config exists)
+  if (hasDbConfig) {
+    // Check if email is explicitly disabled in database
+    if (!dbConfig.enabled) {
+      currentEmailConfig = null;
+      transporter = null;
+      console.log('[EMAIL] ✗ Email service DISABLED via Admin panel');
+      return;
+    }
+    
+    // Database config enabled - use it if complete
+    if (dbConfig.host && dbConfig.user && dbConfig.password) {
+      currentEmailConfig = {
+        host: dbConfig.host,
+        port: dbConfig.port || 587,
+        user: dbConfig.user,
+        password: dbConfig.password,
+        from: dbConfig.from || 'noreply@payback247.com',
+        secure: dbConfig.secure || false,
+        enabled: true,
+      };
+      console.log('[EMAIL] ✓ Using database configuration');
+      
+      // Create transporter with database config
+      transporter = nodemailer.createTransport({
+        host: currentEmailConfig.host,
+        port: currentEmailConfig.port,
+        secure: currentEmailConfig.secure,
+        auth: {
+          user: currentEmailConfig.user,
+          pass: currentEmailConfig.password,
+        },
+      });
+      console.log(`[EMAIL] ✓ SMTP configured - ${currentEmailConfig.host}:${currentEmailConfig.port}`);
+      return;
+    } else {
+      // Database config incomplete
+      currentEmailConfig = null;
+      transporter = null;
+      console.log('[EMAIL] ⚠ Email enabled but database configuration incomplete');
+      console.log('[EMAIL] Please configure SMTP host, user, and password in Admin panel');
+      return;
+    }
+  }
+  
+  // Priority 2: Environment variables (fallback - only when no database config exists)
+  const envHost = process.env.EMAIL_HOST;
+  const envPort = process.env.EMAIL_PORT ? parseInt(process.env.EMAIL_PORT) : 587;
+  const envUser = process.env.EMAIL_USER;
+  const envPass = process.env.EMAIL_PASS;
+  const envFrom = process.env.EMAIL_FROM || 'noreply@payback247.com';
+  const envSecure = envPort === 465;
+
+  if (envHost && envUser && envPass) {
+    currentEmailConfig = {
+      host: envHost,
+      port: envPort,
+      user: envUser,
+      password: envPass,
+      from: envFrom,
+      secure: envSecure,
+      enabled: true,
+    };
+    transporter = nodemailer.createTransport({
+      host: currentEmailConfig.host,
+      port: currentEmailConfig.port,
+      secure: currentEmailConfig.secure,
+      auth: {
+        user: currentEmailConfig.user,
+        pass: currentEmailConfig.password,
+      },
+    });
+    console.log('[EMAIL] ✓ Using environment variable configuration (fallback)');
+    console.log(`[EMAIL] ✓ SMTP configured - ${currentEmailConfig.host}:${currentEmailConfig.port}`);
+  } else {
+    currentEmailConfig = null;
+    transporter = null;
+    console.log('[EMAIL] ⚠ Email service running in CONSOLE MODE (no SMTP configured)');
+    console.log('[EMAIL] Configure via Admin panel or set EMAIL_HOST, EMAIL_USER, EMAIL_PASS');
+  }
 }
 
 export interface EmailOptions {
@@ -68,8 +139,9 @@ export async function sendEmail(options: EmailOptions): Promise<void> {
   }
 
   try {
+    const fromAddress = currentEmailConfig?.from || 'noreply@payback247.com';
     const info = await transporter.sendMail({
-      from: EMAIL_FROM,
+      from: fromAddress,
       to: options.to,
       subject: options.subject,
       html: options.html,

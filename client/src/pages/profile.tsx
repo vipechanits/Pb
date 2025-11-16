@@ -123,7 +123,7 @@ export default function Profile() {
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'Failed to generate QR code. Make sure you have filled in your UPI ID, name, and mobile number.',
+        description: 'Failed to generate QR code. Make sure you have filled in your UPI ID.',
         variant: 'destructive',
       });
     }

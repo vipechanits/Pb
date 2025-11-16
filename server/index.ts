@@ -210,6 +210,19 @@ app.use((req, res, next) => {
     // Initialize system configuration (ensure singleton row exists)
     await storage.initializeSystemConfig();
     
+    // Initialize email service with database configuration
+    const systemConfig = await storage.getSystemConfig();
+    const { initializeEmailService } = await import('./lib/email');
+    initializeEmailService({
+      host: systemConfig.emailHost || undefined,
+      port: systemConfig.emailPort || undefined,
+      user: systemConfig.emailUser || undefined,
+      password: systemConfig.emailPassword || undefined,
+      from: systemConfig.emailFrom || undefined,
+      secure: systemConfig.emailSecure,
+      enabled: systemConfig.emailEnabled,
+    });
+    
     // Initialize admin user (PB0 root admin only)
     const { hashPassword } = await import('./auth');
     await storage.initializeAdminUsers(hashPassword);

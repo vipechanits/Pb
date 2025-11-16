@@ -747,7 +747,8 @@ export class DbStorage implements IStorage {
     const user = userRows[0];
     
     // STEP 2: Ensure matrix placement exists (if not, place user now)
-    if (!user.matrixParentId || !user.matrixPath) {
+    // NOTE: Root user has matrixParentId=null, so we check matrixPath instead
+    if (!user.matrixPath || user.matrixLevel === null) {
       console.log(`[MATRIX RECONCILE] User ${user.userId} not yet placed in matrix - placing now...`);
       const placedUser = await this.findAndAssignMatrixSlot(user.userId, tx);
       
@@ -888,11 +889,11 @@ export class DbStorage implements IStorage {
 
       // Matrix has existing users - find next available slot using BFS
       // NO LEVEL LIMIT: Matrix grows infinitely, each user earns from their 5-level downline (62 users)
+      // NOTE: Don't check isActivated - users are placed during payment confirmation, before full activation
       const frontier = await txn.select()
         .from(users)
         .where(and(
           sql`matrix_level IS NOT NULL`,
-          eq(users.isActivated, true),
           ne(users.role, 'admin')  // Exclude admin accounts from matrix
         ))
         .orderBy(sql`matrix_level ASC, matrix_path ASC`)
