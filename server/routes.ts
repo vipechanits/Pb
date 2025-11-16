@@ -2005,6 +2005,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if user has completed matrix
       const isMatrixComplete = await storage.checkMatrixCompletion(user.userId);
       
+      // Automatically mark eligible if matrix is complete and user isn't already eligible
+      if (isMatrixComplete && !user.isEligibleForReentry && user.isActivated) {
+        try {
+          await storage.markEligibleForReentry(user.userId);
+          console.log(`[RE-ENTRY] Auto-detected eligibility for ${user.userId} - matrix complete with 62 users`);
+          // Refetch user to get updated eligibility status
+          const updatedUser = await storage.getUserById(req.session.userId as string);
+          if (updatedUser) {
+            user.isEligibleForReentry = updatedUser.isEligibleForReentry;
+          }
+        } catch (eligibilityError) {
+          console.error(`[RE-ENTRY] Failed to mark ${user.userId} as eligible:`, eligibilityError);
+          // Continue with current user data even if marking failed
+        }
+      }
+      
       // Get current re-entry record (if any)
       const currentReentry = await storage.getCurrentReentryStatus(user.userId);
 
@@ -2063,14 +2079,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "You already have a re-entry in progress" });
       }
 
-      // Initiate re-entry
-      const reentry = await storage.initiateReentry(user.userId);
-      
-      res.json({
-        reentry,
-        message: "Re-entry initiated successfully. Please proceed to activation payment.",
-        redirectTo: "/activate"
-      });
+      try {
+        // Initiate re-entry (now creates activation + payments inside service)
+        const reentry = await storage.initiateReentry(user.userId);
+        
+        // Fetch the newly created activation and payments for response
+        const activation = await storage.getActivation(reentry.newActivationId!);
+        const payments = await storage.getActivationPaymentsByActivationId(reentry.newActivationId!);
+        
+        console.log(`[RE-ENTRY] User ${user.userId} initiated cycle ${user.currentCycleNumber + 1} with activation ${reentry.newActivationId} and ${payments.length} payment slots`);
+        
+        res.json({
+          reentry,
+          activation,
+          payments,
+          paymentCount: payments.length,
+          message: "Re-entry initiated successfully. Your new payment slots have been created.",
+          redirectTo: "/user/activate"
+        });
+      } catch (reentryError: any) {
+        console.error(`[RE-ENTRY ERROR] Failed to initiate re-entry for ${user.userId}:`, reentryError);
+        throw new Error(`Failed to initiate re-entry: ${reentryError.message}`);
+      }
     } catch (error: any) {
       console.error("Error initiating re-entry:", error);
       res.status(500).json({ error: error.message || "Failed to initiate re-entry" });

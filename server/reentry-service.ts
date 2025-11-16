@@ -1,6 +1,8 @@
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { eq, and, sql, desc } from 'drizzle-orm';
 import * as schema from '@shared/schema';
+import { storage } from './storage';
+import * as crypto from 'crypto';
 
 const { users, reentries, userIncomeSummaries, activationPayments } = schema;
 
@@ -134,6 +136,22 @@ export class ReentryService {
       throw new Error('User is not eligible for re-entry');
     }
 
+    // CRITICAL: Check if there's already an in-progress re-entry (prevent duplicates)
+    const inProgressReentry = await this.db
+      .select()
+      .from(reentries)
+      .where(
+        and(
+          eq(reentries.userId, userId),
+          eq(reentries.status, 'in_progress')
+        )
+      )
+      .limit(1);
+
+    if (inProgressReentry.length > 0) {
+      throw new Error('You already have a re-entry in progress. Please complete your current cycle payments first.');
+    }
+
     const pendingReentry = await this.db
       .select()
       .from(reentries)
@@ -151,11 +169,65 @@ export class ReentryService {
     }
 
     const reentryRecord = pendingReentry[0];
+    
+    // CRITICAL: Check if this re-entry was already initiated (has activation)
+    if (reentryRecord.newActivationId) {
+      throw new Error('This re-entry has already been initiated. Check your activation page for payment details.');
+    }
+    
+    // Create new activation with 8 payment slots AND assign matrix receivers atomically
+    let newActivation;
+    try {
+      // Generate activation ID (same pattern as initial activation)
+      const activationId = `ACT-${userData.id}-${crypto.randomUUID().substring(0, 8)}`;
+      
+      // Create activation in a single atomic transaction that includes matrix receiver assignment
+      const result = await this.db.transaction(async (tx: any) => {
+        // Step 1: Create activation with payments using shared transaction context
+        const activationResult = await storage.createActivationWithPayments(
+          {
+            id: activationId,
+            payerWallet: userData.id, // Store database UUID for activation lookup
+            sponsorWallet: userData.sponsorId || null, // Sponsor's PB#### ID
+            status: 'pending',
+          },
+          userId, // Use PB#### ID for payment records
+          userData.sponsorId || null,
+          tx // Pass transaction context to prevent nested transactions
+        );
+        
+        // Step 2: Immediately assign matrix receivers if user has existing matrix position
+        // This happens in the SAME transaction to ensure atomicity
+        if (userData.matrixPath && userData.isActivated) {
+          await storage.assignMatrixPaymentReceiversForReentry(activationId, userId, tx);
+          console.log(`[RE-ENTRY] Assigned matrix payment receivers for ${userId} based on existing matrix position`);
+        }
+        
+        return activationResult;
+      });
+      
+      newActivation = result.activation;
+      console.log(`[RE-ENTRY] Created activation ${activationId} for ${userId} with ${result.payments.length} payment slots`);
+    } catch (error) {
+      console.error('[RE-ENTRY] Failed to create activation:', error);
+      
+      // Mark re-entry as failed
+      await this.db.update(reentries)
+        .set({
+          status: 'failed',
+          updatedAt: new Date(),
+        })
+        .where(eq(reentries.id, reentryRecord.id));
+      
+      throw new Error('Failed to create re-entry activation');
+    }
 
+    // Update re-entry record and user status (separate transaction after activation succeeds)
     await this.db.transaction(async (tx) => {
       await tx.update(reentries)
         .set({
           status: 'in_progress',
+          newActivationId: newActivation.id,
           reentryInitiatedAt: new Date(),
           updatedAt: new Date(),
         })

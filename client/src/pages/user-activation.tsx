@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CheckCircle, Circle, Clock, Info, AlertCircle, RefreshCw, Copy, CheckCircle2, UserCheck, ArrowLeft, ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/hooks/use-toast';
@@ -45,6 +46,18 @@ interface CycleData {
   createdAt?: Date | string;
 }
 
+interface ReentryHistory {
+  id: string;
+  cycleNumber: number;
+  status: string;
+  previousActivationId: string;
+  newActivationId: string | null;
+  totalMatrixEarnings: string;
+  eligibilityDetectedAt: string;
+  reentryInitiatedAt: string | null;
+  reentryCompletedAt: string | null;
+}
+
 export default function UserActivationPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -54,6 +67,7 @@ export default function UserActivationPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [expandedPayments, setExpandedPayments] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState<string>('cycle-1');
 
   // Fetch user's activation payments
   // Use userId (PB####) if available, otherwise use database UUID for pre-activation users
@@ -73,6 +87,12 @@ export default function UserActivationPage() {
   const { data: sponsorData } = useQuery<{ userId: string; name: string | null }>({
     queryKey: ['/api/users', user?.sponsorId, 'public'],
     enabled: !!user?.sponsorId,
+  });
+
+  // Fetch re-entry history to map activations to cycles
+  const { data: reentryHistory = [] } = useQuery<ReentryHistory[]>({
+    queryKey: ['/api/reentry/history'],
+    enabled: !!user,
   });
 
   const copyToClipboard = (text: string, fieldName: string) => {
@@ -172,17 +192,81 @@ export default function UserActivationPage() {
     }
   };
 
-  const confirmedCount = payments?.filter(p => p.status === 'confirmed').length || 0;
-  const submittedCount = payments?.filter(p => p.status === 'submitted').length || 0;
-  const rejectedCount = payments?.filter(p => p.status === 'rejected').length || 0;
+  // Group payments by cycle
+  const groupPaymentsByCycle = (): CycleData[] => {
+    if (!payments || payments.length === 0) return [];
+
+    // Group payments by activationId
+    const paymentsByActivation = payments.reduce((acc, payment) => {
+      if (!acc[payment.activationId]) {
+        acc[payment.activationId] = [];
+      }
+      acc[payment.activationId].push(payment);
+      return acc;
+    }, {} as Record<string, EnrichedPayment[]>);
+
+    // Map each activation to a cycle
+    const cycles: CycleData[] = [];
+    
+    // Find Cycle 1 (first activation, not linked to any re-entry)
+    const cycle1ActivationIds = Object.keys(paymentsByActivation).filter(actId => {
+      // Cycle 1 activation is NOT in any re-entry's newActivationId
+      return !reentryHistory.some(re => re.newActivationId === actId);
+    });
+
+    if (cycle1ActivationIds.length > 0) {
+      const activationId = cycle1ActivationIds[0]; // Should only be one
+      const cyclePayments = paymentsByActivation[activationId];
+      cycles.push({
+        cycleNumber: 1,
+        activationId,
+        status: cyclePayments.every(p => p.status === 'confirmed') ? 'completed' : 'active',
+        payments: cyclePayments,
+        confirmedCount: cyclePayments.filter(p => p.status === 'confirmed').length,
+        totalAmount: config.totalActivationCost,
+        confirmedAmount: cyclePayments
+          .filter(p => p.status === 'confirmed')
+          .reduce((sum, p) => sum + Number(p.amountInr || 0), 0),
+      });
+    }
+
+    // Add re-entry cycles
+    reentryHistory
+      .filter(re => re.newActivationId && paymentsByActivation[re.newActivationId])
+      .forEach(re => {
+        const cyclePayments = paymentsByActivation[re.newActivationId!];
+        cycles.push({
+          cycleNumber: re.cycleNumber,
+          activationId: re.newActivationId!,
+          status: cyclePayments.every(p => p.status === 'confirmed') ? 'completed' : 'active',
+          payments: cyclePayments,
+          confirmedCount: cyclePayments.filter(p => p.status === 'confirmed').length,
+          totalAmount: config.totalActivationCost,
+          confirmedAmount: cyclePayments
+            .filter(p => p.status === 'confirmed')
+            .reduce((sum, p) => sum + Number(p.amountInr || 0), 0),
+        });
+      });
+
+    // Sort by cycle number
+    return cycles.sort((a, b) => a.cycleNumber - b.cycleNumber);
+  };
+
+  const cycles = groupPaymentsByCycle();
+  const currentCycle = cycles.find(c => c.cycleNumber === Number(activeTab.split('-')[1])) || cycles[0];
+  const cyclePayments = currentCycle?.payments || payments || [];
+
+  const confirmedCount = cyclePayments?.filter(p => p.status === 'confirmed').length || 0;
+  const submittedCount = cyclePayments?.filter(p => p.status === 'submitted').length || 0;
+  const rejectedCount = cyclePayments?.filter(p => p.status === 'rejected').length || 0;
   
   // Check if first 3 payments (slots 0-2) are all confirmed
-  const firstThreeConfirmed = payments
-    ? payments.filter(p => p.slotIndex < 3).every(p => p.status === 'confirmed')
+  const firstThreeConfirmed = cyclePayments
+    ? cyclePayments.filter(p => p.slotIndex < 3).every(p => p.status === 'confirmed')
     : false;
   
   // Sum actual amounts from confirmed payments
-  const confirmedAmount = payments
+  const confirmedAmount = cyclePayments
     ?.filter(p => p.status === 'confirmed')
     .reduce((sum, p) => sum + Number(p.amountInr || 0), 0) || 0;
   
@@ -298,6 +382,48 @@ export default function UserActivationPage() {
           Refresh
         </Button>
       </div>
+
+      {/* Cycle Tabs - Organized Payment Lists */}
+      {cycles.length > 0 && (
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full mb-4" style={{ gridTemplateColumns: `repeat(${cycles.length}, 1fr)` }}>
+            {cycles.map((cycle) => {
+              const isCompleted = cycle.status === 'completed';
+              const isCurrent = cycle.status === 'active';
+              return (
+                <TabsTrigger 
+                  key={`cycle-${cycle.cycleNumber}`} 
+                  value={`cycle-${cycle.cycleNumber}`}
+                  data-testid={`tab-cycle-${cycle.cycleNumber}`}
+                  className="flex-col h-auto py-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">Cycle {cycle.cycleNumber}</span>
+                    {isCompleted && <CheckCircle2 className="h-4 w-4 text-green-600" />}
+                    {isCurrent && <Clock className="h-4 w-4 text-blue-600" />}
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge variant={isCompleted ? "default" : "outline"} className={isCompleted ? "bg-green-600" : ""}>
+                      {cycle.confirmedCount}/8 Paid
+                    </Badge>
+                    {isCompleted && <span className="text-xs text-muted-foreground">Completed</span>}
+                    {isCurrent && <span className="text-xs text-blue-600">Active</span>}
+                  </div>
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+          
+          {cycles.length > 1 && (
+            <Alert className="mb-4">
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                Each cycle represents a separate activation. Switch between tabs to view payment details for each cycle.
+              </AlertDescription>
+            </Alert>
+          )}
+        </Tabs>
+      )}
 
       <div className="space-y-6">
           <Alert>

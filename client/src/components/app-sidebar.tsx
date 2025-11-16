@@ -10,6 +10,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarFooter,
+  SidebarSeparator,
 } from '@/components/ui/sidebar';
 import {
   LayoutDashboard,
@@ -32,6 +33,7 @@ import {
   Trophy,
   TrendingUp,
   UserPlus,
+  DollarSign,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth-context';
@@ -58,26 +60,29 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     setLocation('/auth/login');
   };
 
-  const userMenuItems: Array<{
-    title: string;
-    url: string;
-    icon: typeof LayoutDashboard;
-  }> = [
+  // Organized User Menu Groups
+  const userDashboardItems = [
     {
       title: 'Dashboard',
       url: '/user',
       icon: LayoutDashboard,
     },
+  ];
+
+  const activationItems = [
     {
       title: 'Activation',
       url: '/user/activation',
       icon: Wallet,
     },
     {
-      title: 'Confirmations',
+      title: 'Payment Confirmations',
       url: '/user/confirmation',
       icon: CheckSquare,
     },
+  ];
+
+  const networkItems = [
     {
       title: 'Binary Tree',
       url: '/user/binary-tree',
@@ -93,27 +98,13 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       url: '/user/direct-sponsoring',
       icon: UserPlus,
     },
-    {
-      title: 'Re-entry Cycles',
-      url: '/user/reentry',
-      icon: RefreshCw,
-    },
-    {
-      title: 'Profile',
-      url: '/user/profile',
-      icon: UserCircle,
-    },
   ];
 
-  const incomeHistoryItems: Array<{
-    title: string;
-    url: string;
-    icon: typeof Clock;
-  }> = [
+  const incomeItems = [
     {
-      title: 'Transaction History',
+      title: 'Income Summary',
       url: '/user/transaction-history',
-      icon: FileText,
+      icon: DollarSign,
     },
     {
       title: 'Binary Match Queue',
@@ -132,11 +123,21 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     },
   ];
 
-  const adminMenuItems: Array<{
-    title: string;
-    url: string;
-    icon: typeof LayoutDashboard;
-  }> = [
+  const accountItems = [
+    {
+      title: 'Re-entry Cycles',
+      url: '/user/reentry',
+      icon: RefreshCw,
+    },
+    {
+      title: 'Profile',
+      url: '/user/profile',
+      icon: UserCircle,
+    },
+  ];
+
+  // Admin Menu Items
+  const adminDashboardItems = [
     {
       title: 'Admin Dashboard',
       url: '/admin',
@@ -147,6 +148,9 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       url: '/admin/analytics',
       icon: BarChart3,
     },
+  ];
+
+  const adminPaymentItems = [
     {
       title: 'Payment Confirmations',
       url: '/admin/payments',
@@ -157,20 +161,26 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       url: '/admin/payments-report',
       icon: FileText,
     },
+  ];
+
+  const adminManagementItems = [
+    {
+      title: 'User Management',
+      url: '/admin/users',
+      icon: UserCog,
+    },
     {
       title: 'Re-entry Management',
       url: '/admin/reentry',
       icon: RefreshCw,
     },
+  ];
+
+  const adminSystemItems = [
     {
       title: 'System Configuration',
       url: '/admin/config',
       icon: Settings,
-    },
-    {
-      title: 'User Management',
-      url: '/admin/users',
-      icon: UserCog,
     },
     {
       title: 'Database Backup',
@@ -179,7 +189,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     },
   ];
 
-  const menuItems = isAdmin ? adminMenuItems : userMenuItems;
+  const pendingCount = pendingData?.count || 0;
 
   return (
     <Sidebar>
@@ -198,59 +208,224 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
           )}
         </div>
       </SidebarHeader>
+      
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>{isAdmin ? 'Admin Panel' : 'User Menu'}</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {menuItems.map((item) => {
-                const pendingCount = pendingData?.count || 0;
-                const showBadge = (item.title === 'Confirmations' || item.title === 'Payment Confirmations') && pendingCount > 0;
-                
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={location === item.url}>
-                      <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
-                        <item.icon className="w-4 h-4" />
-                        <span>{item.title}</span>
-                        {showBadge && (
-                          <Badge 
-                            variant="destructive" 
-                            className="ml-auto" 
-                            data-testid="badge-pending-count"
-                          >
-                            {pendingCount}
-                          </Badge>
-                        )}
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        
-        {!isAdmin && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Income History</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {incomeHistoryItems.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={location === item.url}>
-                      <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
-                        <item.icon className="w-4 h-4" />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+        {isAdmin ? (
+          <>
+            {/* Admin Dashboard */}
+            <SidebarGroup>
+              <SidebarGroupLabel>Overview</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {adminDashboardItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild isActive={location === item.url}>
+                        <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                          <item.icon className="w-4 h-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
+            <SidebarSeparator />
+
+            {/* Admin Payments */}
+            <SidebarGroup>
+              <SidebarGroupLabel>Payments</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {adminPaymentItems.map((item) => {
+                    const showBadge = item.title === 'Payment Confirmations' && pendingCount > 0;
+                    return (
+                      <SidebarMenuItem key={item.title}>
+                        <SidebarMenuButton asChild isActive={location === item.url}>
+                          <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                            <item.icon className="w-4 h-4" />
+                            <span>{item.title}</span>
+                            {showBadge && (
+                              <Badge 
+                                variant="destructive" 
+                                className="ml-auto" 
+                                data-testid="badge-pending-count"
+                              >
+                                {pendingCount}
+                              </Badge>
+                            )}
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
+            <SidebarSeparator />
+
+            {/* Admin Management */}
+            <SidebarGroup>
+              <SidebarGroupLabel>Management</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {adminManagementItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild isActive={location === item.url}>
+                        <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                          <item.icon className="w-4 h-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
+            <SidebarSeparator />
+
+            {/* Admin System */}
+            <SidebarGroup>
+              <SidebarGroupLabel>System</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {adminSystemItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild isActive={location === item.url}>
+                        <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                          <item.icon className="w-4 h-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
+        ) : (
+          <>
+            {/* User Dashboard */}
+            <SidebarGroup>
+              <SidebarGroupLabel>Overview</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {userDashboardItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild isActive={location === item.url}>
+                        <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                          <item.icon className="w-4 h-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
+            <SidebarSeparator />
+
+            {/* Activation & Payments */}
+            <SidebarGroup>
+              <SidebarGroupLabel>Activation & Payments</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {activationItems.map((item) => {
+                    const showBadge = item.title === 'Payment Confirmations' && pendingCount > 0;
+                    return (
+                      <SidebarMenuItem key={item.title}>
+                        <SidebarMenuButton asChild isActive={location === item.url}>
+                          <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                            <item.icon className="w-4 h-4" />
+                            <span>{item.title}</span>
+                            {showBadge && (
+                              <Badge 
+                                variant="destructive" 
+                                className="ml-auto" 
+                                data-testid="badge-pending-count"
+                              >
+                                {pendingCount}
+                              </Badge>
+                            )}
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
+            <SidebarSeparator />
+
+            {/* Network Structure */}
+            <SidebarGroup>
+              <SidebarGroupLabel>Network Structure</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {networkItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild isActive={location === item.url}>
+                        <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                          <item.icon className="w-4 h-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
+            <SidebarSeparator />
+
+            {/* Income Tracking */}
+            <SidebarGroup>
+              <SidebarGroupLabel>Income Tracking</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {incomeItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild isActive={location === item.url}>
+                        <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                          <item.icon className="w-4 h-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
+            <SidebarSeparator />
+
+            {/* Account Management */}
+            <SidebarGroup>
+              <SidebarGroupLabel>Account</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {accountItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild isActive={location === item.url}>
+                        <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                          <item.icon className="w-4 h-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
         )}
       </SidebarContent>
+      
       <SidebarFooter className="p-4 border-t border-sidebar-border">
         <SidebarMenu>
           <SidebarMenuItem>

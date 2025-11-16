@@ -2,7 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { RefreshCw, Info, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { RefreshCw, Info, CheckCircle2, XCircle, Loader2, Clock } from 'lucide-react';
 import { useSystemConfig, formatINR } from '@/hooks/use-system-config';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
@@ -53,10 +53,12 @@ export default function ReentryPage() {
     onSuccess: (data: any) => {
       toast({
         title: 'Re-entry Initiated',
-        description: data.message || 'You can now proceed to activation payment.',
+        description: data.message || `Cycle ${(status?.currentCycleNumber || 1) + 1} activation created with ${data.paymentCount || 8} payment slots.`,
       });
       queryClient.invalidateQueries({ queryKey: ['/api/reentry/status'] });
       queryClient.invalidateQueries({ queryKey: ['/api/reentry/history'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/activation-payments'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
       // Redirect to activation page
       setLocation('/user/activate');
     },
@@ -99,6 +101,18 @@ export default function ReentryPage() {
       });
       return;
     }
+    
+    // Prevent duplicate initiations
+    if (status?.currentReentry && status.currentReentry.status === 'in_progress') {
+      toast({
+        variant: 'destructive',
+        title: 'Already In Progress',
+        description: 'You already have a re-entry in progress. Please complete your current cycle payments first.',
+      });
+      setLocation('/user/activation');
+      return;
+    }
+    
     initiateMutation.mutate();
   };
 
@@ -301,15 +315,31 @@ export default function ReentryPage() {
         <CardHeader>
           <CardTitle>Ready to Re-enter?</CardTitle>
           <CardDescription>
-            {status?.isEligibleForReentry 
-              ? 'Your matrix cycle is complete! Start a new cycle now.'
-              : 'Complete your current matrix cycle to unlock re-entry'
+            {status?.currentReentry && status.currentReentry.status === 'in_progress'
+              ? 'You have a re-entry in progress. Complete your payments to proceed.'
+              : status?.isEligibleForReentry 
+                ? 'Your matrix cycle is complete! Start a new cycle now.'
+                : 'Complete your current matrix cycle to unlock re-entry'
             }
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {status?.currentReentry && status.currentReentry.status === 'in_progress' && (
+            <Alert>
+              <Clock className="h-4 w-4" />
+              <AlertDescription>
+                Cycle {status.currentReentry.cycleNumber} re-entry is in progress. 
+                Please complete your activation payments before initiating a new re-entry.
+              </AlertDescription>
+            </Alert>
+          )}
+          
           <Button 
-            disabled={!status?.isEligibleForReentry || initiateMutation.isPending}
+            disabled={
+              !status?.isEligibleForReentry || 
+              initiateMutation.isPending || 
+              (status?.currentReentry && status.currentReentry.status === 'in_progress')
+            }
             onClick={handleInitiateReentry}
             className="w-full"
             data-testid="button-initiate-reentry"
@@ -319,6 +349,11 @@ export default function ReentryPage() {
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Initiating...
               </>
+            ) : (status?.currentReentry && status.currentReentry.status === 'in_progress') ? (
+              <>
+                <XCircle className="mr-2 h-4 w-4" />
+                Re-entry In Progress
+              </>
             ) : (
               <>
                 <RefreshCw className="mr-2 h-4 w-4" />
@@ -327,9 +362,11 @@ export default function ReentryPage() {
             )}
           </Button>
           <p className="text-xs text-muted-foreground text-center mt-2">
-            {status?.isEligibleForReentry 
-              ? `Re-entry fee: ${formatINR(config.totalActivationCost)}`
-              : 'Complete your current matrix cycle to enable re-entry'
+            {status?.currentReentry && status.currentReentry.status === 'in_progress'
+              ? 'Complete your current cycle payments in the Activation page'
+              : status?.isEligibleForReentry 
+                ? `Re-entry fee: ${formatINR(config.totalActivationCost)}`
+                : 'Complete your current matrix cycle to enable re-entry'
             }
           </p>
         </CardContent>

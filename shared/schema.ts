@@ -194,7 +194,7 @@ export type UpdateProfile = z.infer<typeof updateProfileSchema>;
 
 export const activations = pgTable("activations", {
   id: varchar("id", { length: 100 }).primaryKey(),
-  payerWallet: varchar("payer_wallet", { length: 42 }).notNull().unique(), // Unique constraint prevents duplicate activations
+  payerWallet: varchar("payer_wallet", { length: 42 }).notNull(), // Removed unique constraint to support multiple activations per user (re-entry cycles)
   sponsorWallet: varchar("sponsor_wallet", { length: 42 }),
   binaryMatchId: varchar("binary_match_id", { length: 100 }),
   matrixUpline1: varchar("matrix_upline_1", { length: 42 }),

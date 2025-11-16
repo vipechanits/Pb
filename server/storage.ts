@@ -120,6 +120,7 @@ export interface IStorage {
   submitPaymentProof(id: string, utrId: string, proofUrl?: string): Promise<ActivationPayment | undefined>;
   confirmActivationPayment(id: string, notes?: string): Promise<ActivationPayment | undefined>;
   rejectActivationPayment(id: string, rejectionReason: string): Promise<ActivationPayment | undefined>;
+  assignMatrixPaymentReceiversForReentry(activationId: string, userId: string, tx: any): Promise<void>;
   
   // Notification methods
   createNotification(notification: InsertNotification): Promise<Notification>;
@@ -619,6 +620,45 @@ export class DbStorage implements IStorage {
     return result.rows.map(row => row.user_id);
   }
 
+  async getBinaryAncestorChain(userId: string): Promise<Array<{userId: string, legFromChild: 'left' | 'right'}>> {
+    // Get all ancestors in the BINARY PLACEMENT chain for bubble-up counts
+    // Returns array of {userId, legFromChild} where legFromChild is the leg the CHILD occupies relative to this ancestor
+    // This is used for binary matching count bubbling, NOT sponsorship
+    const user = await this.getUserByUserId(userId);
+    
+    if (!user || !user.binaryParentId || !user.binaryPlacementLeg) {
+      return []; // Root user or not placed in binary tree yet
+    }
+    
+    const chain: Array<{userId: string, legFromChild: 'left' | 'right'}> = [];
+    
+    // Start with the user's direct parent and the leg the user occupies
+    let currentUserId = userId;
+    let currentUser = user;
+    
+    while (currentUser.binaryParentId && currentUser.binaryParentId !== 'PB0' && currentUser.binaryPlacementLeg) {
+      // Add the parent with the leg this child occupies relative to it
+      chain.push({ 
+        userId: currentUser.binaryParentId, 
+        legFromChild: currentUser.binaryPlacementLeg // The leg THIS user occupies in their parent's tree
+      });
+      
+      // Move up to the parent
+      const parent = await this.getUserByUserId(currentUser.binaryParentId);
+      if (!parent) break;
+      
+      currentUser = parent;
+      
+      // Safety check
+      if (chain.length > 100) {
+        console.error('[STORAGE] Binary chain exceeds 100 levels - possible circular reference');
+        break;
+      }
+    }
+    
+    return chain;
+  }
+
   async isInDownline(requesterId: string, targetId: string): Promise<boolean> {
     // Check if targetId is in requesterId's downline (sponsor hierarchy)
     // Returns true ONLY if targetId is a descendant of requesterId
@@ -1007,9 +1047,10 @@ export class DbStorage implements IStorage {
   async createActivationWithPayments(
     activation: InsertActivation,
     payerUserId: string,
-    sponsorUserId: string | null
+    sponsorUserId: string | null,
+    existingTx?: any // Optional transaction context for atomic re-entry operations
   ): Promise<{ activation: Activation; payments: ActivationPayment[] }> {
-    return await db.transaction(async (tx) => {
+    const executeInTx = async (tx: any) => {
       // Fetch system config for payment amounts (with lock to prevent concurrent edits)
       const configResult = await tx.select().from(systemConfig)
         .where(eq(systemConfig.id, 'default-config-singleton'))
@@ -1144,7 +1185,14 @@ export class DbStorage implements IStorage {
         activation: createdActivation,
         payments: paymentsResult,
       };
-    });
+    };
+    
+    // Use existing transaction if provided, otherwise create new one
+    if (existingTx) {
+      return await executeInTx(existingTx);
+    } else {
+      return await db.transaction(executeInTx);
+    }
   }
 
   async getActivation(id: string): Promise<Activation | undefined> {
@@ -2216,57 +2264,58 @@ export class DbStorage implements IStorage {
           console.log(`[ACTIVATION] ✓ Final income verification passed: All 8 income records confirmed`);
           
           // Step 4: Update ALL upline network statistics recursively NOW (only after activation)
-          // This propagates the activation up the entire sponsor chain
-          if (activatedUser.sponsorId && assignedBinaryLeg) {
-            console.log(`[ACTIVATION] Updating upline leg counts for ${activatedUser.userId} (leg: ${assignedBinaryLeg})`);
+          // BUBBLE PLACEMENT: This propagates counts up the BINARY PLACEMENT tree, not sponsor chain
+          if (activatedUser.binaryParentId && activatedUser.binaryPlacementLeg) {
+            console.log(`[ACTIVATION] Updating binary ancestor leg counts for ${activatedUser.userId} (binary leg: ${activatedUser.binaryPlacementLeg})`);
             
-            // Get sponsor chain (excluding PB0)
-            const sponsorChain = await this.getSponsorChain(activatedUser.userId);
-            console.log(`[ACTIVATION] Found ${sponsorChain.length} upline sponsors (excluding PB0 and self)`);
+            // Get BINARY ancestor chain (not sponsor chain) - this is the key fix for bubble placement
+            const binaryAncestors = await this.getBinaryAncestorChain(activatedUser.userId);
+            console.log(`[ACTIVATION] Found ${binaryAncestors.length} binary ancestors (excluding PB0)`);
             
-            // Update each upline user's leg counts
-            for (const uplineId of sponsorChain) {
-              if (uplineId === activatedUser.userId) continue; // Skip self
-              if (uplineId === 'PB0') continue; // Skip admin
+            // Update each binary ancestor's leg counts based on which leg the child occupies
+            for (const ancestor of binaryAncestors) {
+              if (ancestor.userId === activatedUser.userId) continue; // Skip self
+              if (ancestor.userId === 'PB0') continue; // Skip admin
               
               const updateData: any = {
                 updatedAt: now
               };
               
-              // Direct sponsor gets personal + global count increment
-              // Other uplines get only global count increment
-              const isDirectSponsor = uplineId === activatedUser.sponsorId;
+              // ALL binary ancestors get global count increment based on child's leg position
+              // Personal counts ONLY updated if this ancestor is also the direct sponsor
+              const isDirectSponsor = ancestor.userId === activatedUser.sponsorId;
+              const childLeg = ancestor.legFromChild; // The leg this child occupies relative to this ancestor
               
-              if (assignedBinaryLeg === 'left') {
+              if (childLeg === 'left') {
                 updateData.leftLegCount = sql`${users.leftLegCount} + 1`; // Global count for all
                 if (isDirectSponsor) {
-                  updateData.personalLeftCount = sql`${users.personalLeftCount} + 1`; // Personal only for direct sponsor
+                  updateData.personalLeftCount = sql`${users.personalLeftCount} + 1`; // Personal only if also sponsor
                   updateData.totalReferrals = sql`${users.totalReferrals} + 1`; // Total referrals only for direct sponsor
                 }
-              } else if (assignedBinaryLeg === 'right') {
+              } else if (childLeg === 'right') {
                 updateData.rightLegCount = sql`${users.rightLegCount} + 1`; // Global count for all
                 if (isDirectSponsor) {
-                  updateData.personalRightCount = sql`${users.personalRightCount} + 1`; // Personal only for direct sponsor
+                  updateData.personalRightCount = sql`${users.personalRightCount} + 1`; // Personal only if also sponsor
                   updateData.totalReferrals = sql`${users.totalReferrals} + 1`; // Total referrals only for direct sponsor
                 }
               }
               
               await tx.update(users)
                 .set(updateData)
-                .where(eq(users.userId, uplineId));
+                .where(eq(users.userId, ancestor.userId));
               
-              const typeLabel = isDirectSponsor ? 'direct sponsor' : 'upline';
-              console.log(`[ACTIVATION] Updated ${typeLabel} ${uplineId}: +1 to ${assignedBinaryLeg} leg (${isDirectSponsor ? 'personal + global' : 'global only'})`);
+              const typeLabel = isDirectSponsor ? 'binary parent + direct sponsor' : 'binary ancestor';
+              console.log(`[ACTIVATION] Updated ${typeLabel} ${ancestor.userId}: +1 to ${childLeg} leg (${isDirectSponsor ? 'personal + global' : 'global only'})`);
             }
             
-            // Step 5: Check ALL upline users for queue entry eligibility
+            // Step 5: Check ALL binary ancestors for queue entry eligibility
             // Import QUEUE-BASED binary matching service
             const { BinaryMatchService } = await import('./binary-match-service');
             const binaryMatchService = new BinaryMatchService(tx as any);
             
-            console.log(`[BINARY_MATCH_QUEUE] Checking upline for queue entry after ${activatedUser.userId} activation`);
+            console.log(`[BINARY_MATCH_QUEUE] Checking binary ancestors for queue entry after ${activatedUser.userId} activation`);
             await binaryMatchService.processUplineForQueueEntry(activatedUser.userId);
-            console.log(`[BINARY_MATCH_QUEUE] ✓ Upline queue check completed`);
+            console.log(`[BINARY_MATCH_QUEUE] ✓ Binary ancestor queue check completed`);
           }
           
           console.log(`[ACTIVATION] User ${activatedUser.userId} successfully activated and placed in binary tree!`);
@@ -2330,6 +2379,85 @@ export class DbStorage implements IStorage {
       
       return payment;
     });
+  }
+
+  async assignMatrixPaymentReceiversForReentry(activationId: string, userId: string, tx: any): Promise<void> {
+    // MUST be called within a transaction (no longer creates its own)
+    // Get user's matrix position
+    const userResult = await tx.select()
+      .from(users)
+      .where(eq(users.userId, userId))
+      .limit(1);
+    
+    if (!userResult[0] || !userResult[0].matrixPath) {
+      console.log(`[RE-ENTRY MATRIX] User ${userId} has no matrix position - skipping matrix assignment`);
+      return;
+    }
+    
+    const user = userResult[0];
+    
+    // Find the user's 5-level matrix upline (ancestors) using the same transaction
+    const upline = await this.getMatrixUpline(userId, 5, tx);
+    
+    console.log(`[RE-ENTRY MATRIX] Found ${upline.length} matrix upline members for ${userId}`);
+    
+    // Update matrix payment slots (3-7) with receiver IDs
+    for (let level = 1; level <= 5; level++) {
+      const slotIndex = level + 2; // matrix_level_1 is slot 3, matrix_level_2 is slot 4, etc.
+      const paymentType = `matrix_level_${level}`;
+      
+      const receiverUserId = upline[level - 1] || 'PB0'; // Fallback to PB0 if no upline at this level
+      
+      await tx.update(activationPayments)
+        .set({
+          receiverUserId,
+          receiverType: 'user',
+          status: 'pending', // Change from awaiting_assignment to pending
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(activationPayments.activationId, activationId),
+          eq(activationPayments.paymentType, paymentType as any)
+        ));
+      
+      console.log(`[RE-ENTRY MATRIX] Assigned ${paymentType} receiver: ${receiverUserId}`);
+    }
+  }
+
+  // Get matrix upline (ancestors) up to maxLevels
+  private async getMatrixUpline(userId: string, maxLevels: number, txOrDb?: any): Promise<string[]> {
+    const dbConn = txOrDb || db; // Use transaction if provided, otherwise global db
+    
+    const userResult = await dbConn.select()
+      .from(users)
+      .where(eq(users.userId, userId))
+      .limit(1);
+    
+    if (!userResult[0]) {
+      return [];
+    }
+    
+    const user = userResult[0];
+    
+    // Walk up the matrix parent chain
+    const upline: string[] = [];
+    let currentParentId = user.matrixParentId;
+    
+    while (currentParentId && upline.length < maxLevels) {
+      const parentResult = await dbConn.select()
+        .from(users)
+        .where(eq(users.userId, currentParentId))
+        .limit(1);
+      
+      if (!parentResult[0]) {
+        break;
+      }
+      
+      upline.push(parentResult[0].userId);
+      currentParentId = parentResult[0].matrixParentId;
+    }
+    
+    return upline;
   }
 
   // Release abandoned queue reservations (for activations that were never completed/rejected)

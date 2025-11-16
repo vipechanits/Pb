@@ -4,6 +4,15 @@
 PAYBACK247 is a peer-to-peer income platform for network marketing, featuring binary pairing income, multi-level matrix rewards, and a manual payment tracking system with administrator approval. It allows users to activate accounts, build referral networks, monitor earnings, and manage profiles. Administrators can manage system configurations, approve payments, and access analytics for efficient operation and financial transparency.
 
 ## Recent Changes
+- **Re-Entry Database Constraint Fixed (November 15, 2025)**:
+  - **Schema Fix**: Removed UNIQUE constraint from `activations.payer_wallet` to allow multiple activations per user (required for re-entry cycles)
+  - **Automatic Eligibility Detection**: Re-entry status endpoint now auto-detects and marks users eligible when matrix completes (62 users)
+  - **Automatic Activation Creation**: When users initiate re-entry, `ReentryService.initiateReentry()` creates new activation with 8 payment slots automatically
+  - **Atomic Transaction**: Activation creation uses `storage.createActivationWithPayments()` (already transactional), then updates re-entry record with `newActivationId`
+  - **Error Handling**: If activation creation fails, re-entry is marked as 'failed' with proper rollback
+  - **Cycle-Based Tabs**: Frontend displays separate tabs for each cycle (Cycle 1, Cycle 2, etc.) with visual progress indicators
+  - **Payment Grouping**: Payments automatically grouped by `activationId` and mapped to cycles via re-entry history
+  - **Cache Invalidation**: Frontend properly refreshes all relevant queries after re-entry to show new cycle immediately
 - **Two-Factor Authentication Feature Removed (November 15, 2025)**:
   - **Complete 2FA Removal**: All Two-Factor Authentication functionality removed per user request, including database fields, UI components, and backend routes
   - **Database Schema Update**: Removed `twoFactorSecret`, `twoFactorEnabled`, `twoFactorBackupCodes` from users table and `twoFactorRequired` from system_config table
