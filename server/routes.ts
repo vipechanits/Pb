@@ -1912,6 +1912,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         adminIfscCode: config.adminIfscCode,
         adminMobile: config.adminMobile,
         adminQrCodeUrl: config.adminQrCodeUrl,
+        recaptchaSiteKey: config.recaptchaSiteKey,
+        recaptchaEnabled: config.recaptchaEnabled,
       };
       
       res.json(normalizedConfig);

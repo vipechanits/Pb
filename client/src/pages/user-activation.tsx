@@ -413,7 +413,7 @@ export default function UserActivationPage() {
                   key={`cycle-${cycle.cycleNumber}`} 
                   value={`cycle-${cycle.cycleNumber}`}
                   data-testid={`tab-cycle-${cycle.cycleNumber}`}
-                  className="flex-col h-auto py-3"
+                  className={`flex-col h-auto py-3 ${cycle.cycleNumber === 1 ? 'data-[state=active]:bg-green-100 dark:data-[state=active]:bg-green-900/30 data-[state=active]:text-green-800 dark:data-[state=active]:text-green-300' : ''}`}
                 >
                   <div className="flex items-center gap-2">
                     <span className="font-semibold">Cycle {cycle.cycleNumber}</span>
@@ -493,154 +493,6 @@ export default function UserActivationPage() {
         </Alert>
       )}
 
-      {/* Admin Payment Details Card */}
-      {adminPaymentDetails && (
-        <Card className="border-2 border-primary/20">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Info className="h-5 w-5 text-primary" />
-              Admin Payment Details (PB0)
-            </CardTitle>
-            <CardDescription>
-              Use these details for all admin payments (Top Reward & Matrix Levels)
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-6 md:grid-cols-2">
-              {/* Payment Details */}
-              <div className="space-y-4">
-                {adminPaymentDetails.upiId && (
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-muted-foreground">UPI ID</p>
-                    <div className="flex items-center gap-2">
-                      <p className="font-mono font-semibold" data-testid="text-admin-upi">{adminPaymentDetails.upiId}</p>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => copyToClipboard(adminPaymentDetails.upiId!, 'UPI ID')}
-                        data-testid="button-copy-admin-upi"
-                      >
-                        {copiedField === 'UPI ID' ? (
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {adminPaymentDetails.bankAccount && (
-                  <>
-                    {adminPaymentDetails.bankAccountHolder && (
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-muted-foreground">Account Holder</p>
-                        <div className="flex items-center gap-2">
-                          <p className="font-mono font-semibold" data-testid="text-admin-account-holder">{adminPaymentDetails.bankAccountHolder}</p>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => copyToClipboard(adminPaymentDetails.bankAccountHolder!, 'Account Holder')}
-                            data-testid="button-copy-admin-account-holder"
-                          >
-                            {copiedField === 'Account Holder' ? (
-                              <CheckCircle2 className="h-4 w-4 text-green-600" />
-                            ) : (
-                              <Copy className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                    
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-muted-foreground">Bank Account</p>
-                      <div className="flex items-center gap-2">
-                        <p className="font-mono font-semibold" data-testid="text-admin-bank">{adminPaymentDetails.bankAccount}</p>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => copyToClipboard(adminPaymentDetails.bankAccount!, 'Bank Account')}
-                          data-testid="button-copy-admin-bank"
-                        >
-                          {copiedField === 'Bank Account' ? (
-                            <CheckCircle2 className="h-4 w-4 text-green-600" />
-                          ) : (
-                            <Copy className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-
-                    {adminPaymentDetails.ifscCode && (
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-muted-foreground">IFSC Code</p>
-                        <div className="flex items-center gap-2">
-                          <p className="font-mono font-semibold" data-testid="text-admin-ifsc">{adminPaymentDetails.ifscCode}</p>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => copyToClipboard(adminPaymentDetails.ifscCode!, 'IFSC Code')}
-                            data-testid="button-copy-admin-ifsc"
-                          >
-                            {copiedField === 'IFSC Code' ? (
-                              <CheckCircle2 className="h-4 w-4 text-green-600" />
-                            ) : (
-                              <Copy className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {adminPaymentDetails.mobile && (
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-muted-foreground">Mobile</p>
-                    <div className="flex items-center gap-2">
-                      <p className="font-mono font-semibold" data-testid="text-admin-mobile">{adminPaymentDetails.mobile}</p>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => copyToClipboard(adminPaymentDetails.mobile!, 'Mobile')}
-                        data-testid="button-copy-admin-mobile"
-                      >
-                        {copiedField === 'Mobile' ? (
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* QR Code */}
-              {adminPaymentDetails.paymentQrUrl && (
-                <div className="flex flex-col items-center justify-center">
-                  <p className="text-sm font-medium text-muted-foreground mb-2">Scan to Pay</p>
-                  <div className="border-2 rounded-lg p-3 bg-white">
-                    <img 
-                      src={adminPaymentDetails.paymentQrUrl} 
-                      alt="Admin UPI QR Code" 
-                      className="w-48 h-48 object-contain"
-                      data-testid="img-admin-qr"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
@@ -684,9 +536,20 @@ export default function UserActivationPage() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Payment Checklist - Cycle {Number(effectiveTab.split('-')[1]) || 1}</CardTitle>
-          <CardDescription>Complete all 8 payments for this cycle to activate</CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-4">
+          <div className="space-y-1">
+            <CardTitle>Payment Checklist - Cycle {Number(effectiveTab.split('-')[1]) || 1}</CardTitle>
+            <CardDescription>Complete all 8 payments for this cycle to activate</CardDescription>
+          </div>
+          <Button 
+            onClick={() => refetch()} 
+            variant="outline" 
+            size="sm"
+            data-testid="button-refresh-payments"
+            disabled={isLoading}
+          >
+            <RefreshCw className={`w-4 h-4 text-green-600 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
