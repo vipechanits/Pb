@@ -1113,6 +1113,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Helper function to serialize matrix tree and break any circular references
+  function serializeMatrixTree(node: any, visited = new Set<string>()): any {
+    if (!node) return null;
+    
+    // Prevent infinite loops by tracking visited nodes
+    if (visited.has(node.userId)) {
+      return {
+        userId: node.userId,
+        name: node.name,
+        email: node.email,
+        isActivated: node.isActivated,
+        matrixLevel: node.matrixLevel,
+        matrixPosition: node.matrixPosition,
+        matrixPath: node.matrixPath,
+        leftChild: null,
+        rightChild: null,
+        _circular: true // Mark as circular reference
+      };
+    }
+    
+    // Add to visited BEFORE recursing (prevent cycles)
+    visited.add(node.userId);
+    
+    // Create new object with serialized children (SHARE the same visited set)
+    return {
+      userId: node.userId,
+      name: node.name,
+      email: node.email,
+      isActivated: node.isActivated,
+      matrixLevel: node.matrixLevel,
+      matrixPosition: node.matrixPosition,
+      matrixPath: node.matrixPath,
+      leftChild: serializeMatrixTree(node.leftChild, visited), // FIXED: Share visited set
+      rightChild: serializeMatrixTree(node.rightChild, visited) // FIXED: Share visited set
+    };
+  }
+
   app.get("/api/users/:userId/global-matrix", requireAuth, async (req, res) => {
     try {
       const { userId } = req.params;
@@ -1134,28 +1171,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Verify this activation belongs to this user
         const activation = await storage.getActivation(activationId);
-        if (!activation || activation.payerWallet !== rootUser.id) {
+        if (!activation || activation.payerWallet !== rootUser.userId) { // FIXED: Compare to userId, not UUID
           return res.status(403).json({ error: "Forbidden - This activation does not belong to you" });
         }
         
         const tree = await storage.getActivationMatrixSubtree(activationId, 5);
-        console.log(`[ACTIVATION-MATRIX] Tree result for activation ${activationId}:`, JSON.stringify(tree, null, 2));
+        console.log(`[ACTIVATION-MATRIX] Tree fetched successfully for activation ${activationId}`);
         
-        res.json(tree);
+        // Serialize tree to break circular references
+        const serializedTree = serializeMatrixTree(tree);
+        res.json(serializedTree);
       } else {
         // Legacy user-scoped matrix (fallback for backward compatibility)
         console.log(`[GLOBAL-MATRIX] Fetching legacy user-scoped matrix for ${userId}`);
-        console.log(`[GLOBAL-MATRIX] Root user data:`, JSON.stringify({
+        console.log(`[GLOBAL-MATRIX] Root user data:`, {
           userId: rootUser.userId,
           matrixLevel: rootUser.matrixLevel,
           matrixPath: rootUser.matrixPath,
           matrixPosition: rootUser.matrixPosition
-        }, null, 2));
+        });
         
         const tree = await storage.getMatrixSubtree(userId, 5);
-        console.log(`[GLOBAL-MATRIX] Tree result:`, JSON.stringify(tree, null, 2));
+        console.log(`[GLOBAL-MATRIX] Tree fetched successfully for ${userId}`);
         
-        res.json(tree);
+        // Serialize tree to break circular references
+        const serializedTree = serializeMatrixTree(tree);
+        res.json(serializedTree);
       }
     } catch (error) {
       console.error("Error fetching global matrix:", error);

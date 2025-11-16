@@ -89,6 +89,120 @@ function MatrixNodeComponent({ node, position, depth }: MatrixNodeProps) {
   );
 }
 
+interface CycleMatrixViewProps {
+  activation: UserActivation;
+  userId: string;
+  isSelected: boolean;
+}
+
+function CycleMatrixView({ activation, userId, isSelected }: CycleMatrixViewProps) {
+  // Fetch matrix tree for this specific activation
+  const { data: matrix, isLoading } = useQuery<MatrixNode>({
+    queryKey: ['/api/users', userId, 'global-matrix', activation.activationId],
+    queryFn: async () => {
+      const url = `/api/users/${userId}/global-matrix?activationId=${activation.activationId}`;
+      const res = await fetch(url, { credentials: 'include' });
+      if (!res.ok) {
+        throw new Error('Failed to load global matrix');
+      }
+      return await res.json();
+    },
+    enabled: isSelected && activation.matrixLevel !== null, // Only fetch if selected and placed in matrix
+  });
+
+  const countTeamMembers = (node: MatrixNode | null): number => {
+    if (!node) return 0;
+    return 1 + countTeamMembers(node.leftChild) + countTeamMembers(node.rightChild);
+  };
+
+  const teamCount = matrix ? countTeamMembers(matrix) - 1 : 0;
+
+  return (
+    <div className="space-y-4">
+      {/* Cycle Stats */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium">Matrix Level</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold" data-testid={`stat-matrix-level-cycle-${activation.cycleNumber}`}>
+              {activation.matrixLevel ?? 'Not Placed'}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Position in Cycle #{activation.cycleNumber} matrix
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium">Matrix Path</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm font-mono font-bold truncate" data-testid={`stat-matrix-path-cycle-${activation.cycleNumber}`}>
+              {activation.matrixPath || 'Not Placed'}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Breadcrumb trail for Cycle #{activation.cycleNumber}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium">Team Members</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold" data-testid={`stat-team-count-cycle-${activation.cycleNumber}`}>
+              {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : teamCount}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Under you in Cycle #{activation.cycleNumber}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Matrix Tree Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Your Matrix Position - Cycle #{activation.cycleNumber}</CardTitle>
+          <CardDescription>
+            {activation.status === 'completed' 
+              ? `Matrix tree for Cycle #${activation.cycleNumber} (completed ${activation.completedAt ? new Date(activation.completedAt).toLocaleDateString() : ''})`
+              : `Matrix tree for Cycle #${activation.cycleNumber} (${activation.status})`
+            }
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          {activation.matrixLevel === null ? (
+            <Alert className="my-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Matrix Placement Pending:</strong> Complete all 8 payments for Cycle #{activation.cycleNumber} to be placed in the global matrix.
+              </AlertDescription>
+            </Alert>
+          ) : isLoading ? (
+            <div className="text-center text-muted-foreground py-12">
+              <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+              <p>Loading matrix data for Cycle #{activation.cycleNumber}...</p>
+            </div>
+          ) : matrix ? (
+            <div className="flex justify-center min-w-max p-6">
+              <MatrixNodeComponent node={matrix} position="root" depth={0} />
+            </div>
+          ) : (
+            <div className="text-center text-muted-foreground py-12">
+              <p>No matrix data available for Cycle #{activation.cycleNumber}</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function MatrixFillingStatus() {
   const { data: stats, isLoading } = useQuery<MatrixStats>({
     queryKey: ['/api/global-matrix/stats'],
@@ -362,47 +476,20 @@ export default function UserGlobalMatrixPage() {
                 data-testid={`tab-cycle-${activation.cycleNumber}`}
                 className="gap-2"
               >
-                <span>Cycle {activation.cycleNumber}</span>
+                <span>Cycle #{activation.cycleNumber}</span>
                 {activation.status === 'completed' && <CheckCircle className="w-3 h-3" />}
-                {activation.matrixLevel && <Badge variant="outline" className="text-xs">{activation.matrixLevel}</Badge>}
+                {activation.matrixLevel !== null && <Badge variant="outline" className="text-xs">L{activation.matrixLevel}</Badge>}
               </TabsTrigger>
             ))}
           </TabsList>
           
           {activations.map((activation) => (
             <TabsContent key={activation.activationId} value={activation.activationId} className="mt-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Your Matrix Position - Cycle {activation.cycleNumber}</CardTitle>
-                  <CardDescription>
-                    {activation.status === 'completed' 
-                      ? `Matrix tree for Cycle ${activation.cycleNumber} (completed ${new Date(activation.completedAt!).toLocaleDateString()})`
-                      : `Matrix tree for Cycle ${activation.cycleNumber} (${activation.status})`
-                    }
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="overflow-x-auto">
-                  {activation.matrixLevel === null ? (
-                    <Alert className="my-4">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        <strong>Matrix Placement Pending:</strong> Complete all 8 payments for this cycle to be placed in the global matrix.
-                      </AlertDescription>
-                    </Alert>
-                  ) : (
-                    <div className="flex justify-center min-w-max p-6">
-                      {matrix ? (
-                        <MatrixNodeComponent node={matrix} position="root" depth={0} />
-                      ) : (
-                        <div className="text-center text-muted-foreground py-12">
-                          <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-                          <p>Loading matrix data for Cycle {activation.cycleNumber}...</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              <CycleMatrixView 
+                activation={activation} 
+                userId={user?.userId!} 
+                isSelected={selectedActivationId === activation.activationId}
+              />
             </TabsContent>
           ))}
         </Tabs>

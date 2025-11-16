@@ -193,7 +193,7 @@ export class ReentryService {
         const activationResult = await storage.createActivationWithPayments(
           {
             id: activationId,
-            payerWallet: userData.id, // Store database UUID for activation lookup
+            payerWallet: userData.userId, // FIXED: Use PB#### ID (not UUID) for activation lookup
             sponsorWallet: userData.sponsorId || null, // Sponsor's PB#### ID
             status: 'pending',
           },

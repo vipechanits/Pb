@@ -1285,7 +1285,7 @@ export class DbStorage implements IStorage {
       })
       .from(activations)
       .leftJoin(reentries, eq(reentries.newActivationId, activations.id))
-      .where(eq(activations.payerWallet, user.id))
+      .where(eq(activations.payerWallet, userId)) // FIXED: Use userId directly, not user.id (UUID)
       .orderBy(asc(activations.createdAt));
 
     // Enrich with matrix position data
@@ -1299,7 +1299,7 @@ export class DbStorage implements IStorage {
 
         return {
           activationId: activation.activationId,
-          cycleNumber: activation.cycleNumber || 1, // First activation is Cycle 1
+          cycleNumber: activation.cycleNumber ? activation.cycleNumber + 1 : 1, // First activation is Cycle 1, re-entries are cycleNumber + 1
           status: activation.status,
           matrixLevel: matrixPosition[0]?.matrixLevel || null,
           matrixPath: matrixPosition[0]?.matrixPath || null,
