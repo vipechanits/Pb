@@ -6,7 +6,7 @@ import { CheckCircle, XCircle, Clock, ExternalLink, RefreshCw } from 'lucide-rea
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useNotificationSound } from '@/hooks/use-notification-sound';
 import { apiRequest, queryClient } from '@/lib/queryClient';
@@ -20,6 +20,8 @@ export default function AdminPayments() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [confirmNotes, setConfirmNotes] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [receiverQrCode, setReceiverQrCode] = useState<string | null>(null);
+  const [loadingQrCode, setLoadingQrCode] = useState(false);
   
   const { data: payments, isLoading, refetch } = useQuery<ActivationPayment[]>({
     queryKey: ['/api/activation-payments/pending-confirmations'],
@@ -31,7 +33,46 @@ export default function AdminPayments() {
     setAction(actionType);
     setRejectionReason('');
     setConfirmNotes('');
+    setReceiverQrCode(null);
   };
+
+  // Fetch receiver's QR code when dialog opens
+  useEffect(() => {
+    if (selectedPayment && action === 'confirm') {
+      const fetchReceiverQrCode = async () => {
+        setLoadingQrCode(true);
+        try {
+          // Determine receiver ID (use 'PB0' for admin payments)
+          const receiverId = selectedPayment.receiverType === 'admin' ? 'PB0' : selectedPayment.receiverUserId;
+          
+          const response = await apiRequest('GET', `/api/users/payment-details/${receiverId}`);
+          const data = await response.json();
+          
+          // Generate QR code if receiver has payment details
+          if (data.upiId || data.paymentQrUrl) {
+            if (data.paymentQrUrl) {
+              setReceiverQrCode(data.paymentQrUrl);
+            } else if (data.upiId) {
+              // Generate QR code from UPI ID
+              const qrResponse = await apiRequest('POST', '/api/profile/generate-qr', {
+                upiId: data.upiId,
+                name: data.name || 'Admin',
+                mobile: data.mobile || '0000000000'
+              });
+              const qrData = await qrResponse.json();
+              setReceiverQrCode(qrData.qrCode);
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching receiver QR code:', error);
+        } finally {
+          setLoadingQrCode(false);
+        }
+      };
+      
+      fetchReceiverQrCode();
+    }
+  }, [selectedPayment, action]);
 
   const handleConfirm = async () => {
     console.log('[ADMIN-PAYMENTS] handleConfirm called, selectedPayment:', selectedPayment?.id);
@@ -286,10 +327,35 @@ export default function AdminPayments() {
           </DialogHeader>
 
           {selectedPayment && (
-            <div className="space-y-2 text-sm">
-              <p><strong>From:</strong> {selectedPayment.payerUserId}</p>
-              <p><strong>Amount:</strong> ₹{selectedPayment.amountInr}</p>
-              <p><strong>Type:</strong> {getPaymentTypeLabel(selectedPayment.paymentType)}</p>
+            <div className="space-y-4">
+              <div className="space-y-2 text-sm">
+                <p><strong>From:</strong> {selectedPayment.payerUserId}</p>
+                <p><strong>To:</strong> {selectedPayment.receiverType === 'admin' ? 'Admin Wallet (PB0)' : selectedPayment.receiverUserId}</p>
+                <p><strong>Amount:</strong> ₹{selectedPayment.amountInr}</p>
+                <p><strong>Type:</strong> {getPaymentTypeLabel(selectedPayment.paymentType)}</p>
+              </div>
+
+              {/* Receiver's QR Code */}
+              {loadingQrCode ? (
+                <div className="text-center py-4">
+                  <p className="text-sm text-muted-foreground">Loading receiver QR code...</p>
+                </div>
+              ) : receiverQrCode ? (
+                <div className="border rounded-lg p-4 bg-muted/20">
+                  <Label className="text-sm font-semibold mb-2 block">Receiver's Payment QR Code:</Label>
+                  <div className="bg-white p-2 rounded inline-block">
+                    <img 
+                      src={receiverQrCode} 
+                      alt="Receiver QR Code" 
+                      className="w-48 h-48 mx-auto"
+                      data-testid="img-receiver-qr"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Verify payment was made to this QR code
+                  </p>
+                </div>
+              ) : null}
             </div>
           )}
 
