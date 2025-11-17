@@ -641,6 +641,19 @@ export default function UserActivationPage() {
                                   <span className="text-muted-foreground">Payment To:</span>
                                   <p className="font-medium">{payment.receiverType === 'admin' ? 'Admin Account (PB0)' : payment.receiverUserId}</p>
                                 </div>
+                                {/* Receiver Mobile Number */}
+                                {payment.receiverType === 'admin' && adminPaymentDetails?.mobile && (
+                                  <div>
+                                    <span className="text-muted-foreground">Mobile:</span>
+                                    <p className="font-medium">{adminPaymentDetails.mobile}</p>
+                                  </div>
+                                )}
+                                {payment.receiverType !== 'admin' && payment.receiverMobile && (
+                                  <div>
+                                    <span className="text-muted-foreground">Mobile:</span>
+                                    <p className="font-medium">{payment.receiverMobile}</p>
+                                  </div>
+                                )}
                                 <div>
                                   <span className="text-muted-foreground">Amount:</span>
                                   <p className="font-medium">₹{payment.amountInr}</p>
@@ -690,7 +703,7 @@ export default function UserActivationPage() {
                                 {payment.offlineUtrId && (
                                   <div>
                                     <span className="text-muted-foreground">UTR/Transaction ID:</span>
-                                    <p className="font-mono text-xs font-medium">{payment.offlineUtrId}</p>
+                                    <p className="font-mono text-xs font-bold">{payment.offlineUtrId}</p>
                                   </div>
                                 )}
                                 {payment.submissionCount > 0 && (
@@ -707,6 +720,12 @@ export default function UserActivationPage() {
                                   <span className="text-muted-foreground">Created:</span>
                                   <p className="text-xs">{formatDate(payment.createdAt)}</p>
                                 </div>
+                                {payment.paymentSubmittedAt && (
+                                  <div>
+                                    <span className="text-muted-foreground">Payment Submitted:</span>
+                                    <p className="text-xs text-blue-600 font-medium">{formatDate(payment.paymentSubmittedAt)}</p>
+                                  </div>
+                                )}
                                 {payment.confirmedAt && (
                                   <div>
                                     <span className="text-muted-foreground">Confirmed:</span>
@@ -857,6 +876,19 @@ export default function UserActivationPage() {
                                   <span className="text-muted-foreground">Payment To:</span>
                                   <p className="font-medium">{payment.receiverType === 'admin' ? 'Admin Account (PB0)' : payment.receiverUserId || 'Assigning...'}</p>
                                 </div>
+                                {/* Receiver Mobile Number */}
+                                {payment.receiverType === 'admin' && adminPaymentDetails?.mobile && (
+                                  <div>
+                                    <span className="text-muted-foreground">Mobile:</span>
+                                    <p className="font-medium">{adminPaymentDetails.mobile}</p>
+                                  </div>
+                                )}
+                                {payment.receiverType !== 'admin' && payment.receiverMobile && (
+                                  <div>
+                                    <span className="text-muted-foreground">Mobile:</span>
+                                    <p className="font-medium">{payment.receiverMobile}</p>
+                                  </div>
+                                )}
                                 <div>
                                   <span className="text-muted-foreground">Amount:</span>
                                   <p className="font-medium">₹{payment.amountInr}</p>
@@ -906,7 +938,7 @@ export default function UserActivationPage() {
                                 {payment.offlineUtrId && (
                                   <div>
                                     <span className="text-muted-foreground">UTR/Transaction ID:</span>
-                                    <p className="font-mono text-xs font-medium">{payment.offlineUtrId}</p>
+                                    <p className="font-mono text-xs font-bold">{payment.offlineUtrId}</p>
                                   </div>
                                 )}
                                 {payment.submissionCount > 0 && (
@@ -923,6 +955,12 @@ export default function UserActivationPage() {
                                   <span className="text-muted-foreground">Created:</span>
                                   <p className="text-xs">{formatDate(payment.createdAt)}</p>
                                 </div>
+                                {payment.paymentSubmittedAt && (
+                                  <div>
+                                    <span className="text-muted-foreground">Payment Submitted:</span>
+                                    <p className="text-xs text-blue-600 font-medium">{formatDate(payment.paymentSubmittedAt)}</p>
+                                  </div>
+                                )}
                                 {payment.confirmedAt && (
                                   <div>
                                     <span className="text-muted-foreground">Confirmed:</span>

@@ -203,106 +203,6 @@ function CycleMatrixView({ activation, userId, isSelected }: CycleMatrixViewProp
   );
 }
 
-function MatrixFillingStatus() {
-  const { data: stats, isLoading } = useQuery<MatrixStats>({
-    queryKey: ['/api/global-matrix/stats'],
-  });
-
-  if (isLoading || !stats) {
-    return (
-      <Card>
-        <CardContent className="p-6">
-          <div className="flex items-center justify-center">
-            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className="border-purple-500/30 bg-gradient-to-br from-purple-50/50 to-pink-50/50 dark:from-purple-950/20 dark:to-pink-950/20">
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Layers className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-          <CardTitle>Global Matrix Filling Status</CardTitle>
-        </div>
-        <CardDescription>Real-time overview of unlimited global matrix growth</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Users className="w-4 h-4" />
-              <span>Total Members</span>
-            </div>
-            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400" data-testid="stat-filled">
-              {stats.totalFilled}
-            </div>
-          </div>
-          
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Layers className="w-4 h-4" />
-              <span>Active Levels</span>
-            </div>
-            <div className="text-2xl font-bold text-pink-600 dark:text-pink-400" data-testid="stat-levels">
-              {stats.totalLevels}
-            </div>
-          </div>
-          
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <TrendingUp className="w-4 h-4" />
-              <span>Max Level Reached</span>
-            </div>
-            <div className="text-2xl font-bold" data-testid="stat-max-level">
-              Level {stats.maxLevel || 1}
-            </div>
-          </div>
-        </div>
-
-        <Alert className="bg-purple-50/50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800">
-          <AlertCircle className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-          <AlertDescription className="text-sm">
-            <strong>Unlimited Growth:</strong> The matrix has no level cap and grows infinitely. Each user earns from their 5-level downline (up to 62 members), regardless of their position in the matrix.
-          </AlertDescription>
-        </Alert>
-
-        <div className="space-y-3 pt-2">
-          <h4 className="text-sm font-semibold">Level-wise Breakdown</h4>
-          <div className="space-y-2 max-h-[400px] overflow-y-auto">
-            {stats.levelBreakdown.map((level) => (
-              <div key={level.level} className="flex items-center gap-3">
-                <Badge variant="outline" className="min-w-16 justify-center">
-                  Level {level.level}
-                </Badge>
-                <div className="flex-1">
-                  <Progress 
-                    value={(level.filled / level.capacity) * 100} 
-                    className="h-1.5"
-                    data-testid={`progress-level-${level.level}`}
-                  />
-                </div>
-                <span className="text-xs text-muted-foreground min-w-20 text-right" data-testid={`stat-level-${level.level}`}>
-                  {level.filled} / {level.capacity}
-                </span>
-                <Badge 
-                  variant={level.available > 0 ? "default" : "secondary"} 
-                  className="min-w-16 justify-center text-xs"
-                  data-testid={`badge-available-${level.level}`}
-                >
-                  {level.available} left
-                </Badge>
-              </div>
-            ))}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 interface UserActivation {
   activationId: string;
   cycleNumber: number;
@@ -413,8 +313,6 @@ export default function UserGlobalMatrixPage() {
           View your position in the global 2x5 matrix system
         </p>
       </div>
-
-      <MatrixFillingStatus />
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>

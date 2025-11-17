@@ -252,6 +252,7 @@ export const activationPayments = pgTable("activation_payments", {
   offlineProofUrl: text("offline_proof_url"),
   status: paymentStatusEnum("payment_status").notNull().default('pending'),
   submissionCount: integer("submission_count").notNull().default(0),
+  paymentSubmittedAt: timestamp("payment_submitted_at"),
   confirmedAt: timestamp("confirmed_at"),
   rejectedAt: timestamp("rejected_at"),
   rejectionReason: text("rejection_reason"),
@@ -745,3 +746,58 @@ export type Setup2FA = z.infer<typeof setup2FASchema>;
 export type Verify2FA = z.infer<typeof verify2FASchema>;
 export type Disable2FA = z.infer<typeof disable2FASchema>;
 export type VerifyRecaptcha = z.infer<typeof verifyRecaptchaSchema>;
+
+// Ticket Support System
+export const ticketStatusEnum = pgEnum("ticket_status", ["open", "in_progress", "resolved", "closed"]);
+export const ticketPriorityEnum = pgEnum("ticket_priority", ["low", "medium", "high", "urgent"]);
+export const ticketCategoryEnum = pgEnum("ticket_category", [
+  "payment_issue",
+  "activation_problem",
+  "technical_support",
+  "account_issue",
+  "general_inquiry",
+  "other"
+]);
+
+export const tickets = pgTable("tickets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ticketNumber: varchar("ticket_number", { length: 20 }).notNull().unique(),
+  userId: varchar("user_id", { length: 20 }).notNull(),
+  subject: text("subject").notNull(),
+  category: ticketCategoryEnum("category").notNull(),
+  priority: ticketPriorityEnum("priority").notNull().default('medium'),
+  status: ticketStatusEnum("status").notNull().default('open'),
+  description: text("description").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  resolvedAt: timestamp("resolved_at"),
+  closedAt: timestamp("closed_at"),
+});
+
+export const ticketReplies = pgTable("ticket_replies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ticketId: varchar("ticket_id").notNull(),
+  userId: varchar("user_id", { length: 20 }).notNull(),
+  message: text("message").notNull(),
+  isAdminReply: boolean("is_admin_reply").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertTicketSchema = createInsertSchema(tickets).omit({
+  id: true,
+  ticketNumber: true,
+  createdAt: true,
+  updatedAt: true,
+  resolvedAt: true,
+  closedAt: true,
+});
+
+export const insertTicketReplySchema = createInsertSchema(ticketReplies).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertTicket = z.infer<typeof insertTicketSchema>;
+export type Ticket = typeof tickets.$inferSelect;
+export type InsertTicketReply = z.infer<typeof insertTicketReplySchema>;
+export type TicketReply = typeof ticketReplies.$inferSelect;

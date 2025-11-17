@@ -3,6 +3,7 @@ import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Mail } from 'lucide-react';
@@ -19,6 +20,7 @@ export default function SignupPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const recaptchaRef = useRef<HTMLDivElement>(null);
   const { isLoaded, isEnabled, renderRecaptcha, executeRecaptcha } = useRecaptcha();
 
@@ -54,6 +56,11 @@ export default function SignupPage() {
 
     if (password.length < 6) {
       setError('Password must be at least 6 characters');
+      return;
+    }
+
+    if (!acceptedTerms) {
+      setError('You must accept the Terms & Conditions to create an account');
       return;
     }
 
@@ -210,6 +217,30 @@ export default function SignupPage() {
                 <div ref={recaptchaRef} className="g-recaptcha" data-testid="recaptcha-widget"></div>
               </div>
             )}
+
+            {/* Terms & Conditions Checkbox */}
+            <div className="flex items-start space-x-2" data-testid="checkbox-terms-container">
+              <Checkbox
+                id="terms"
+                checked={acceptedTerms}
+                onCheckedChange={(checked) => setAcceptedTerms(checked === true)}
+                data-testid="checkbox-terms"
+              />
+              <Label
+                htmlFor="terms"
+                className="text-sm font-normal leading-tight cursor-pointer"
+              >
+                I agree to the{' '}
+                <button
+                  type="button"
+                  onClick={() => window.open('/legal/terms', '_blank')}
+                  className="text-primary hover:underline"
+                  data-testid="link-terms"
+                >
+                  Terms & Conditions
+                </button>
+              </Label>
+            </div>
 
             <Button type="submit" className="w-full" disabled={loading} data-testid="button-signup">
               {loading ? 'Creating account...' : 'Sign Up'}

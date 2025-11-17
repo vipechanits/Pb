@@ -98,15 +98,13 @@ export default function Landing() {
       {/* Header */}
       <header className="border-b sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50">
         <div className="container mx-auto px-4 sm:px-6 py-2 flex items-center justify-between gap-4">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
             <img src={logoUrl} alt="PAYBACK247" className="w-32 h-32 my-2" />
-            <span className="font-bold text-xl sm:text-2xl">PAYBACK247</span>
           </div>
           <div className="flex items-center gap-2">
             <Button 
               variant="ghost" 
               onClick={() => setLocation('/auth/login')} 
-              className="hidden sm:inline-flex"
               data-testid="button-header-login"
             >
               Login
@@ -343,6 +341,38 @@ export default function Landing() {
                     data-testid="button-footer-login"
                   >
                     Login
+                  </button>
+                </li>
+                <li>
+                  <button 
+                    onClick={() => setLocation('/legal/about')} 
+                    className="hover:text-foreground transition-colors"
+                    data-testid="button-footer-about"
+                  >
+                    About Us
+                  </button>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-4">Legal</h3>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li>
+                  <button 
+                    onClick={() => setLocation('/legal/terms')} 
+                    className="hover:text-foreground transition-colors"
+                    data-testid="button-footer-terms"
+                  >
+                    Terms & Conditions
+                  </button>
+                </li>
+                <li>
+                  <button 
+                    onClick={() => setLocation('/legal/contact')} 
+                    className="hover:text-foreground transition-colors"
+                    data-testid="button-footer-contact"
+                  >
+                    Contact Us
                   </button>
                 </li>
               </ul>

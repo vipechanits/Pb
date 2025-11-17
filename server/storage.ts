@@ -99,7 +99,15 @@ export interface IStorage {
   createActivationPayment(payment: InsertActivationPayment): Promise<ActivationPayment>;
   // REMOVED: createActivationPayments() from interface - internal use only via transaction
   getActivationPayment(id: string): Promise<ActivationPayment | undefined>;
-  getActivationPaymentsByActivationId(activationId: string): Promise<ActivationPayment[]>;
+  getActivationPaymentsByActivationId(activationId: string): Promise<(ActivationPayment & { 
+    receiverName?: string; 
+    receiverEmail?: string; 
+    receiverMobile?: string; 
+    receiverUpiId?: string;
+    receiverBankAccountHolder?: string;
+    receiverBankAccount?: string;
+    receiverIfscCode?: string;
+  })[]>;
   getActivationPaymentsByPayerUserId(payerUserId: string): Promise<(ActivationPayment & { 
     receiverName?: string; 
     receiverEmail?: string; 
@@ -117,8 +125,26 @@ export interface IStorage {
     payments: ActivationPayment[];
   }>>;
   getActivationPaymentsByReceiverUserId(receiverUserId: string): Promise<ActivationPayment[]>;
-  getActivationPaymentsPendingConfirmation(receiverUserId: string): Promise<ActivationPayment[]>;
-  getAdminPendingConfirmations(adminUserId: string): Promise<ActivationPayment[]>;
+  getActivationPaymentsPendingConfirmation(receiverUserId: string): Promise<Array<ActivationPayment & {
+    payerName?: string | null;
+    payerMobile?: string | null;
+    receiverName?: string | null;
+    receiverMobile?: string | null;
+    receiverUpiId?: string | null;
+    receiverBankAccount?: string | null;
+    receiverIfscCode?: string | null;
+    receiverBankAccountHolder?: string | null;
+  }>>;
+  getAdminPendingConfirmations(adminUserId: string): Promise<Array<ActivationPayment & {
+    payerName?: string | null;
+    payerMobile?: string | null;
+    receiverName?: string | null;
+    receiverMobile?: string | null;
+    receiverUpiId?: string | null;
+    receiverBankAccount?: string | null;
+    receiverIfscCode?: string | null;
+    receiverBankAccountHolder?: string | null;
+  }>>;
   getAllPendingConfirmationsCount(): Promise<number>;
   getAllConfirmedPayments(): Promise<ActivationPayment[]>;
   getConfirmedPaymentsWithDetails(): Promise<Array<ActivationPayment & { 
@@ -1591,6 +1617,12 @@ export class DbStorage implements IStorage {
         // Matrix payments start with 'awaiting_assignment' status until receivers are determined
         const paymentStatus = paymentType.startsWith('matrix_level_') ? 'awaiting_assignment' : 'pending';
         
+        // Generate unique decimal amount for tracking (e.g., 1000.00-1000.99, 500.00-500.99)
+        // This helps identify individual payments when processing UTR submissions
+        const baseAmount = parseFloat(amount);
+        const randomCents = Math.floor(Math.random() * 100); // 0-99
+        const uniqueAmount = (baseAmount + (randomCents / 100)).toFixed(2);
+        
         paymentsToCreate.push({
           activationId: createdActivation.id,
           slotIndex,
@@ -1598,7 +1630,7 @@ export class DbStorage implements IStorage {
           receiverUserId,
           paymentType: paymentType as any,
           receiverType,
-          amountInr: amount,
+          amountInr: uniqueAmount,
           paymentMode: 'offline',
           status: paymentStatus as any,
           submissionCount: 0,
@@ -1653,8 +1685,41 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
-  async getActivationPaymentsByActivationId(activationId: string): Promise<ActivationPayment[]> {
-    return db.select().from(activationPayments).where(eq(activationPayments.activationId, activationId));
+  async getActivationPaymentsByActivationId(activationId: string): Promise<(ActivationPayment & { 
+    receiverName?: string; 
+    receiverEmail?: string; 
+    receiverMobile?: string; 
+    receiverUpiId?: string;
+    receiverBankAccountHolder?: string;
+    receiverBankAccount?: string;
+    receiverIfscCode?: string;
+  })[]> {
+    const payments = await db.select().from(activationPayments).where(eq(activationPayments.activationId, activationId));
+    
+    // Get unique receiver user IDs (filter out null/undefined)
+    const receiverUserIds = Array.from(new Set(payments.map(p => p.receiverUserId).filter((id): id is string => id !== null && id !== undefined)));
+    
+    // Fetch receiver details if there are any
+    const receivers = receiverUserIds.length > 0
+      ? await db.select().from(users).where(inArray(users.userId, receiverUserIds))
+      : [];
+    
+    const receiverMap = new Map(receivers.map(u => [u.userId, u]));
+    
+    // Enrich payments with receiver metadata
+    return payments.map(p => {
+      const receiver = p.receiverUserId ? receiverMap.get(p.receiverUserId) : null;
+      return {
+        ...p,
+        receiverName: receiver?.name || undefined,
+        receiverEmail: receiver?.email || undefined,
+        receiverMobile: receiver?.mobile || undefined,
+        receiverUpiId: receiver?.upiId || undefined,
+        receiverBankAccountHolder: receiver?.bankAccountHolder || undefined,
+        receiverBankAccount: receiver?.bankAccountNumber || undefined,
+        receiverIfscCode: receiver?.ifscCode || undefined,
+      };
+    });
   }
 
   async getActivationPaymentsByPayerUserId(payerUserId: string): Promise<(ActivationPayment & { 
@@ -1878,26 +1943,63 @@ export class DbStorage implements IStorage {
     return db.select().from(activationPayments).where(eq(activationPayments.receiverUserId, receiverUserId));
   }
 
-  async getActivationPaymentsPendingConfirmation(receiverUserId: string): Promise<ActivationPayment[]> {
-    return db.select().from(activationPayments).where(
-      and(
-        eq(activationPayments.receiverType, 'user'),
-        eq(activationPayments.receiverUserId, receiverUserId),
-        eq(activationPayments.status, 'submitted')
-      )
-    );
+  async getActivationPaymentsPendingConfirmation(receiverUserId: string) {
+    const payer = alias(users, 'payer');
+    const receiver = alias(users, 'receiver');
+    
+    return await db
+      .select({
+        ...getTableColumns(activationPayments),
+        payerName: payer.name,
+        payerMobile: payer.mobile,
+        receiverName: receiver.name,
+        receiverMobile: receiver.mobile,
+        receiverUpiId: receiver.upiId,
+        receiverBankAccount: receiver.bankAccount,
+        receiverIfscCode: receiver.ifscCode,
+        receiverBankAccountHolder: receiver.bankAccountHolder,
+      })
+      .from(activationPayments)
+      .leftJoin(payer, eq(activationPayments.payerWallet, payer.id))
+      .leftJoin(receiver, eq(activationPayments.receiverWallet, receiver.id))
+      .where(
+        and(
+          eq(activationPayments.receiverType, 'user'),
+          eq(activationPayments.receiverUserId, receiverUserId),
+          eq(activationPayments.status, 'submitted')
+        )
+      );
   }
   
-  async getAdminPendingConfirmations(adminUserId: string): Promise<ActivationPayment[]> {
+  async getAdminPendingConfirmations(adminUserId: string) {
     // Admin sees ALL payments where receiverUserId = 'PB0' (regardless of receiverType)
     // This includes: sponsor fallback, binary match fallback, top reward, and matrix level fallback
     // Payments to PB0 use receiverType='admin' (after recent fix)
-    return db.select().from(activationPayments).where(
-      and(
-        eq(activationPayments.receiverUserId, adminUserId),
-        eq(activationPayments.status, 'submitted')
+    const payer = alias(users, 'payer');
+    const receiver = alias(users, 'receiver');
+    
+    return await db
+      .select({
+        ...getTableColumns(activationPayments),
+        payerName: payer.name,
+        payerMobile: payer.mobile,
+        receiverName: receiver.name,
+        receiverMobile: receiver.mobile,
+        receiverUpiId: receiver.upiId,
+        receiverBankAccount: receiver.bankAccount,
+        receiverIfscCode: receiver.ifscCode,
+        receiverBankAccountHolder: receiver.bankAccountHolder,
+      })
+      .from(activationPayments)
+      .leftJoin(payer, eq(activationPayments.payerWallet, payer.id))
+      .leftJoin(receiver, eq(activationPayments.receiverWallet, receiver.id))
+      .where(
+        and(
+          eq(activationPayments.receiverUserId, adminUserId),
+          eq(activationPayments.status, 'submitted')
+        )
       )
-    ).orderBy(desc(activationPayments.updatedAt));
+      .orderBy(desc(activationPayments.updatedAt));
   }
 
   async getAllPendingConfirmationsCount(): Promise<number> {
@@ -2020,6 +2122,7 @@ export class DbStorage implements IStorage {
           offlineUtrId: normalizedUtr, // Store normalized version
           offlineProofUrl: proofUrl,
           submissionCount: (currentPayment.submissionCount || 0) + 1,
+          paymentSubmittedAt: new Date(), // Track when payment was submitted
           updatedAt: new Date()
         })
         .where(eq(activationPayments.id, id))

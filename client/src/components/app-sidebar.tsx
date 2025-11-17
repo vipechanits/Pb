@@ -34,6 +34,7 @@ import {
   TrendingUp,
   UserPlus,
   DollarSign,
+  MessageCircle,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth-context';
@@ -128,6 +129,11 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       title: 'Re-entry Cycles',
       url: '/user/reentry',
       icon: RefreshCw,
+    },
+    {
+      title: 'Support Tickets',
+      url: '/user/tickets',
+      icon: MessageCircle,
     },
     {
       title: 'Profile',

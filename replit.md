@@ -7,6 +7,25 @@ PAYBACK247 is a peer-to-peer income platform for network marketing. It features 
 Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
+- **Brand & UI Consistency Updates (2025-11-17)**:
+  - Removed "PAYBACK247" text from all page headers (landing, T&C, About, Contact) - logo is sufficient
+  - Updated Terms & Conditions page with dynamic pricing from system configuration
+  - Consistent header design across all pages with logo only
+  - Added mandatory Terms & Conditions checkbox to signup page with clickable link to T&C page
+- **Mobile/Tablet UI Improvements & User Experience Enhancements (2025-11-17)**:
+  - Fixed mobile/tablet login button visibility on landing page (removed hidden class)
+  - Extended session persistence from 30 days to 365 days (1 year) for persistent login until explicit logout
+  - Added user profile dropdown in top-right header with avatar, user info, quick links (Profile, Settings), and logout
+  - Added binary match calculation display on every node in Binary Tree (Match = floor(min(L,R)/3))
+  - Added large green refresh button to Binary Tree page for instant data reload
+- **Legal Pages & Support System (2025-11-17)**:
+  - Created comprehensive Terms & Conditions page with legal disclaimers at /legal/terms
+  - Created About Us page with company information and platform overview at /legal/about
+  - Created Contact Us page with contact form and support channels at /legal/contact
+  - Added ticket support system UI at /user/tickets (frontend-only, shows demo ticket)
+  - Added ticket database schema (tickets, ticketReplies tables) for future backend implementation
+  - Linked all legal pages in landing page footer for easy access
+  - Added "Support Tickets" link to user dashboard sidebar
 - **URL-Based Binary Placement with Spillover (2025-11-16)**: Implemented 3-tier placement strategy: (1) Try exact placement at sponsor's requested leg, (2) If taken, search sponsor's entire downline for first available slot (spillover), (3) If sponsor's downline full, search global tree. Users must sign up via referral links (?ref=PB10000&leg=left) which specify sponsor and placement preference.
 - **Removed Manual Sponsor ID Input (2025-11-16)**: Removed the manual sponsor ID input field from signup page. Users can now only register through referral links with sponsor IDs in the URL (?ref=PB10000&leg=left). This ensures all registrations are properly tracked and prevents orphaned users.
 - **Global Matrix Authorization Fix (2025-11-16)**: Fixed 403 Forbidden error when loading activation-scoped matrix trees. Changed authorization check from comparing `activation.payerWallet` to `rootUser.userId` (incompatible types) to comparing `activation.payerWallet` to `rootUser.id` (both UUIDs).

@@ -134,7 +134,7 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      maxAge: 365 * 24 * 60 * 60 * 1000, // 365 days (1 year) - persistent login
       httpOnly: true,
       secure: true, // Always use secure cookies (Replit provides HTTPS)
       sameSite: 'lax',

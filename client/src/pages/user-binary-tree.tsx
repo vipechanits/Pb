@@ -8,7 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { useAuth } from '@/lib/auth-context';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { Users, CheckCircle, XCircle, AlertCircle, Loader2, ChevronDown, ChevronRight, UserCircle, ArrowRight } from 'lucide-react';
+import { Users, CheckCircle, XCircle, AlertCircle, Loader2, ChevronDown, ChevronRight, UserCircle, ArrowRight, RefreshCw } from 'lucide-react';
 import type { BinaryTreeNode, SponsorInfo } from '@shared/schema';
 
 // Sponsor Summary Component
@@ -196,6 +196,11 @@ function UserNode({
             <span title="Personal Left">PL: {node.personalLeftCount}</span>
             <span title="Personal Right">PR: {node.personalRightCount}</span>
           </div>
+          <div className="mt-1 pt-1 border-t border-muted">
+            <div className="text-xs font-semibold text-purple-600 dark:text-purple-400" title="Binary Match Potential">
+              Match: {Math.floor(Math.min(node.leftLegCount, node.rightLegCount) / 3)}
+            </div>
+          </div>
           
           {/* Expand/Collapse Button for nodes with children */}
           {hasChildren && (
@@ -307,7 +312,7 @@ export default function UserBinaryTreePage() {
   // Maintain expansion state per tree (keyed by rootUserId)
   const [expansionStates, setExpansionStates] = useState<Record<string, TreeExpansionState>>({});
 
-  const { data: tree, isLoading, error } = useQuery<BinaryTreeNode>({
+  const { data: tree, isLoading, error, refetch } = useQuery<BinaryTreeNode>({
     queryKey: ['/api/users', effectiveViewedUserId, 'binary-tree'],
     enabled: !!effectiveViewedUserId,
     retry: (failureCount, error: any) => {
@@ -617,9 +622,21 @@ export default function UserBinaryTreePage() {
       </Alert>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Your Binary Network</CardTitle>
-          <CardDescription>Visual representation of your team structure (unlimited depth, collapsible)</CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0 pb-4">
+          <div className="space-y-1">
+            <CardTitle>Your Binary Network</CardTitle>
+            <CardDescription>Visual representation of your team structure (unlimited depth, collapsible)</CardDescription>
+          </div>
+          <Button 
+            onClick={() => refetch()} 
+            variant="outline" 
+            size="lg"
+            data-testid="button-refresh-tree"
+            disabled={isLoading}
+            className="shrink-0"
+          >
+            <RefreshCw className={`w-5 h-5 text-green-600 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <div className="flex justify-center min-w-max p-6">

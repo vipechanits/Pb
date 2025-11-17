@@ -12,10 +12,22 @@ import { useNotificationSound } from '@/hooks/use-notification-sound';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import type { ActivationPayment } from '@shared/schema';
 
+// Enriched payment type with receiver and payer details
+interface EnrichedPayment extends ActivationPayment {
+  payerName?: string | null;
+  payerMobile?: string | null;
+  receiverName?: string | null;
+  receiverMobile?: string | null;
+  receiverUpiId?: string | null;
+  receiverBankAccount?: string | null;
+  receiverIfscCode?: string | null;
+  receiverBankAccountHolder?: string | null;
+}
+
 export default function AdminPayments() {
   const { toast } = useToast();
   const { playSuccessSound, playAlertSound } = useNotificationSound();
-  const [selectedPayment, setSelectedPayment] = useState<ActivationPayment | null>(null);
+  const [selectedPayment, setSelectedPayment] = useState<EnrichedPayment | null>(null);
   const [action, setAction] = useState<'confirm' | 'reject' | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [confirmNotes, setConfirmNotes] = useState('');
@@ -23,11 +35,11 @@ export default function AdminPayments() {
   const [receiverQrCode, setReceiverQrCode] = useState<string | null>(null);
   const [loadingQrCode, setLoadingQrCode] = useState(false);
   
-  const { data: payments, isLoading, refetch } = useQuery<ActivationPayment[]>({
+  const { data: payments, isLoading, refetch } = useQuery<EnrichedPayment[]>({
     queryKey: ['/api/activation-payments/pending-confirmations'],
   });
 
-  const handleOpenDialog = (payment: ActivationPayment, actionType: 'confirm' | 'reject') => {
+  const handleOpenDialog = (payment: EnrichedPayment, actionType: 'confirm' | 'reject') => {
     console.log('[ADMIN-PAYMENTS] Opening dialog:', { paymentId: payment.id, actionType, paymentType: payment.paymentType });
     setSelectedPayment(payment);
     setAction(actionType);
@@ -245,10 +257,13 @@ export default function AdminPayments() {
                           <Badge variant="outline">₹{payment.amountInr}</Badge>
                         </div>
                         <div className="text-sm space-y-1">
-                          <p><strong>From:</strong> {payment.payerUserId}</p>
-                          <p><strong>To:</strong> {payment.receiverType === 'admin' ? 'Admin Wallet' : payment.receiverUserId}</p>
+                          <p><strong>From:</strong> {payment.payerUserId} {payment.payerMobile && `(${payment.payerMobile})`}</p>
+                          <p><strong>To:</strong> {payment.receiverType === 'admin' ? 'Admin Wallet' : payment.receiverUserId} {payment.receiverMobile && `(${payment.receiverMobile})`}</p>
                           {payment.offlineUtrId && (
-                            <p><strong>UTR/Transaction ID:</strong> <span className="font-mono">{payment.offlineUtrId}</span></p>
+                            <p><strong>UTR/Transaction ID:</strong> <span className="font-mono font-bold">{payment.offlineUtrId}</span></p>
+                          )}
+                          {payment.paymentSubmittedAt && (
+                            <p><strong>Submitted:</strong> {new Date(payment.paymentSubmittedAt).toLocaleString()}</p>
                           )}
                           {payment.offlineProofUrl && (
                             <p>
@@ -329,10 +344,16 @@ export default function AdminPayments() {
           {selectedPayment && (
             <div className="space-y-4">
               <div className="space-y-2 text-sm">
-                <p><strong>From:</strong> {selectedPayment.payerUserId}</p>
-                <p><strong>To:</strong> {selectedPayment.receiverType === 'admin' ? 'Admin Wallet (PB0)' : selectedPayment.receiverUserId}</p>
+                <p><strong>From:</strong> {selectedPayment.payerUserId} {selectedPayment.payerMobile && `(${selectedPayment.payerMobile})`}</p>
+                <p><strong>To:</strong> {selectedPayment.receiverType === 'admin' ? 'Admin Wallet (PB0)' : selectedPayment.receiverUserId} {selectedPayment.receiverMobile && `(${selectedPayment.receiverMobile})`}</p>
                 <p><strong>Amount:</strong> ₹{selectedPayment.amountInr}</p>
                 <p><strong>Type:</strong> {getPaymentTypeLabel(selectedPayment.paymentType)}</p>
+                {selectedPayment.offlineUtrId && (
+                  <p><strong>UTR/Transaction ID:</strong> <span className="font-mono font-bold">{selectedPayment.offlineUtrId}</span></p>
+                )}
+                {selectedPayment.paymentSubmittedAt && (
+                  <p><strong>Submitted:</strong> {new Date(selectedPayment.paymentSubmittedAt).toLocaleString()}</p>
+                )}
               </div>
 
               {/* Receiver's QR Code */}
@@ -393,9 +414,16 @@ export default function AdminPayments() {
 
           {selectedPayment && (
             <div className="space-y-2 text-sm">
-              <p><strong>From:</strong> {selectedPayment.payerUserId}</p>
+              <p><strong>From:</strong> {selectedPayment.payerUserId} {selectedPayment.payerMobile && `(${selectedPayment.payerMobile})`}</p>
+              <p><strong>To:</strong> {selectedPayment.receiverType === 'admin' ? 'Admin Wallet (PB0)' : selectedPayment.receiverUserId} {selectedPayment.receiverMobile && `(${selectedPayment.receiverMobile})`}</p>
               <p><strong>Amount:</strong> ₹{selectedPayment.amountInr}</p>
               <p><strong>Type:</strong> {getPaymentTypeLabel(selectedPayment.paymentType)}</p>
+              {selectedPayment.offlineUtrId && (
+                <p><strong>UTR/Transaction ID:</strong> <span className="font-mono font-bold">{selectedPayment.offlineUtrId}</span></p>
+              )}
+              {selectedPayment.paymentSubmittedAt && (
+                <p><strong>Submitted:</strong> {new Date(selectedPayment.paymentSubmittedAt).toLocaleString()}</p>
+              )}
             </div>
           )}
 

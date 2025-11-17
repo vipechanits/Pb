@@ -7,6 +7,7 @@ import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/app-sidebar';
 import ThemeToggle from '@/components/ThemeToggle';
 import { NotificationBell } from '@/components/NotificationBell';
+import { UserProfileDropdown } from '@/components/UserProfileDropdown';
 import { AuthProvider } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/protected-route';
 import NotFound from '@/pages/not-found';
@@ -16,6 +17,9 @@ import SignupPage from '@/pages/auth/signup';
 import ForgotPasswordPage from '@/pages/auth/forgot-password';
 import ResetPasswordPage from '@/pages/auth/reset-password';
 import VerifyEmailPage from '@/pages/auth/verify-email';
+import TermsAndConditions from '@/pages/legal/terms';
+import AboutUs from '@/pages/legal/about';
+import ContactUs from '@/pages/legal/contact';
 import UserDashboard from '@/pages/user-dashboard';
 import Profile from '@/pages/profile';
 import UserActivationPage from '@/pages/user-activation';
@@ -28,6 +32,7 @@ import TransactionHistoryPage from '@/pages/user/transaction-history';
 import BinaryMatchQueueHistory from '@/pages/user/binary-match-queue-history';
 import BinaryPairMatchingHistory from '@/pages/user/binary-pair-matching-history';
 import MatrixIncomeHistory from '@/pages/user/matrix-income-history';
+import TicketsPage from '@/pages/user/tickets';
 import ReentryPage from '@/pages/reentry';
 import AdditionalReentryPage from '@/pages/additional-reentry';
 import AdminDashboard from '@/pages/admin-dashboard';
@@ -55,6 +60,7 @@ function DashboardLayout({ children, isAdmin = false }: { children: React.ReactN
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <div className="flex items-center gap-2">
               <NotificationBell />
+              <UserProfileDropdown />
               <ThemeToggle />
             </div>
           </header>
@@ -76,6 +82,9 @@ function Router() {
       <Route path="/auth/forgot-password" component={ForgotPasswordPage} />
       <Route path="/auth/reset-password/:token" component={ResetPasswordPage} />
       <Route path="/auth/verify-email/:token" component={VerifyEmailPage} />
+      <Route path="/legal/terms" component={TermsAndConditions} />
+      <Route path="/legal/about" component={AboutUs} />
+      <Route path="/legal/contact" component={ContactUs} />
       
       <Route path="/user/dashboard">
         {() => (
@@ -227,6 +236,16 @@ function Router() {
           <ProtectedRoute>
             <DashboardLayout>
               <MatrixIncomeHistory />
+            </DashboardLayout>
+          </ProtectedRoute>
+        )}
+      </Route>
+      
+      <Route path="/user/tickets">
+        {() => (
+          <ProtectedRoute>
+            <DashboardLayout>
+              <TicketsPage />
             </DashboardLayout>
           </ProtectedRoute>
         )}
