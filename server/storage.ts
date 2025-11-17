@@ -29,7 +29,7 @@ import {
   userIncomeSummaries
 } from "@shared/schema";
 import { SLOT_TO_PAYMENT_TYPE, PAYMENT_TYPE_AMOUNTS, MATRIX_PAYMENT_TYPES } from "@shared/constants";
-import { eq, and, or, ne, isNull, desc, sql, lt, asc, inArray, count } from "drizzle-orm";
+import { eq, and, or, ne, isNull, desc, sql, lt, asc, inArray, count, getTableColumns } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "./db";
 import crypto from "crypto";
@@ -1955,13 +1955,13 @@ export class DbStorage implements IStorage {
         receiverName: receiver.name,
         receiverMobile: receiver.mobile,
         receiverUpiId: receiver.upiId,
-        receiverBankAccount: receiver.bankAccount,
+        receiverBankAccount: receiver.bankAccountNumber,
         receiverIfscCode: receiver.ifscCode,
         receiverBankAccountHolder: receiver.bankAccountHolder,
       })
       .from(activationPayments)
-      .leftJoin(payer, eq(activationPayments.payerWallet, payer.id))
-      .leftJoin(receiver, eq(activationPayments.receiverWallet, receiver.id))
+      .leftJoin(payer, eq(activationPayments.payerUserId, payer.userId))
+      .leftJoin(receiver, eq(activationPayments.receiverUserId, receiver.userId))
       .where(
         and(
           eq(activationPayments.receiverType, 'user'),
@@ -1986,13 +1986,13 @@ export class DbStorage implements IStorage {
         receiverName: receiver.name,
         receiverMobile: receiver.mobile,
         receiverUpiId: receiver.upiId,
-        receiverBankAccount: receiver.bankAccount,
+        receiverBankAccount: receiver.bankAccountNumber,
         receiverIfscCode: receiver.ifscCode,
         receiverBankAccountHolder: receiver.bankAccountHolder,
       })
       .from(activationPayments)
-      .leftJoin(payer, eq(activationPayments.payerWallet, payer.id))
-      .leftJoin(receiver, eq(activationPayments.receiverWallet, receiver.id))
+      .leftJoin(payer, eq(activationPayments.payerUserId, payer.userId))
+      .leftJoin(receiver, eq(activationPayments.receiverUserId, receiver.userId))
       .where(
         and(
           eq(activationPayments.receiverUserId, adminUserId),

@@ -579,7 +579,7 @@ export default function UserActivationPage() {
                             <div>
                               <p className="font-medium">{getPaymentSlotLabel(payment.slotIndex)}</p>
                               <p className="text-xs text-muted-foreground">
-                                {payment.receiverType === 'admin' ? 'Admin Account (PB0)' : payment.receiverUserId}
+                                {payment.receiverType === 'admin' ? 'PB0' : payment.receiverUserId}
                               </p>
                               {payment.status === 'submitted' && payment.offlineUtrId && (
                                 <p className="text-xs text-muted-foreground mt-1">
@@ -639,7 +639,7 @@ export default function UserActivationPage() {
                               <div className="space-y-2">
                                 <div>
                                   <span className="text-muted-foreground">Payment To:</span>
-                                  <p className="font-medium">{payment.receiverType === 'admin' ? 'Admin Account (PB0)' : payment.receiverUserId}</p>
+                                  <p className="font-medium">{payment.receiverType === 'admin' ? 'PB0' : payment.receiverUserId}</p>
                                 </div>
                                 {/* Receiver Mobile Number */}
                                 {payment.receiverType === 'admin' && adminPaymentDetails?.mobile && (
@@ -814,7 +814,7 @@ export default function UserActivationPage() {
                             <div>
                               <p className="font-medium">{getPaymentSlotLabel(payment.slotIndex)}</p>
                               <p className="text-xs text-muted-foreground">
-                                {payment.receiverType === 'admin' ? 'Admin Account (PB0)' : payment.receiverUserId || 'Assigning...'}
+                                {payment.receiverType === 'admin' ? 'PB0' : payment.receiverUserId || 'Assigning...'}
                               </p>
                               {payment.status === 'submitted' && payment.offlineUtrId && (
                                 <p className="text-xs text-muted-foreground mt-1">
@@ -874,7 +874,7 @@ export default function UserActivationPage() {
                               <div className="space-y-2">
                                 <div>
                                   <span className="text-muted-foreground">Payment To:</span>
-                                  <p className="font-medium">{payment.receiverType === 'admin' ? 'Admin Account (PB0)' : payment.receiverUserId || 'Assigning...'}</p>
+                                  <p className="font-medium">{payment.receiverType === 'admin' ? 'PB0' : payment.receiverUserId || 'Assigning...'}</p>
                                 </div>
                                 {/* Receiver Mobile Number */}
                                 {payment.receiverType === 'admin' && adminPaymentDetails?.mobile && (
