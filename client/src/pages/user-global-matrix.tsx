@@ -332,48 +332,6 @@ export default function UserGlobalMatrixPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Matrix Level</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="stat-matrix-level">
-              {matrix?.matrixLevel ?? 'Not Placed'}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Your position in matrix
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Matrix Path</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-sm font-mono font-bold truncate" data-testid="stat-matrix-path">
-              {matrix?.matrixPath || 'Not Placed'}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Breadcrumb trail
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Team Members</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="stat-team-count">{teamCount}</div>
-            <p className="text-xs text-muted-foreground">
-              Under you in matrix
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
       <Alert>
         <Network className="h-4 w-4" />
         <AlertDescription>
