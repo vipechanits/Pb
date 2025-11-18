@@ -409,8 +409,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUserByVerificationToken(token);
       
       if (!user) {
+        // Token not found - could be:
+        // 1. Invalid token
+        // 2. Already used (cleared after verification)
+        // 3. Expired
+        // Return friendly message suggesting the email might already be verified
         return res.status(400).json({ 
-          error: "Invalid or expired verification link. Please request a new one.",
+          error: "This verification link is invalid or has already been used. If you recently verified your email, you can log in now. Otherwise, please request a new verification link.",
           expired: true
         });
       }
@@ -418,15 +423,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if token is expired
       if (user.emailVerificationExpiry && user.emailVerificationExpiry < new Date()) {
         return res.status(400).json({ 
-          error: "Verification link has expired. Please request a new one.",
+          error: "Verification link has expired. Please request a new one from the login page.",
           expired: true
         });
       }
       
-      // Check if already verified
+      // Check if already verified (user found by token but email already verified)
       if (user.emailVerified) {
         return res.status(200).json({ 
-          message: "Email already verified. You can now log in.",
+          message: "Your email is already verified! You can log in now.",
           alreadyVerified: true
         });
       }
