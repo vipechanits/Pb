@@ -182,10 +182,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }),
     async (req, res) => {
     try {
-      const { email, password, sponsorId, binaryLeg, recaptchaToken } = req.body;
+      const { name, mobile, email, password, sponsorId, binaryLeg, recaptchaToken } = req.body;
       
-      if (!email || !password) {
-        return res.status(400).json({ error: "Email and password are required" });
+      if (!email || !password || !name || !mobile) {
+        return res.status(400).json({ error: "Name, mobile, email and password are required" });
+      }
+      
+      // Validate mobile number format
+      if (!/^[0-9]{10}$/.test(mobile)) {
+        return res.status(400).json({ error: "Mobile number must be exactly 10 digits" });
+      }
+      
+      // Check mobile number usage limit (max 3 users per mobile)
+      const usersWithMobile = await storage.getUsersByMobile(mobile);
+      if (usersWithMobile.length >= 3) {
+        return res.status(400).json({ error: "This mobile number is already used by 3 users. Maximum limit reached." });
       }
 
       // Verify reCAPTCHA if enabled
@@ -235,6 +246,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create user with auto-generated PB#### ID (transaction-safe)
       // Binary leg placement deferred to activation (stored as requested preference)
       const user = await storage.createUserWithGeneratedId({
+        name,
+        mobile,
         email,
         password: hashedPassword,
         role: 'user',

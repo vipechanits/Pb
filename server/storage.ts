@@ -39,6 +39,7 @@ export interface IStorage {
   // User methods
   getUserById(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUsersByMobile(mobile: string): Promise<User[]>;
   getUserByVerificationToken(token: string): Promise<User | undefined>;
   markEmailAsVerified(userId: string): Promise<void>;
   getUserByUserId(userId: string): Promise<User | undefined>;
@@ -350,6 +351,11 @@ export class DbStorage implements IStorage {
   async getUserByEmail(email: string): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
     return result[0];
+  }
+
+  async getUsersByMobile(mobile: string): Promise<User[]> {
+    const result = await db.select().from(users).where(eq(users.mobile, mobile));
+    return result;
   }
 
   async getUserByUserId(userId: string): Promise<User | undefined> {

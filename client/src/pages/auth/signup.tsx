@@ -12,6 +12,8 @@ import { useRecaptcha } from '@/hooks/use-recaptcha';
 
 export default function SignupPage() {
   const [, setLocation] = useLocation();
+  const [name, setName] = useState('');
+  const [mobile, setMobile] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -79,6 +81,8 @@ export default function SignupPage() {
       }
 
       const result = await apiRequest('POST', '/api/auth/signup', {
+        name,
+        mobile,
         email,
         password,
         sponsorId: sponsorId || undefined,
@@ -155,6 +159,34 @@ export default function SignupPage() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
+
+            <div className="space-y-2">
+              <Label htmlFor="name">Full Name</Label>
+              <Input
+                id="name"
+                type="text"
+                placeholder="Enter your full name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                data-testid="input-name"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="mobile">Mobile Number</Label>
+              <Input
+                id="mobile"
+                type="tel"
+                placeholder="10 digit mobile number"
+                value={mobile}
+                onChange={(e) => setMobile(e.target.value)}
+                required
+                maxLength={10}
+                pattern="[0-9]{10}"
+                data-testid="input-mobile"
+              />
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>

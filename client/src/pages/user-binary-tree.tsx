@@ -196,10 +196,31 @@ function UserNode({
             <span title="Personal Left">PL: {node.personalLeftCount}</span>
             <span title="Personal Right">PR: {node.personalRightCount}</span>
           </div>
-          <div className="mt-1 pt-1 border-t border-muted">
+          <div className="mt-1 pt-1 border-t border-muted space-y-1">
             <div className="text-xs font-semibold text-purple-600 dark:text-purple-400" title="Binary Match Potential">
               Match: {Math.floor(Math.min(node.leftLegCount, node.rightLegCount) / 3)}
             </div>
+            
+            {/* Binary Qualification Status */}
+            {node.personalLeftCount >= 1 && node.personalRightCount >= 1 ? (
+              <Badge 
+                variant="default" 
+                className="text-xs py-0 bg-green-600 hover:bg-green-700" 
+                data-testid={`badge-qualified-${node.userId}`}
+                title="Qualified for binary matching (1L+1R)"
+              >
+                ✓ Qualified
+              </Badge>
+            ) : (
+              <Badge 
+                variant="secondary" 
+                className="text-xs py-0" 
+                data-testid={`badge-not-qualified-${node.userId}`}
+                title="Not qualified - needs 1 personal left + 1 personal right"
+              >
+                Not Qualified
+              </Badge>
+            )}
           </div>
           
           {/* Expand/Collapse Button for nodes with children */}
@@ -498,6 +519,17 @@ export default function UserBinaryTreePage() {
           
           {/* Navigation Buttons */}
           <div className="flex items-center gap-2">
+            {/* Large Green Refresh Button */}
+            <Button
+              size="lg"
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => refetch()}
+              data-testid="button-refresh-tree"
+            >
+              <RefreshCw className="w-5 h-5 mr-2" />
+              Refresh Tree
+            </Button>
+            
             {!isViewingOwnTree && (
               <Button
                 variant="outline"

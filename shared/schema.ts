@@ -156,6 +156,8 @@ export const insertUserSchema = createInsertSchema(users).omit({
 }).extend({
   email: z.string().email(),
   password: z.string().min(6),
+  name: z.string().min(1, "Name is required"),
+  mobile: z.string().length(10, "Mobile number must be exactly 10 digits").regex(/^[0-9]{10}$/, "Mobile number must contain only digits"),
 });
 
 // Update profile schema
