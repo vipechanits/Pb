@@ -1,4 +1,4 @@
-import { Switch, Route, useLocation } from 'wouter';
+import { Switch, Route, useLocation, Link } from 'wouter';
 import { queryClient, fetchCsrfToken } from './lib/queryClient';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
@@ -8,9 +8,12 @@ import { AppSidebar } from '@/components/app-sidebar';
 import ThemeToggle from '@/components/ThemeToggle';
 import { NotificationBell } from '@/components/NotificationBell';
 import { UserProfileDropdown } from '@/components/UserProfileDropdown';
+import { MobileBottomNav } from '@/components/MobileBottomNav';
 import { AuthProvider } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/protected-route';
 import NotFound from '@/pages/not-found';
+import { Button } from '@/components/ui/button';
+import { LayoutDashboard } from 'lucide-react';
 import Landing from '@/pages/landing';
 import LoginPage from '@/pages/auth/login';
 import SignupPage from '@/pages/auth/signup';
@@ -60,6 +63,17 @@ function DashboardLayout({ children, isAdmin = false }: { children: React.ReactN
           <header className="flex items-center justify-between p-4 border-b border-border">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <div className="flex items-center gap-2">
+              <Link href={isAdmin ? "/admin" : "/user"}>
+                <Button 
+                  variant="default" 
+                  size="sm"
+                  data-testid="button-dashboard"
+                  className="gap-2"
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  <span className="hidden sm:inline">Dashboard</span>
+                </Button>
+              </Link>
               <NotificationBell />
               <UserProfileDropdown />
               <ThemeToggle />
@@ -68,6 +82,7 @@ function DashboardLayout({ children, isAdmin = false }: { children: React.ReactN
           <main className="flex-1 overflow-auto">
             {children}
           </main>
+          {!isAdmin && <MobileBottomNav />}
         </div>
       </div>
     </SidebarProvider>

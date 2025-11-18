@@ -39,33 +39,12 @@ interface MatrixNodeProps {
 }
 
 function MatrixNodeComponent({ node, position, depth }: MatrixNodeProps) {
-  if (depth > 5) {
+  if (depth > 5 || !node) {
     return null;
   }
 
-  if (!node) {
-    return (
-      <div className="flex flex-col items-center gap-2">
-        <div className="w-32 h-24 border-2 border-dashed border-muted rounded-lg flex items-center justify-center bg-muted/20">
-          <p className="text-xs text-muted-foreground">Empty</p>
-        </div>
-        {depth < 5 && (
-          <div className="flex gap-8 mt-6">
-            <div className="flex flex-col items-center">
-              <div className="h-6 border-l-2 border-dashed border-muted/40" />
-              <Badge variant="outline" className="mb-2 text-xs border-muted text-muted-foreground">L</Badge>
-              <MatrixNodeComponent node={null} position="left" depth={depth + 1} />
-            </div>
-            <div className="flex flex-col items-center">
-              <div className="h-6 border-l-2 border-muted/40" />
-              <Badge variant="outline" className="mb-2 text-xs border-muted text-muted-foreground">R</Badge>
-              <MatrixNodeComponent node={null} position="right" depth={depth + 1} />
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
+  const hasLeftChild = node.leftChild !== null;
+  const hasRightChild = node.rightChild !== null;
 
   return (
     <div className="flex flex-col items-center gap-2">
@@ -89,18 +68,22 @@ function MatrixNodeComponent({ node, position, depth }: MatrixNodeProps) {
         </CardContent>
       </Card>
       
-      {depth < 5 && (
+      {depth < 5 && (hasLeftChild || hasRightChild) && (
         <div className="flex gap-8 mt-6">
-          <div className="flex flex-col items-center">
-            <div className="h-6 border-l-2 border-muted" />
-            <Badge variant="outline" className="mb-2 text-xs border-purple-500 text-purple-500">Left</Badge>
-            <MatrixNodeComponent node={node.leftChild} position="left" depth={depth + 1} />
-          </div>
-          <div className="flex flex-col items-center">
-            <div className="h-6 border-l-2 border-muted" />
-            <Badge variant="outline" className="mb-2 text-xs border-pink-500 text-pink-500">Right</Badge>
-            <MatrixNodeComponent node={node.rightChild} position="right" depth={depth + 1} />
-          </div>
+          {hasLeftChild && (
+            <div className="flex flex-col items-center">
+              <div className="h-6 border-l-2 border-muted" />
+              <Badge variant="outline" className="mb-2 text-xs border-purple-500 text-purple-500">Left</Badge>
+              <MatrixNodeComponent node={node.leftChild} position="left" depth={depth + 1} />
+            </div>
+          )}
+          {hasRightChild && (
+            <div className="flex flex-col items-center">
+              <div className="h-6 border-l-2 border-muted" />
+              <Badge variant="outline" className="mb-2 text-xs border-pink-500 text-pink-500">Right</Badge>
+              <MatrixNodeComponent node={node.rightChild} position="right" depth={depth + 1} />
+            </div>
+          )}
         </div>
       )}
     </div>

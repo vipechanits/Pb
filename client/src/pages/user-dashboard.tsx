@@ -15,10 +15,11 @@ import { format } from 'date-fns';
 import MiniBinaryTree from '@/components/MiniBinaryTree';
 import MiniMatrixTree from '@/components/MiniMatrixTree';
 import { DashboardHeader } from '@/components/dashboard/DashboardHeader';
-import { DashboardIncomeCards } from '@/components/dashboard/DashboardIncomeCards';
 import { DashboardReferralLinks } from '@/components/dashboard/DashboardReferralLinks';
 import { DashboardTreePreviews } from '@/components/dashboard/DashboardTreePreviews';
 import { useSystemConfig } from '@/hooks/use-system-config';
+import { QuickActions } from '@/components/QuickActions';
+import { ProgressWidget, TeamStats, EarningsOverview } from '@/components/DashboardWidgets';
 
 interface IncomeSummary {
   totalEarnings: string;
@@ -102,6 +103,12 @@ export default function UserDashboard() {
   const { data: matrixTree } = useQuery<any>({
     queryKey: ['/api/users', user?.userId, 'global-matrix'],
     enabled: !!user?.userId && isActivated,
+  });
+
+  // Fetch direct referrals
+  const { data: directReferrals } = useQuery<any[]>({
+    queryKey: ['/api/users', user?.userId, 'direct-referrals'],
+    enabled: !!user?.userId,
   });
 
   // Initiate re-entry mutation
@@ -193,7 +200,7 @@ export default function UserDashboard() {
   ];
 
   return (
-    <div className="container mx-auto p-4 sm:p-6 lg:p-8 space-y-8" data-testid="user-dashboard">
+    <div className="container mx-auto p-4 sm:p-6 lg:p-8 space-y-6 pb-20 lg:pb-8" data-testid="user-dashboard">
       {/* Header Section */}
       <DashboardHeader
         userName={user?.name}
@@ -219,6 +226,9 @@ export default function UserDashboard() {
         </Alert>
       )}
 
+      {/* Quick Actions - Always visible */}
+      <QuickActions />
+
       {/* Referral Links - Only shown after activation */}
       {isActivated && (
         <DashboardReferralLinks
@@ -231,37 +241,32 @@ export default function UserDashboard() {
         />
       )}
 
-      {/* Income Summary & Tree Previews - Side by Side */}
+      {/* Dashboard Widgets Grid */}
       {isActivated && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <DashboardIncomeCards
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <ProgressWidget 
+            currentCycle={reentryStatus?.currentCycleNumber}
+            isActivated={isActivated}
+            matrixComplete={reentryStatus?.isMatrixComplete}
+          />
+          <TeamStats 
+            totalReferrals={directReferrals?.length || 0}
+            leftLeg={user?.leftLegCount || 0}
+            rightLeg={user?.rightLegCount || 0}
+          />
+          <EarningsOverview
             totalEarnings={totalEarnings}
             sponsorIncome={sponsorIncome}
             binaryIncome={binaryIncome}
             matrixIncome={matrixIncome}
           />
-          <DashboardTreePreviews binaryTree={binaryTree} matrixTree={matrixTree} />
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
-          <Card key={stat.title}>
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {stat.title}
-              </CardTitle>
-              <stat.icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
-              <p className="text-xs text-muted-foreground">
-                {stat.description}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {/* Tree Previews */}
+      {isActivated && (
+        <DashboardTreePreviews binaryTree={binaryTree} matrixTree={matrixTree} />
+      )}
 
       {!isActivated && (
         <Card>
