@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema, users, reentries, activationPayments, activations, activationMatrixPositions, binaryMatchQueue, notifications, incomeTransactions, userIncomeSummaries, passwordResetTokens, forgotPasswordSchema, resetPasswordSchema, updateEmailSchema, updatePasswordSchema, setupPinSchema, loginWithPinSchema, manualActivationCompletionSchema } from "@shared/schema";
+import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema, users, reentries, activationPayments, activations, activationMatrixPositions, binaryMatchQueue, notifications, incomeTransactions, userIncomeSummaries, passwordResetTokens, forgotPasswordSchema, resetPasswordSchema, updateEmailSchema, updatePasswordSchema, setupSecurityCodeSchema, setupPinSchema, loginWithPinSchema, manualActivationCompletionSchema } from "@shared/schema";
 import { hashPassword, verifyPassword, serializeUser } from "./auth";
 import { generateUserPaymentQR } from "./qrcode-generator";
 import { z } from "zod";
@@ -876,6 +876,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
   
+  // Setup 6-digit security code (required for all security features)
+  app.post("/api/auth/setup-security-code", requireAuth,
+    applyRateLimit({
+      keyFn: (req) => req.session.userId || getClientIp(req),
+      limit: 10,
+      windowMs: 60 * 60 * 1000, // 10 requests per hour
+      name: 'Setup Security Code'
+    }),
+    async (req, res) => {
+      try {
+        const validation = setupSecurityCodeSchema.safeParse(req.body);
+        if (!validation.success) {
+          return res.status(400).json({ error: validation.error.errors[0].message });
+        }
+        
+        const { securityCode } = validation.data;
+        
+        // Get current user
+        const user = await storage.getUserById(req.session.userId!);
+        if (!user) {
+          return res.status(404).json({ error: "User not found" });
+        }
+        
+        // Check if security code is already set
+        if (user.securityCode) {
+          return res.status(400).json({ error: "Security code is already set. If you need to change it, please contact support." });
+        }
+        
+        // Hash the security code
+        const hashedSecurityCode = await hashPassword(securityCode);
+        
+        // Update user with hashed security code
+        await db.update(users)
+          .set({ securityCode: hashedSecurityCode })
+          .where(eq(users.id, req.session.userId!));
+        
+        console.log(`[SETUP_SECURITY_CODE] Security code set up successfully for user ${user.userId}`);
+        
+        res.json({ message: "Security code has been set up successfully. You can now use it to manage your account security." });
+      } catch (error) {
+        console.error("Error setting up security code:", error);
+        res.status(500).json({ error: "Failed to set up security code" });
+      }
+    }
+  );
+
   // Setup 6-digit PIN for quick login (requires security code)
   app.post("/api/auth/setup-pin", requireAuth,
     applyRateLimit({

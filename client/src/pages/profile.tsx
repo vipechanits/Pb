@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { updateProfileSchema, updateEmailSchema, updatePasswordSchema, setupPinSchema } from '@shared/schema';
 import type { UpdateProfile, UpdateEmailRequest, UpdatePasswordRequest, SetupPinRequest } from '@shared/schema';
 import { Button } from '@/components/ui/button';
@@ -377,9 +378,24 @@ export default function Profile() {
 function SecuritySettings() {
   const { user, refreshUser } = useAuth();
   const { toast } = useToast();
+  const [securityCodeLoading, setSecurityCodeLoading] = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [pinLoading, setPinLoading] = useState(false);
+
+  const securityCodeForm = useForm({
+    resolver: zodResolver(z.object({
+      securityCode: z.string().length(6, "Security code must be exactly 6 digits").regex(/^\d{6}$/, "Security code must contain only digits"),
+      confirmSecurityCode: z.string().length(6, "Security code must be exactly 6 digits").regex(/^\d{6}$/, "Security code must contain only digits"),
+    }).refine((data) => data.securityCode === data.confirmSecurityCode, {
+      message: "Security codes do not match",
+      path: ["confirmSecurityCode"],
+    })),
+    defaultValues: {
+      securityCode: '',
+      confirmSecurityCode: '',
+    },
+  });
 
   const emailForm = useForm<UpdateEmailRequest>({
     resolver: zodResolver(updateEmailSchema),
@@ -404,6 +420,27 @@ function SecuritySettings() {
       securityCode: '',
     },
   });
+
+  const onSecurityCodeSubmit = async (data: { securityCode: string; confirmSecurityCode: string }) => {
+    setSecurityCodeLoading(true);
+    try {
+      await apiRequest('POST', '/api/auth/setup-security-code', data);
+      await refreshUser();
+      securityCodeForm.reset();
+      toast({
+        title: 'Security code set up',
+        description: 'Your 6-digit security code has been successfully set up. You can now use it for account security features.',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to set up security code. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSecurityCodeLoading(false);
+    }
+  };
 
   const onEmailSubmit = async (data: UpdateEmailRequest) => {
     setEmailLoading(true);
@@ -469,12 +506,97 @@ function SecuritySettings() {
 
   return (
     <div className="space-y-6">
+      {/* Setup Security Code (Required First) */}
       {!user?.securityCode && (
-        <Alert variant="destructive" data-testid="alert-no-security-code">
-          <Shield className="h-4 w-4" />
-          <AlertTitle>Security Code Required</AlertTitle>
-          <AlertDescription>
-            You need to set up your 6-digit security code in your profile before you can update your email or password.
+        <Card className="border-orange-200 dark:border-orange-800">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-orange-800 dark:text-orange-200">
+              <Shield className="h-5 w-5" />
+              Setup Security Code (Required)
+            </CardTitle>
+            <CardDescription>
+              Set up your 6-digit security code first. This is required to use email updates, password changes, and PIN login features.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Form {...securityCodeForm}>
+              <form onSubmit={securityCodeForm.handleSubmit(onSecurityCodeSubmit)} className="space-y-4">
+                <FormField
+                  control={securityCodeForm.control}
+                  name="securityCode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>6-Digit Security Code</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="123456"
+                          maxLength={6}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                            field.onChange(value);
+                          }}
+                          disabled={securityCodeLoading}
+                          data-testid="input-security-code"
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Choose a 6-digit code (0-9 only) that you can remember
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={securityCodeForm.control}
+                  name="confirmSecurityCode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Confirm Security Code</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="123456"
+                          maxLength={6}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                            field.onChange(value);
+                          }}
+                          disabled={securityCodeLoading}
+                          data-testid="input-confirm-security-code"
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Re-enter your security code to confirm
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <Button
+                  type="submit"
+                  disabled={securityCodeLoading}
+                  data-testid="button-setup-security-code"
+                >
+                  {securityCodeLoading ? 'Setting up...' : 'Setup Security Code'}
+                </Button>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      )}
+
+      {user?.securityCode && (
+        <Alert className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
+          <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+          <AlertDescription className="text-green-800 dark:text-green-200">
+            Security code is active. You can now use all security features.
           </AlertDescription>
         </Alert>
       )}

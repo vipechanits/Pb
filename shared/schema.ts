@@ -93,7 +93,7 @@ export const users = pgTable("users", {
   paymentQrUrl: text("payment_qr_url"), // User's uploaded UPI QR code
   
   // Security
-  securityCode: varchar("security_code", { length: 6 }),
+  securityCode: text("security_code"), // Hashed 6-digit security code (bcrypt)
   pinHash: text("pin_hash"), // Hashed 6-digit PIN for quick login
   
   // Referral/Sponsorship (for income calculations)
@@ -700,6 +700,18 @@ export const updatePasswordSchema = z.object({
 });
 
 // Setup PIN schema (for 6-digit PIN quick login)
+export const setupSecurityCodeSchema = z.object({
+  securityCode: z.string()
+    .length(6, "Security code must be exactly 6 digits")
+    .regex(/^\d{6}$/, "Security code must contain only digits"),
+  confirmSecurityCode: z.string()
+    .length(6, "Security code must be exactly 6 digits")
+    .regex(/^\d{6}$/, "Security code must contain only digits"),
+}).refine((data) => data.securityCode === data.confirmSecurityCode, {
+  message: "Security codes do not match",
+  path: ["confirmSecurityCode"],
+});
+
 export const setupPinSchema = z.object({
   pin: z.string()
     .length(6, "PIN must be exactly 6 digits")
