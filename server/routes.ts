@@ -243,6 +243,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`[SIGNUP] Auto-assigned ${finalBinaryLeg} leg for sponsor ${finalSponsorId}`);
       }
       
+      // Generate email verification token
+      const verificationToken = crypto.randomBytes(32).toString('hex');
+      const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      
       // Create user with auto-generated PB#### ID (transaction-safe)
       // Binary leg placement deferred to activation (stored as requested preference)
       const user = await storage.createUserWithGeneratedId({
@@ -256,27 +260,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         binaryLeg: finalBinaryLeg, // DEPRECATED: kept for backward compatibility
         sponsorRequestedLeg: finalBinaryLeg, // Requested leg preference (actual placement at activation)
         isActivated: false,
-        emailVerified: true, // Auto-verify email (no verification required)
-        emailVerificationToken: null,
-        emailVerificationExpiry: null,
+        emailVerified: false, // Require email verification
+        emailVerificationToken: verificationToken,
+        emailVerificationExpiry: verificationExpiry,
       });
       
-      console.log(`[SIGNUP] Created user ${user.userId} (${email}) - binary placement deferred to activation`);
+      console.log(`[SIGNUP] Created user ${user.userId} (${email}) - email verification required`);
       
-      // Auto-login after signup
-      req.session.userId = user.id;
-      req.session.isAdmin = user.role === 'admin';
+      // Send verification email
+      try {
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        await sendVerificationEmail(email, verificationToken, baseUrl);
+        console.log(`[SIGNUP] Verification email sent to ${email}`);
+      } catch (emailError) {
+        console.error(`[SIGNUP] Failed to send verification email to ${email}:`, emailError);
+        // Continue even if email fails (user can request resend)
+      }
       
-      // Save session before responding
-      req.session.save((err) => {
-        if (err) {
-          console.error("Error saving session:", err);
-          return res.status(500).json({ error: "Failed to create session" });
-        }
-        res.status(201).json({ 
-          message: "Account created successfully! You are now logged in.",
-          user: serializeUser(user)
-        });
+      // DO NOT auto-login - require email verification first
+      res.status(201).json({ 
+        message: "Account created successfully! Please check your email to verify your account.",
+        requiresVerification: true,
+        email: email
       });
     } catch (error: any) {
       // Enhanced error logging for debugging
@@ -354,7 +359,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Invalid email or password" });
       }
       
-      // Email verification disabled - users can login immediately
+      // Check email verification (skip for admin)
+      if (!user.emailVerified && user.role !== 'admin') {
+        return res.status(403).json({ 
+          error: "Please verify your email address before logging in. Check your inbox for the verification link.",
+          requiresVerification: true,
+          email: user.email
+        });
+      }
       
       // Set session and save it before responding
       req.session.userId = user.id;
@@ -393,11 +405,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Verification token is required" });
       }
       
-      // Hash the token to compare with stored hash
-      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-      
-      // Find user with this token
-      const user = await storage.getUserByVerificationToken(tokenHash);
+      // Find user with this token (stored in plain text)
+      const user = await storage.getUserByVerificationToken(token);
       
       if (!user) {
         return res.status(400).json({ 
@@ -450,6 +459,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to verify email" });
     }
   });
+  
+  // Resend Verification Email
+  app.post("/api/auth/resend-verification",
+    applyRateLimit({
+      keyFn: (req) => req.body.email?.toLowerCase().trim() || 'unknown',
+      limit: 5,
+      windowMs: 15 * 60 * 1000, // 5 requests per 15 minutes per email
+      name: 'Resend Verification'
+    }),
+    async (req, res) => {
+      try {
+        const { email } = req.body;
+        
+        if (!email) {
+          return res.status(400).json({ error: "Email is required" });
+        }
+        
+        const normalizedEmail = email.toLowerCase().trim();
+        
+        // Find user
+        const user = await storage.getUserByEmail(normalizedEmail);
+        if (!user) {
+          // Don't reveal if email exists (security)
+          return res.json({ message: "If your email is registered, you will receive a verification link." });
+        }
+        
+        // Check if already verified
+        if (user.emailVerified) {
+          return res.json({ message: "This email is already verified. You can log in now." });
+        }
+        
+        // Generate new verification token
+        const verificationToken = crypto.randomBytes(32).toString('hex');
+        const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+        
+        // Update user with new token
+        await db.update(users)
+          .set({
+            emailVerificationToken: verificationToken,
+            emailVerificationExpiry: verificationExpiry,
+          })
+          .where(eq(users.id, user.id));
+        
+        // Send verification email
+        try {
+          const baseUrl = `${req.protocol}://${req.get('host')}`;
+          await sendVerificationEmail(normalizedEmail, verificationToken, baseUrl);
+          console.log(`[RESEND_VERIFY] Verification email sent to ${normalizedEmail}`);
+        } catch (emailError) {
+          console.error(`[RESEND_VERIFY] Failed to send email to ${normalizedEmail}:`, emailError);
+          return res.status(500).json({ error: "Failed to send verification email. Please try again later." });
+        }
+        
+        res.json({ message: "Verification email sent! Please check your inbox." });
+      } catch (error) {
+        console.error("Error resending verification:", error);
+        res.status(500).json({ error: "Failed to resend verification email" });
+      }
+    }
+  );
   
   // Password Reset Routes
   
