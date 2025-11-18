@@ -2,15 +2,15 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { updateProfileSchema, updateEmailSchema, updatePasswordSchema } from '@shared/schema';
-import type { UpdateProfile, UpdateEmailRequest, UpdatePasswordRequest } from '@shared/schema';
+import { updateProfileSchema, updateEmailSchema, updatePasswordSchema, setupPinSchema } from '@shared/schema';
+import type { UpdateProfile, UpdateEmailRequest, UpdatePasswordRequest, SetupPinRequest } from '@shared/schema';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { CheckCircle, QrCode, AlertTriangle, Mail, Lock, Shield } from 'lucide-react';
+import { CheckCircle, QrCode, AlertTriangle, Mail, Lock, Shield, Hash } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { ReferralLinks } from '@/components/referral-links';
@@ -379,6 +379,7 @@ function SecuritySettings() {
   const { toast } = useToast();
   const [emailLoading, setEmailLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [pinLoading, setPinLoading] = useState(false);
 
   const emailForm = useForm<UpdateEmailRequest>({
     resolver: zodResolver(updateEmailSchema),
@@ -392,6 +393,14 @@ function SecuritySettings() {
     resolver: zodResolver(updatePasswordSchema),
     defaultValues: {
       newPassword: '',
+      securityCode: '',
+    },
+  });
+
+  const pinForm = useForm<SetupPinRequest>({
+    resolver: zodResolver(setupPinSchema),
+    defaultValues: {
+      pin: '',
       securityCode: '',
     },
   });
@@ -434,6 +443,27 @@ function SecuritySettings() {
       });
     } finally {
       setPasswordLoading(false);
+    }
+  };
+
+  const onPinSubmit = async (data: SetupPinRequest) => {
+    setPinLoading(true);
+    try {
+      await apiRequest('POST', '/api/auth/setup-pin', data);
+      await refreshUser();
+      pinForm.reset();
+      toast({
+        title: 'PIN setup successful',
+        description: 'Your 6-digit PIN has been set up successfully. You can now use it for quick login.',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to set up PIN. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setPinLoading(false);
     }
   };
 
@@ -588,6 +618,95 @@ function SecuritySettings() {
                 data-testid="button-update-password"
               >
                 {passwordLoading ? 'Updating...' : 'Update Password'}
+              </Button>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Hash className="h-5 w-5" />
+            Setup 6-Digit PIN for Quick Login
+          </CardTitle>
+          <CardDescription>
+            {user?.pinHash 
+              ? "Your PIN is already set up. You can update it by entering a new PIN below." 
+              : "Set up a 6-digit PIN for faster login. You'll need your security code to set this up."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {user?.pinHash && (
+            <Alert className="mb-4 bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
+              <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+              <AlertDescription className="text-green-800 dark:text-green-200">
+                PIN is currently active. You can use it for quick login.
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          <Form {...pinForm}>
+            <form onSubmit={pinForm.handleSubmit(onPinSubmit)} className="space-y-4">
+              <FormField
+                control={pinForm.control}
+                name="pin"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>6-Digit PIN</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="Enter 6-digit PIN"
+                        maxLength={6}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                          field.onChange(value);
+                        }}
+                        disabled={pinLoading || !user?.securityCode}
+                        data-testid="input-pin"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Must be exactly 6 digits (0-9 only)
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={pinForm.control}
+                name="securityCode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>6-Digit Security Code</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="text"
+                        placeholder="123456"
+                        maxLength={6}
+                        disabled={pinLoading || !user?.securityCode}
+                        data-testid="input-pin-security-code"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Enter your 6-digit security code to confirm this change
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <Button
+                type="submit"
+                disabled={pinLoading || !user?.securityCode}
+                data-testid="button-setup-pin"
+              >
+                {pinLoading ? 'Setting up...' : user?.pinHash ? 'Update PIN' : 'Setup PIN'}
               </Button>
             </form>
           </Form>

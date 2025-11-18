@@ -94,6 +94,7 @@ export const users = pgTable("users", {
   
   // Security
   securityCode: varchar("security_code", { length: 6 }),
+  pinHash: text("pin_hash"), // Hashed 6-digit PIN for quick login
   
   // Referral/Sponsorship (for income calculations)
   sponsorId: varchar("sponsor_id", { length: 20 }), // PB ID of sponsor (who referred you)
@@ -698,10 +699,30 @@ export const updatePasswordSchema = z.object({
     .regex(/^\d{6}$/, "Security code must contain only digits"),
 });
 
+// Setup PIN schema (for 6-digit PIN quick login)
+export const setupPinSchema = z.object({
+  pin: z.string()
+    .length(6, "PIN must be exactly 6 digits")
+    .regex(/^\d{6}$/, "PIN must contain only digits"),
+  securityCode: z.string()
+    .length(6, "Security code must be exactly 6 digits")
+    .regex(/^\d{6}$/, "Security code must contain only digits"),
+});
+
+// Login with PIN schema
+export const loginWithPinSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  pin: z.string()
+    .length(6, "PIN must be exactly 6 digits")
+    .regex(/^\d{6}$/, "PIN must contain only digits"),
+});
+
 export type ForgotPasswordRequest = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordRequest = z.infer<typeof resetPasswordSchema>;
 export type UpdateEmailRequest = z.infer<typeof updateEmailSchema>;
 export type UpdatePasswordRequest = z.infer<typeof updatePasswordSchema>;
+export type SetupPinRequest = z.infer<typeof setupPinSchema>;
+export type LoginWithPinRequest = z.infer<typeof loginWithPinSchema>;
 export type ManualActivationCompletionRequest = z.infer<typeof manualActivationCompletionSchema>;
 
 // Binary Match Queue - FIFO queue for 3:3 matched pairs

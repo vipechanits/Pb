@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema, users, reentries, activationPayments, activations, activationMatrixPositions, binaryMatchQueue, notifications, incomeTransactions, userIncomeSummaries, passwordResetTokens, forgotPasswordSchema, resetPasswordSchema, updateEmailSchema, updatePasswordSchema, manualActivationCompletionSchema } from "@shared/schema";
+import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema, users, reentries, activationPayments, activations, activationMatrixPositions, binaryMatchQueue, notifications, incomeTransactions, userIncomeSummaries, passwordResetTokens, forgotPasswordSchema, resetPasswordSchema, updateEmailSchema, updatePasswordSchema, setupPinSchema, loginWithPinSchema, manualActivationCompletionSchema } from "@shared/schema";
 import { hashPassword, verifyPassword, serializeUser } from "./auth";
 import { generateUserPaymentQR } from "./qrcode-generator";
 import { z } from "zod";
@@ -872,6 +872,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error("Error updating password:", error);
         res.status(500).json({ error: "Failed to update password" });
+      }
+    }
+  );
+  
+  // Setup 6-digit PIN for quick login (requires security code)
+  app.post("/api/auth/setup-pin", requireAuth,
+    applyRateLimit({
+      keyFn: (req) => req.session.userId || getClientIp(req),
+      limit: 10,
+      windowMs: 60 * 60 * 1000, // 10 requests per hour
+      name: 'Setup PIN'
+    }),
+    async (req, res) => {
+      try {
+        const validation = setupPinSchema.safeParse(req.body);
+        if (!validation.success) {
+          return res.status(400).json({ error: validation.error.errors[0].message });
+        }
+        
+        const { pin, securityCode } = validation.data;
+        
+        // Get current user
+        const user = await storage.getUserById(req.session.userId!);
+        if (!user) {
+          return res.status(404).json({ error: "User not found" });
+        }
+        
+        // Verify security code
+        if (!user.securityCode) {
+          return res.status(400).json({ error: "Security code not set. Please set up your security code first." });
+        }
+        
+        const isValidCode = await verifyPassword(securityCode, user.securityCode);
+        if (!isValidCode) {
+          console.warn(`[SETUP_PIN] Invalid security code attempt for user ${user.userId}`);
+          return res.status(401).json({ error: "Invalid security code" });
+        }
+        
+        // Hash the PIN
+        const hashedPin = await hashPassword(pin);
+        
+        // Update user with hashed PIN
+        await db.update(users)
+          .set({ pinHash: hashedPin })
+          .where(eq(users.id, req.session.userId!));
+        
+        console.log(`[SETUP_PIN] PIN set up successfully for user ${user.userId}`);
+        
+        res.json({ message: "6-digit PIN has been set up successfully. You can now use it for quick login." });
+      } catch (error) {
+        console.error("Error setting up PIN:", error);
+        res.status(500).json({ error: "Failed to set up PIN" });
+      }
+    }
+  );
+  
+  // Login with 6-digit PIN
+  app.post("/api/auth/login-with-pin",
+    applyRateLimit({
+      keyFn: (req) => req.body.email?.toLowerCase().trim() || getClientIp(req),
+      limit: 5,
+      windowMs: 60 * 1000, // 5 attempts per minute per email
+      name: 'PIN Login'
+    }),
+    async (req, res) => {
+      try {
+        const validation = loginWithPinSchema.safeParse(req.body);
+        if (!validation.success) {
+          return res.status(400).json({ error: validation.error.errors[0].message });
+        }
+        
+        const { email, pin } = validation.data;
+        const normalizedEmail = email.toLowerCase().trim();
+        
+        // Find user
+        const user = await storage.getUserByEmail(normalizedEmail);
+        if (!user) {
+          console.warn(`[PIN_LOGIN] Login attempt for non-existent email: ${normalizedEmail}`);
+          return res.status(401).json({ error: "Invalid email or PIN" });
+        }
+        
+        // Check if user has PIN set up
+        if (!user.pinHash) {
+          console.warn(`[PIN_LOGIN] PIN login attempt but PIN not set up for user ${user.userId}`);
+          return res.status(400).json({ error: "PIN not set up. Please use email/password login and set up your PIN first." });
+        }
+        
+        // Check if email is verified
+        if (!user.emailVerified) {
+          console.warn(`[PIN_LOGIN] Unverified email login attempt: ${normalizedEmail}`);
+          return res.status(403).json({ error: "Please verify your email before logging in" });
+        }
+        
+        // Verify PIN
+        const isPinValid = await verifyPassword(pin, user.pinHash);
+        if (!isPinValid) {
+          console.warn(`[PIN_LOGIN] Invalid PIN attempt for user ${user.userId}`);
+          return res.status(401).json({ error: "Invalid email or PIN" });
+        }
+        
+        // Create session
+        req.session.userId = user.id;
+        req.session.isAdmin = user.role === 'admin';
+        
+        console.log(`[PIN_LOGIN] Successful PIN login for user ${user.userId}`);
+        
+        res.json({
+          message: "Login successful",
+          user: serializeUser(user)
+        });
+      } catch (error) {
+        console.error("Error during PIN login:", error);
+        res.status(500).json({ error: "Login failed" });
       }
     }
   );

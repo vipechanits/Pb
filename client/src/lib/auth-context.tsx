@@ -7,6 +7,7 @@ interface AuthContextType {
   user: Omit<User, 'password'> | null;
   loading: boolean;
   login: (email: string, password: string, recaptchaToken?: string) => Promise<Omit<User, 'password'>>;
+  loginWithPin: (email: string, pin: string) => Promise<Omit<User, 'password'>>;
   logout: () => Promise<void>;
   signup: (email: string, password: string, sponsorId?: string, binaryLeg?: string) => Promise<Omit<User, 'password'>>;
   refreshUser: () => Promise<void>;
@@ -51,6 +52,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return data.user;
   };
 
+  const loginWithPin = async (email: string, pin: string) => {
+    const response = await apiRequest('POST', '/api/auth/login-with-pin', { email, pin });
+    const data = await response.json();
+    setUser(data.user);
+    toast({
+      title: 'Welcome back!',
+      description: 'You have successfully logged in with your PIN.',
+    });
+    return data.user;
+  };
+
   const signup = async (email: string, password: string, sponsorId?: string, binaryLeg?: string) => {
     const response = await apiRequest('POST', '/api/auth/signup', { email, password, sponsorId, binaryLeg });
     const data = await response.json();
@@ -83,7 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, signup, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithPin, logout, signup, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
