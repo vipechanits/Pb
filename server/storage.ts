@@ -19,6 +19,7 @@ import {
   users,
   activations,
   activationPayments,
+  activationMatrixPositions,
   systemConfig,
   reentries,
   notifications,
@@ -182,7 +183,7 @@ export interface IStorage {
   getBackupHistory(limit?: number): Promise<any[]>;
   deleteBackup(backupId: string): Promise<void>;
   exportDatabaseToJSON(): Promise<string>; // Returns JSON string of entire database
-  // REMOVED: importDatabaseFromJSON - Security vulnerability removed (see line 2249)
+  importDatabaseFromJSON(backupJson: string): Promise<void>; // Restore database from JSON backup
 }
 
 export class DbStorage implements IStorage {
@@ -3346,10 +3347,102 @@ export class DbStorage implements IStorage {
     return JSON.stringify(backup, null, 2);
   }
   
-  // REMOVED: importDatabaseFromJSON - Catastrophic security vulnerability
-  // This function allowed deleting ALL user data and was exposed via insecure endpoint
-  // Database restoration must be done manually via direct database access tools
-  // with proper backup procedures and administrator oversight
+  /**
+   * Import database from JSON backup (SECURE)
+   * WARNING: This replaces ALL existing data with backup data
+   * Should only be called after admin authorization and pre-restore backup creation
+   */
+  async importDatabaseFromJSON(backupJson: string): Promise<void> {
+    console.log('[DB_RESTORE] Starting database restore...');
+    
+    try {
+      // Parse backup data
+      const backup = JSON.parse(backupJson);
+      
+      // Validate backup structure
+      if (!backup.version || !backup.tables) {
+        throw new Error('Invalid backup format - missing version or tables');
+      }
+      
+      console.log(`[DB_RESTORE] Backup version: ${backup.version}`);
+      console.log(`[DB_RESTORE] Backup timestamp: ${backup.timestamp}`);
+      console.log(`[DB_RESTORE] Users to restore: ${backup.metadata?.userCount || 0}`);
+      
+      // Use transaction to ensure atomicity
+      await db.transaction(async (tx) => {
+        console.log('[DB_RESTORE] Starting database transaction...');
+        
+        // 1. Delete existing data (in reverse dependency order)
+        console.log('[DB_RESTORE] Clearing existing data...');
+        await tx.delete(notifications);
+        await tx.delete(databaseBackups);
+        await tx.delete(reentries);
+        await tx.delete(incomeTransactions);
+        await tx.delete(userIncomeSummaries);
+        await tx.delete(activationMatrixPositions);
+        await tx.delete(activationPayments);
+        await tx.delete(activations);
+        await tx.delete(passwordResetTokens);
+        await tx.delete(binaryMatchQueue);
+        await tx.delete(users);
+        await tx.delete(systemConfig);
+        
+        console.log('[DB_RESTORE] Existing data cleared successfully');
+        
+        // 2. Restore data (in dependency order)
+        console.log('[DB_RESTORE] Restoring tables...');
+        
+        // Restore system config first
+        if (backup.tables.system_config && backup.tables.system_config.length > 0) {
+          await tx.insert(systemConfig).values(backup.tables.system_config);
+          console.log(`[DB_RESTORE] Restored ${backup.tables.system_config.length} system config records`);
+        }
+        
+        // Restore users
+        if (backup.tables.users && backup.tables.users.length > 0) {
+          await tx.insert(users).values(backup.tables.users);
+          console.log(`[DB_RESTORE] Restored ${backup.tables.users.length} users`);
+        }
+        
+        // Restore activations
+        if (backup.tables.activations && backup.tables.activations.length > 0) {
+          await tx.insert(activations).values(backup.tables.activations);
+          console.log(`[DB_RESTORE] Restored ${backup.tables.activations.length} activations`);
+        }
+        
+        // Restore activation payments
+        if (backup.tables.activation_payments && backup.tables.activation_payments.length > 0) {
+          await tx.insert(activationPayments).values(backup.tables.activation_payments);
+          console.log(`[DB_RESTORE] Restored ${backup.tables.activation_payments.length} activation payments`);
+        }
+        
+        // Restore re-entries
+        if (backup.tables.reentries && backup.tables.reentries.length > 0) {
+          await tx.insert(reentries).values(backup.tables.reentries);
+          console.log(`[DB_RESTORE] Restored ${backup.tables.reentries.length} re-entries`);
+        }
+        
+        // Restore notifications
+        if (backup.tables.notifications && backup.tables.notifications.length > 0) {
+          await tx.insert(notifications).values(backup.tables.notifications);
+          console.log(`[DB_RESTORE] Restored ${backup.tables.notifications.length} notifications`);
+        }
+        
+        // Restore database backups metadata
+        if (backup.tables.database_backups && backup.tables.database_backups.length > 0) {
+          await tx.insert(databaseBackups).values(backup.tables.database_backups);
+          console.log(`[DB_RESTORE] Restored ${backup.tables.database_backups.length} database backup records`);
+        }
+        
+        console.log('[DB_RESTORE] Transaction committed successfully');
+      });
+      
+      console.log('[DB_RESTORE] Database restore completed successfully');
+    } catch (error) {
+      console.error('[DB_RESTORE] Error restoring database:', error);
+      throw new Error(`Database restore failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
 }
 
 export const storage = new DbStorage();

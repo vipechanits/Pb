@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Download, Upload, Loader2, AlertTriangle, Database, Trash2 } from "lucide-react";
+import { Download, Upload, Loader2, AlertTriangle, Database } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function DatabaseBackupPage() {
@@ -16,7 +16,6 @@ export default function DatabaseBackupPage() {
   const [showRestoreDialog, setShowRestoreDialog] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [backupData, setBackupData] = useState<any>(null);
-  const [showResetDialog, setShowResetDialog] = useState(false);
 
   // Fetch backup history
   const { data: backups, isLoading: loadingBackups } = useQuery<any[]>({
@@ -134,29 +133,6 @@ export default function DatabaseBackupPage() {
     restoreMutation.mutate({ backupData, createPreBackup: true });
   };
 
-  // Reset user data mutation
-  const resetUsersMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest("DELETE", "/api/admin/database/reset-users");
-      return await response.json();
-    },
-    onSuccess: (result) => {
-      toast({
-        title: "User Data Reset",
-        description: result.message,
-      });
-      setShowResetDialog(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/database/backups"] });
-    },
-    onError: (error: any) => {
-      toast({
-        variant: "destructive",
-        title: "Reset Failed",
-        description: error.message || "Failed to reset user data",
-      });
-    },
-  });
-
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center gap-3">
@@ -228,27 +204,6 @@ export default function DatabaseBackupPage() {
           >
             <Upload className="mr-2 h-4 w-4" />
             Select Backup File to Restore
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Reset User Data Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-destructive">Reset User Data</CardTitle>
-          <CardDescription>
-            <strong>DANGER ZONE:</strong> This will permanently delete all user accounts and related data.
-            Admin accounts (PB0, PB1) and system configuration will be preserved.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button
-            onClick={() => setShowResetDialog(true)}
-            variant="destructive"
-            data-testid="button-reset-users"
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Reset All User Data
           </Button>
         </CardContent>
       </Card>
@@ -343,62 +298,6 @@ export default function DatabaseBackupPage() {
                 </>
               ) : (
                 "Restore Database"
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Reset User Data Confirmation Dialog */}
-      <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-destructive">Confirm User Data Reset</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2">
-              <p>
-                <strong>DANGER:</strong> This will permanently delete ALL user accounts and related data.
-              </p>
-              <p className="text-destructive font-semibold">
-                This action cannot be undone!
-              </p>
-              <div className="mt-4 p-4 bg-muted rounded-md space-y-1">
-                <p className="font-semibold">What will be deleted:</p>
-                <ul className="list-disc list-inside space-y-1 text-sm">
-                  <li>All user accounts (except PB0 and PB1)</li>
-                  <li>All activations and payments</li>
-                  <li>All income transactions and summaries</li>
-                  <li>All matrix positions and re-entries</li>
-                  <li>All binary match queue entries</li>
-                  <li>All notifications and password reset tokens</li>
-                  <li>All user sessions (users will be logged out)</li>
-                </ul>
-                <p className="font-semibold mt-3">What will be preserved:</p>
-                <ul className="list-disc list-inside space-y-1 text-sm">
-                  <li>Admin accounts (PB0, PB1)</li>
-                  <li>System configuration settings</li>
-                  <li>Database structure and backups</li>
-                </ul>
-              </div>
-              <p className="text-sm text-muted-foreground mt-3">
-                The next user ID will be reset to PB10000.
-              </p>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={resetUsersMutation.isPending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => resetUsersMutation.mutate()}
-              disabled={resetUsersMutation.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              data-testid="button-confirm-reset"
-            >
-              {resetUsersMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Resetting...
-                </>
-              ) : (
-                "Yes, Reset All User Data"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

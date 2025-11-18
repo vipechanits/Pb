@@ -193,6 +193,11 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       url: '/admin/database',
       icon: Database,
     },
+    {
+      title: 'Security',
+      url: '/admin/security',
+      icon: Shield,
+    },
   ];
 
   const pendingCount = pendingData?.count || 0;

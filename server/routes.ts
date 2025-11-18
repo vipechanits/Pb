@@ -12,6 +12,12 @@ import crypto from "crypto";
 import { sendVerificationEmail, sendPasswordResetEmail, sendPasswordChangedEmail } from "./lib/email";
 import { IncomeService } from "./income-service";
 import { verifyRecaptcha } from "./security-helpers";
+import {
+  authRateLimiter,
+  paymentRateLimiter,
+  adminRateLimiter,
+  generalRateLimiter,
+} from "./middleware/security";
 
 // Middleware to check if user is authenticated
 function requireAuth(req: any, res: any, next: any) {
@@ -167,6 +173,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Signup - Rate limited to prevent spam account creation
   app.post("/api/auth/signup", 
+    authRateLimiter, // DDoS protection layer
     applyRateLimit({
       keyFn: (req) => getClientIp(req),
       limit: 100,
@@ -294,6 +301,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Login - Rate limited to prevent brute-force attacks
   app.post("/api/auth/login", 
+    authRateLimiter, // DDoS protection layer (stricter: 5 per 15min)
     applyRateLimit({
       keyFn: (req) => getClientIp(req),
       limit: 600,
@@ -1781,7 +1789,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Confirm payment (only the designated receiver based on receiverType)
-  app.patch("/api/activation-payments/:id/confirm", requireAuth, async (req, res) => {
+  app.patch("/api/activation-payments/:id/confirm", paymentRateLimiter, requireAuth, async (req, res) => {
     try {
       console.log(`[CONFIRM-ROUTE] Received confirmation request for payment ${req.params.id} from user ${req.session.userId}`);
       
@@ -1846,7 +1854,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Reject payment (only the designated receiver based on receiverType)
-  app.patch("/api/activation-payments/:id/reject", requireAuth, async (req, res) => {
+  app.patch("/api/activation-payments/:id/reject", paymentRateLimiter, requireAuth, async (req, res) => {
     try {
       const validationResult = rejectPaymentSchema.safeParse(req.body);
       if (!validationResult.success) {
@@ -2586,10 +2594,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // REMOVED: Database restore endpoint - CATASTROPHIC SECURITY VULNERABILITY
-  // This endpoint allowed ANY logged-in user to DELETE ALL DATABASE DATA
-  // Database restoration must be done manually via direct database access
-  // by qualified database administrators with proper backup procedures
+  // POST /api/admin/database/restore - Restore database from backup (PB0 only)
+  // SECURITY: Super admin (PB0) only - creates pre-restore backup automatically
+  app.post("/api/admin/database/restore", requireAdmin, async (req: any, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user || user.userId !== 'PB0') {
+        return res.status(403).json({ error: "Forbidden - Super Admin (PB0) access required" });
+      }
+
+      const { backupData, createPreBackup } = req.body;
+      
+      if (!backupData) {
+        return res.status(400).json({ error: "Backup data is required" });
+      }
+
+      console.log(`[DB_RESTORE] Database restore initiated by ${user.userId}`);
+
+      // Create pre-restore backup if requested
+      let preRestoreBackup = null;
+      if (createPreBackup) {
+        console.log('[DB_RESTORE] Creating pre-restore backup...');
+        const backupJson = await storage.exportDatabaseToJSON();
+        const filename = `pre_restore_backup_${new Date().toISOString().replace(/:/g, '-')}.json`;
+        const fileSize = Buffer.byteLength(backupJson, 'utf8');
+        
+        // Save backup metadata
+        await storage.createDatabaseBackup(filename, fileSize, user.userId!, 'Pre-restore backup');
+        
+        preRestoreBackup = {
+          filename,
+          data: backupJson
+        };
+        
+        console.log(`[DB_RESTORE] Pre-restore backup created: ${filename}`);
+      }
+
+      // Perform restore
+      const backupJson = typeof backupData === 'string' ? backupData : JSON.stringify(backupData);
+      await storage.importDatabaseFromJSON(backupJson);
+
+      console.log('[DB_RESTORE] Database restore completed successfully');
+
+      res.json({
+        success: true,
+        message: "Database restored successfully",
+        preRestoreBackup
+      });
+    } catch (error) {
+      console.error("[DB_RESTORE] Error restoring database:", error);
+      res.status(500).json({ 
+        error: "Failed to restore database",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
 
   // GET /api/admin/database/backups - Get backup history
   // SECURITY: Changed from requireAuth to requireAdmin
@@ -2989,7 +3048,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================================================
   // Force re-confirmation of a payment to trigger matrix reconciliation
   // This is used to test/fix legacy activations like PB10004 who are missing matrix placement
-  app.post("/api/admin/activation/force-confirm", requireAdmin, async (req, res) => {
+  app.post("/api/admin/activation/force-confirm", adminRateLimiter, requireAdmin, async (req, res) => {
     try {
       const schema = z.object({
         paymentId: z.string().uuid("paymentId must be a valid UUID"),
@@ -3155,6 +3214,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
         error: "Manual activation completion failed", 
         details: error.message 
       });
+    }
+  });
+
+  // ============================================================================
+  // SECURITY MONITORING - Admin only
+  // ============================================================================
+  
+  // Get security stats (blocked IPs, suspicious activity)
+  app.get("/api/admin/security/stats", adminRateLimiter, requireAdmin, async (_req, res) => {
+    try {
+      const { getSuspiciousIPs, getBlockedIPs } = await import("./middleware/security");
+      
+      const suspiciousIPs = getSuspiciousIPs();
+      const blockedIPs = getBlockedIPs();
+      
+      // Convert to arrays for JSON response
+      const suspiciousArray = Array.from(suspiciousIPs.entries()).map(([ip, data]) => ({
+        ip,
+        count: data.count,
+        lastAttempt: new Date(data.lastAttempt).toISOString(),
+      }));
+      
+      const blockedArray = Array.from(blockedIPs);
+      
+      res.json({
+        suspiciousIPs: suspiciousArray,
+        blockedIPs: blockedArray,
+        stats: {
+          totalSuspicious: suspiciousArray.length,
+          totalBlocked: blockedArray.length,
+        },
+      });
+    } catch (error) {
+      console.error("[ADMIN SECURITY] Failed to fetch security stats:", error);
+      res.status(500).json({ error: "Failed to fetch security stats" });
+    }
+  });
+  
+  // Block an IP manually
+  app.post("/api/admin/security/block-ip", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        ip: z.string().min(7).max(45), // IPv4: 7-15, IPv6: up to 45
+      });
+      
+      const { ip } = schema.parse(req.body);
+      
+      const { blockIP } = await import("./middleware/security");
+      blockIP(ip);
+      
+      console.log(`[ADMIN SECURITY] Admin ${req.session.userId} manually blocked IP: ${ip}`);
+      
+      res.json({
+        success: true,
+        message: `IP ${ip} has been blocked`,
+        ip,
+      });
+    } catch (error: any) {
+      console.error("[ADMIN SECURITY] Failed to block IP:", error);
+      res.status(500).json({ error: "Failed to block IP", details: error?.message });
+    }
+  });
+  
+  // Unblock an IP manually
+  app.post("/api/admin/security/unblock-ip", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        ip: z.string().min(7).max(45),
+      });
+      
+      const { ip } = schema.parse(req.body);
+      
+      const { unblockIP } = await import("./middleware/security");
+      const wasBlocked = unblockIP(ip);
+      
+      if (!wasBlocked) {
+        return res.status(404).json({ error: "IP not found in blocked list" });
+      }
+      
+      console.log(`[ADMIN SECURITY] Admin ${req.session.userId} manually unblocked IP: ${ip}`);
+      
+      res.json({
+        success: true,
+        message: `IP ${ip} has been unblocked`,
+        ip,
+      });
+    } catch (error: any) {
+      console.error("[ADMIN SECURITY] Failed to unblock IP:", error);
+      res.status(500).json({ error: "Failed to unblock IP", details: error?.message });
     }
   });
 

@@ -8,6 +8,14 @@ import ws from "ws";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { storage } from "./storage";
+import {
+  helmetMiddleware,
+  ipBlockMiddleware,
+  requestSizeMiddleware,
+  suspiciousPatternMiddleware,
+  securityAuditLogger,
+  speedLimiter,
+} from "./middleware/security";
 import "./types";
 
 // Configure WebSocket for Neon
@@ -108,6 +116,32 @@ const app = express();
 // This is required for secure cookies and proper IP addresses
 app.set('trust proxy', 1);
 
+// ============================================================================
+// SECURITY MIDDLEWARE - Order matters!
+// ============================================================================
+
+// 1. Helmet - Security headers (XSS, clickjacking, MIME sniffing protection)
+app.use(helmetMiddleware);
+
+// 2. IP blocking - Block known malicious IPs immediately
+app.use(ipBlockMiddleware);
+
+// 3. Request size limits - Prevent large payload attacks
+app.use(requestSizeMiddleware);
+
+// 4. Suspicious pattern detection - Detect common attack patterns
+app.use(suspiciousPatternMiddleware);
+
+// 5. Security audit logging - Log all security-relevant events
+app.use(securityAuditLogger);
+
+// 6. Speed limiter - Gradual slowdown for repeated requests
+app.use(speedLimiter);
+
+// ============================================================================
+// END SECURITY MIDDLEWARE
+// ============================================================================
+
 // Setup PostgreSQL session store
 const PgSession = connectPgSimple(session);
 const sessionPool = new Pool({ connectionString: dbConfig.getDatabaseUrl() });
@@ -120,9 +154,10 @@ declare module 'http' {
 app.use(express.json({
   verify: (req, _res, buf) => {
     req.rawBody = buf;
-  }
+  },
+  limit: '10mb' // Match request size limit
 }));
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 
 app.use(
   session({
