@@ -7,6 +7,13 @@ PAYBACK247 is a peer-to-peer income platform for network marketing. It features 
 Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
+- **Binary Tree Count Recalculation Tool (2025-11-18)**:
+  - Added admin maintenance feature to recalculate binary tree counts for all users
+  - Implements post-order DFS traversal with memoization for efficient computation
+  - Available at Admin Dashboard → Database Management → "Recalculate Tree Counts" button
+  - Use cases: Fix legacy data from before auto-update logic, repair corrupted counts, verify data integrity
+  - Admin endpoint: POST `/api/admin/recalculate-tree-counts` (admin-only, rate-limited)
+  - Detailed console logging shows calculation steps for verification
 - **Comprehensive Security Implementation (2025-11-18)**:
   - Deployed Helmet.js with strict CSP in production (disabled in dev for Vite HMR), HSTS, XSS protection, clickjacking prevention
   - Implemented tiered rate limiting: auth endpoints (5/min), payment endpoints (10/min), admin endpoints (30/min), general API (100/15min)

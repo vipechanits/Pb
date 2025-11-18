@@ -133,6 +133,27 @@ export default function DatabaseBackupPage() {
     restoreMutation.mutate({ backupData, createPreBackup: true });
   };
 
+  // Recalculate tree counts mutation
+  const recalcTreeCountsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/admin/recalculate-tree-counts", {});
+      return await response.json();
+    },
+    onSuccess: (result) => {
+      toast({
+        title: "Recalculation Complete",
+        description: `Successfully recalculated binary tree counts for ${result.usersUpdated} users`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Recalculation Failed",
+        description: error.message || "Failed to recalculate tree counts",
+      });
+    },
+  });
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center gap-3">
@@ -174,6 +195,37 @@ export default function DatabaseBackupPage() {
               <>
                 <Download className="mr-2 h-4 w-4" />
                 Download Backup
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Tree Count Recalculation Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Binary Tree Count Recalculation</CardTitle>
+          <CardDescription>
+            Recalculate leftLegCount, rightLegCount, personalLeftCount, and personalRightCount for all users.
+            This fixes counts for users activated before the tree count logic was implemented.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            onClick={() => recalcTreeCountsMutation.mutate()}
+            disabled={recalcTreeCountsMutation.isPending}
+            variant="secondary"
+            data-testid="button-recalc-tree-counts"
+          >
+            {recalcTreeCountsMutation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Recalculating...
+              </>
+            ) : (
+              <>
+                <Database className="mr-2 h-4 w-4" />
+                Recalculate Tree Counts
               </>
             )}
           </Button>

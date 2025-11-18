@@ -39,12 +39,30 @@ interface MatrixNodeProps {
 }
 
 function MatrixNodeComponent({ node, position, depth }: MatrixNodeProps) {
-  if (!node || depth > 5) {
+  if (depth > 5) {
+    return null;
+  }
+
+  if (!node) {
     return (
-      <div className="flex flex-col items-center gap-2 p-4">
+      <div className="flex flex-col items-center gap-2">
         <div className="w-32 h-24 border-2 border-dashed border-muted rounded-lg flex items-center justify-center bg-muted/20">
-          <p className="text-xs text-muted-foreground">Empty Slot</p>
+          <p className="text-xs text-muted-foreground">Empty</p>
         </div>
+        {depth < 5 && (
+          <div className="flex gap-8 mt-6">
+            <div className="flex flex-col items-center">
+              <div className="h-6 border-l-2 border-dashed border-muted/40" />
+              <Badge variant="outline" className="mb-2 text-xs border-muted text-muted-foreground">L</Badge>
+              <MatrixNodeComponent node={null} position="left" depth={depth + 1} />
+            </div>
+            <div className="flex flex-col items-center">
+              <div className="h-6 border-l-2 border-muted/40" />
+              <Badge variant="outline" className="mb-2 text-xs border-muted text-muted-foreground">R</Badge>
+              <MatrixNodeComponent node={null} position="right" depth={depth + 1} />
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -71,7 +89,7 @@ function MatrixNodeComponent({ node, position, depth }: MatrixNodeProps) {
         </CardContent>
       </Card>
       
-      {(node.leftChild || node.rightChild) && depth < 5 && (
+      {depth < 5 && (
         <div className="flex gap-8 mt-6">
           <div className="flex flex-col items-center">
             <div className="h-6 border-l-2 border-muted" />

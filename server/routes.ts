@@ -3463,6 +3463,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ADMIN: Recalculate binary tree counts for all users
+  // Use case: Fix tree counts for users activated before count logic was implemented
+  app.post("/api/admin/recalculate-tree-counts", adminRateLimiter, requireAdmin, async (req: any, res: any) => {
+    try {
+      console.log(`[ADMIN] Tree count recalculation requested by ${req.session.userId}`);
+      
+      const result = await storage.recalculateBinaryTreeCounts();
+      
+      console.log(`[ADMIN] Tree count recalculation completed: ${result.usersUpdated} users updated`);
+      res.json({
+        success: true,
+        message: `Binary tree counts recalculated successfully`,
+        usersUpdated: result.usersUpdated
+      });
+    } catch (error: any) {
+      console.error("[ADMIN] Tree count recalculation failed:", error);
+      res.status(500).json({
+        error: "Tree count recalculation failed",
+        details: error.message
+      });
+    }
+  });
+
   // ============================================================================
   // SECURITY MONITORING - Admin only
   // ============================================================================

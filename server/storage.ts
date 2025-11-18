@@ -3449,6 +3449,170 @@ export class DbStorage implements IStorage {
       throw new Error(`Database restore failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
+
+  /**
+   * MAINTENANCE: Recalculate all binary tree counts for all users
+   * This is useful when users were activated before the tree count logic was implemented
+   */
+  async recalculateBinaryTreeCounts(): Promise<{ success: boolean; usersUpdated: number }> {
+    try {
+      console.log('[TREE_RECALC] Starting binary tree count recalculation...');
+      
+      return await db.transaction(async (tx) => {
+        // Step 1: Fetch all users (activated and non-activated)
+        const allUsers = await tx.select({
+          userId: users.userId,
+          id: users.id,
+          binaryParentId: users.binaryParentId,
+          binaryPlacementLeg: users.binaryPlacementLeg,
+          sponsorId: users.sponsorId,
+          isActivated: users.isActivated,
+        }).from(users);
+        
+        console.log(`[TREE_RECALC] Loaded ${allUsers.length} users from database`);
+        
+        // Step 2: Build adjacency maps for efficient traversal
+        const childrenMap = new Map<string, typeof allUsers>();
+        const userMap = new Map<string, typeof allUsers[0]>();
+        
+        for (const user of allUsers) {
+          userMap.set(user.userId, user);
+          
+          if (user.binaryParentId && user.binaryParentId !== 'PB0') {
+            if (!childrenMap.has(user.binaryParentId)) {
+              childrenMap.set(user.binaryParentId, []);
+            }
+            childrenMap.get(user.binaryParentId)!.push(user);
+          }
+        }
+        
+        console.log(`[TREE_RECALC] Built adjacency maps for ${childrenMap.size} parent nodes`);
+        
+        // Step 3: Calculate counts for each user using post-order DFS
+        const counts = new Map<string, {
+          leftLegCount: number;
+          rightLegCount: number;
+          personalLeftCount: number;
+          personalRightCount: number;
+          subtreeSize: number; // Cache total descendants for correct propagation
+        }>();
+        
+        function calculateCounts(userId: string): { subtreeSize: number } {
+          // Skip if already calculated (memoization)
+          if (counts.has(userId)) {
+            const c = counts.get(userId)!;
+            console.log(`[TREE_RECALC] ${userId} - CACHED: L=${c.leftLegCount} R=${c.rightLegCount} subtree=${c.subtreeSize}`);
+            return { subtreeSize: c.subtreeSize };
+          }
+          
+          const user = userMap.get(userId);
+          if (!user) {
+            counts.set(userId, { 
+              leftLegCount: 0, 
+              rightLegCount: 0, 
+              personalLeftCount: 0, 
+              personalRightCount: 0,
+              subtreeSize: 0
+            });
+            return { subtreeSize: 0 };
+          }
+          
+          let leftLegCount = 0;
+          let rightLegCount = 0;
+          let personalLeftCount = 0;
+          let personalRightCount = 0;
+          
+          const children = childrenMap.get(userId) || [];
+          console.log(`[TREE_RECALC] ${userId} - Processing ${children.length} children (${children.filter(c => c.isActivated).length} activated)`);
+          
+          for (const child of children) {
+            // Only count activated children
+            if (!child.isActivated) {
+              console.log(`[TREE_RECALC]   ${userId} -> ${child.userId} (SKIPPED - not activated)`);
+              continue;
+            }
+            
+            // Recursively calculate child's entire subtree first (post-order)
+            console.log(`[TREE_RECALC]   ${userId} -> ${child.userId} (leg=${child.binaryPlacementLeg}, sponsor=${child.sponsorId})`);
+            const childResult = calculateCounts(child.userId);
+            
+            if (child.binaryPlacementLeg === 'left') {
+              // Count this activated child + entire subtree under them
+              const beforeCount = leftLegCount;
+              leftLegCount += 1 + childResult.subtreeSize;
+              console.log(`[TREE_RECALC]     LEFT: added ${1 + childResult.subtreeSize} (${beforeCount} -> ${leftLegCount})`);
+              
+              // Personal count only if this user is also the sponsor
+              if (child.sponsorId === userId) {
+                personalLeftCount += 1;
+              }
+            } else if (child.binaryPlacementLeg === 'right') {
+              // Count this activated child + entire subtree under them
+              const beforeCount = rightLegCount;
+              rightLegCount += 1 + childResult.subtreeSize;
+              console.log(`[TREE_RECALC]     RIGHT: added ${1 + childResult.subtreeSize} (${beforeCount} -> ${rightLegCount})`);
+              
+              // Personal count only if this user is also the sponsor
+              if (child.sponsorId === userId) {
+                personalRightCount += 1;
+              }
+            }
+          }
+          
+          const totalSubtreeSize = leftLegCount + rightLegCount;
+          
+          console.log(`[TREE_RECALC] ${userId} - FINAL: L=${leftLegCount} R=${rightLegCount} PL=${personalLeftCount} PR=${personalRightCount} subtree=${totalSubtreeSize}`);
+          
+          counts.set(userId, {
+            leftLegCount,
+            rightLegCount,
+            personalLeftCount,
+            personalRightCount,
+            subtreeSize: totalSubtreeSize,
+          });
+          
+          return { subtreeSize: totalSubtreeSize };
+        }
+        
+        // Calculate counts for all users (DFS will memoize and avoid redundant work)
+        for (const user of allUsers) {
+          if (user.userId !== 'PB0') {
+            calculateCounts(user.userId);
+          }
+        }
+        
+        console.log(`[TREE_RECALC] Calculated counts for ${counts.size} users`);
+        
+        // Step 4: Update database with calculated counts
+        let usersUpdated = 0;
+        
+        for (const [userId, userCounts] of Array.from(counts.entries())) {
+          await tx.update(users)
+            .set({
+              leftLegCount: userCounts.leftLegCount,
+              rightLegCount: userCounts.rightLegCount,
+              personalLeftCount: userCounts.personalLeftCount,
+              personalRightCount: userCounts.personalRightCount,
+              updatedAt: new Date(),
+            })
+            .where(eq(users.userId, userId));
+          
+          usersUpdated++;
+          
+          if (usersUpdated % 10 === 0) {
+            console.log(`[TREE_RECALC] Updated ${usersUpdated}/${counts.size} users...`);
+          }
+        }
+        
+        console.log(`[TREE_RECALC] ✓ Recalculation complete! Updated ${usersUpdated} users`);
+        
+        return { success: true, usersUpdated };
+      });
+    } catch (error) {
+      console.error('[TREE_RECALC] Error recalculating tree counts:', error);
+      throw new Error(`Tree count recalculation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
 }
 
 export const storage = new DbStorage();
