@@ -146,7 +146,8 @@ export const users = pgTable("users", {
 }, (t) => ({
   // Index on binaryParentId for fast subtree queries
   binaryParentIdx: index("binary_parent_idx").on(t.binaryParentId),
-  // NOTE: Unique constraint on (binaryParentId, binaryPlacementLeg) will be added after data migration
+  // CRITICAL: Unique constraint prevents duplicate binary positions (only ONE user per parent+leg combination)
+  uniqueBinaryPosition: unique("unique_binary_position").on(t.binaryParentId, t.binaryPlacementLeg),
 }));
 
 // Insert schema for signup

@@ -519,14 +519,17 @@ export class DbStorage implements IStorage {
     return sponsor.leftLegCount <= sponsor.rightLegCount ? 'left' : 'right';
   }
 
-  async findFirstAvailableBinarySlot(preferredParentId?: string, requestedLeg?: 'left' | 'right'): Promise<{ parentId: string | null; leg: 'left' | 'right' | null } | null> {
-    // URL-BASED PLACEMENT WITH SPILLOVER:
+  async findFirstAvailableBinarySlot(preferredParentId?: string, requestedLeg?: 'left' | 'right', tx?: any): Promise<{ parentId: string | null; leg: 'left' | 'right' | null } | null> {
+    // URL-BASED PLACEMENT WITH SPILLOVER (TRANSACTION-SAFE):
     // 1. Try exact placement: sponsor + requested leg
     // 2. If taken, search sponsor's entire downline for first available slot (spillover)
     // 3. If sponsor's downline is full, fall back to global tree search
+    // CRITICAL: When tx is provided, all queries use SELECT FOR UPDATE to prevent race conditions
+    
+    const dbOrTx = tx || db;
     
     // Find binary tree root (first activated regular user with no binary parent)
-    const rootUser = await db.select({
+    const rootUser = await dbOrTx.select({
       userId: users.userId,
     }).from(users)
       .where(and(
@@ -549,7 +552,7 @@ export class DbStorage implements IStorage {
     if (preferredParentId && preferredParentId !== 'PB0' && requestedLeg) {
       const preferredParent = await this.getUserByUserId(preferredParentId);
       if (preferredParent && preferredParent.isActivated) {
-        const requestedLegChildren = await this.getUsersByBinaryParentAndLeg(preferredParentId, requestedLeg);
+        const requestedLegChildren = await this.getUsersByBinaryParentAndLeg(preferredParentId, requestedLeg, tx);
         if (requestedLegChildren.length === 0) {
           console.log(`[BINARY-PLACEMENT] Exact placement successful: ${preferredParentId}-${requestedLeg}`);
           return { parentId: preferredParentId, leg: requestedLeg };
@@ -564,7 +567,7 @@ export class DbStorage implements IStorage {
       const preferredParent = await this.getUserByUserId(preferredParentId);
       if (preferredParent && preferredParent.isActivated) {
         console.log(`[BINARY-PLACEMENT] Searching ${preferredParentId}'s downline for first available slot...`);
-        const sponsorSlot = await this.findFirstSlotInSubtree(preferredParentId);
+        const sponsorSlot = await this.findFirstSlotInSubtree(preferredParentId, new Set<string>(), tx);
         if (sponsorSlot) {
           console.log(`[BINARY-PLACEMENT] Spillover placement in sponsor's downline: ${sponsorSlot.parentId}-${sponsorSlot.leg}`);
           return sponsorSlot;
@@ -584,8 +587,8 @@ export class DbStorage implements IStorage {
       if (visited.has(currentParentId)) continue;
       visited.add(currentParentId);
 
-      // Check left leg
-      const leftChildren = await this.getUsersByBinaryParentAndLeg(currentParentId, 'left');
+      // Check left leg (with transaction for locking if provided)
+      const leftChildren = await this.getUsersByBinaryParentAndLeg(currentParentId, 'left', tx);
       if (leftChildren.length === 0) {
         console.log(`[BINARY-PLACEMENT] Global placement: ${currentParentId}-left`);
         return { parentId: currentParentId, leg: 'left' };
@@ -594,8 +597,8 @@ export class DbStorage implements IStorage {
         queue.push(leftChildren[0].userId);
       }
 
-      // Check right leg
-      const rightChildren = await this.getUsersByBinaryParentAndLeg(currentParentId, 'right');
+      // Check right leg (with transaction for locking if provided)
+      const rightChildren = await this.getUsersByBinaryParentAndLeg(currentParentId, 'right', tx);
       if (rightChildren.length === 0) {
         console.log(`[BINARY-PLACEMENT] Global placement: ${currentParentId}-right`);
         return { parentId: currentParentId, leg: 'right' };
@@ -612,33 +615,33 @@ export class DbStorage implements IStorage {
 
   // Helper: Find first available slot within a user's downline (subtree)
   // DEPTH-FIRST SEARCH: Goes deep down left side first, then right side
-  private async findFirstSlotInSubtree(rootUserId: string, visited = new Set<string>()): Promise<{ parentId: string; leg: 'left' | 'right' } | null> {
+  private async findFirstSlotInSubtree(rootUserId: string, visited = new Set<string>(), tx?: any): Promise<{ parentId: string; leg: 'left' | 'right' } | null> {
     // Prevent infinite loops
     if (visited.has(rootUserId)) return null;
     visited.add(rootUserId);
 
-    // Check current node's left slot
-    const leftChildren = await this.getUsersByBinaryParentAndLeg(rootUserId, 'left');
+    // Check current node's left slot (with transaction for locking if provided)
+    const leftChildren = await this.getUsersByBinaryParentAndLeg(rootUserId, 'left', tx);
     if (leftChildren.length === 0) {
       // Left slot empty - place here!
       return { parentId: rootUserId, leg: 'left' };
     }
 
     // Left slot taken - GO DEEP DOWN into left child's subtree
-    const leftSubtreeSlot = await this.findFirstSlotInSubtree(leftChildren[0].userId, visited);
+    const leftSubtreeSlot = await this.findFirstSlotInSubtree(leftChildren[0].userId, visited, tx);
     if (leftSubtreeSlot) {
       return leftSubtreeSlot; // Found slot deep in left subtree
     }
 
-    // Left subtree full - check current node's right slot
-    const rightChildren = await this.getUsersByBinaryParentAndLeg(rootUserId, 'right');
+    // Left subtree full - check current node's right slot (with transaction for locking if provided)
+    const rightChildren = await this.getUsersByBinaryParentAndLeg(rootUserId, 'right', tx);
     if (rightChildren.length === 0) {
       // Right slot empty - place here!
       return { parentId: rootUserId, leg: 'right' };
     }
 
     // Right slot taken - GO DEEP DOWN into right child's subtree
-    const rightSubtreeSlot = await this.findFirstSlotInSubtree(rightChildren[0].userId, visited);
+    const rightSubtreeSlot = await this.findFirstSlotInSubtree(rightChildren[0].userId, visited, tx);
     if (rightSubtreeSlot) {
       return rightSubtreeSlot; // Found slot deep in right subtree
     }
@@ -647,10 +650,12 @@ export class DbStorage implements IStorage {
     return null;
   }
 
-  async getUsersByBinaryParentAndLeg(parentUserId: string, leg: 'left' | 'right'): Promise<User[]> {
+  async getUsersByBinaryParentAndLeg(parentUserId: string, leg: 'left' | 'right', tx?: any): Promise<User[]> {
     // Query binary PLACEMENT tree (binaryParentId + binaryPlacementLeg)
     // Only return ACTIVATED users - inactive users are not visible in binary tree
-    const result = await db
+    const dbOrTx = tx || db;
+    
+    let query = dbOrTx
       .select()
       .from(users)
       .where(and(
@@ -660,6 +665,13 @@ export class DbStorage implements IStorage {
         sql`${users.userId} IS NOT NULL`
       ))
       .orderBy(users.createdAt);
+    
+    // CRITICAL: Add row-level locking when inside a transaction to prevent race conditions
+    if (tx) {
+      query = query.for('update');
+    }
+    
+    const result = await query;
     return result;
   }
 
@@ -887,6 +899,19 @@ export class DbStorage implements IStorage {
       if (isAwaitingAssignment || isMismatched) {
         // Only update payments that aren't already confirmed (don't mess with completed payments)
         if (payment.status !== 'confirmed') {
+          // CRITICAL: Lock payment row BEFORE updating to prevent concurrent modification race conditions
+          const paymentLock = await tx.select()
+            .from(activationPayments)
+            .where(eq(activationPayments.id, payment.id))
+            .for('update')
+            .limit(1);
+          
+          if (paymentLock.length === 0) {
+            console.warn(`[MATRIX RECONCILE] Payment ${payment.id} not found for locking, skipping`);
+            continue;
+          }
+          
+          // Now safe to update the locked payment
           await tx.update(activationPayments)
             .set({
               receiverUserId: expectedReceiver,
@@ -2074,6 +2099,9 @@ export class DbStorage implements IStorage {
     // PHASE 1 FIX: Advisory lock with normalization to prevent duplicate UTR race condition
     // Normalizes UTR (trim + uppercase) before locking to prevent whitespace/case variants
     return await db.transaction(async (tx) => {
+      // CRITICAL: Use SERIALIZABLE isolation to prevent phantom reads and ensure data consistency
+      await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
+      
       // STEP 1: Validate input BEFORE normalization
       // Reject empty, whitespace-only, or overly long UTRs before any processing
       if (!utrId || utrId.trim().length === 0) {
@@ -2103,10 +2131,17 @@ export class DbStorage implements IStorage {
         throw new Error('Payment receiver not yet assigned - complete first 3 payments before paying matrix levels');
       }
       
-      // STEP 4: CRITICAL - Acquire advisory lock on NORMALIZED UTR hash
+      // STEP 4: CRITICAL - Acquire advisory lock on NORMALIZED UTR hash with timeout protection
       // Uses PostgreSQL advisory lock to serialize concurrent submissions with same UTR
       // Lock is automatically released when transaction commits/rolls back
-      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${normalizedUtr}))`);
+      // SECURITY FIX: Use pg_try_advisory_xact_lock instead of indefinite wait to prevent system hangs
+      const lockResult = await tx.execute(
+        sql`SELECT pg_try_advisory_xact_lock(hashtext(${normalizedUtr})) as locked`
+      );
+      
+      if (!lockResult.rows || lockResult.rows.length === 0 || !lockResult.rows[0].locked) {
+        throw new Error('UTR duplicate check in progress by another payment. Please wait 1-2 seconds and retry.');
+      }
       
       // STEP 5: Check for duplicate NORMALIZED UTR (while holding lock)
       // Even if two transactions start simultaneously, only one gets the lock at a time
@@ -2141,6 +2176,9 @@ export class DbStorage implements IStorage {
 
   async confirmActivationPayment(id: string, notes?: string): Promise<ActivationPayment | undefined> {
     return await db.transaction(async (tx) => {
+      // CRITICAL: Use SERIALIZABLE isolation to prevent phantom reads and ensure data consistency
+      await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
+      
       console.log(`[STORAGE] Confirming payment ${id}`);
       
       // Step 1: Lock payment row with SELECT FOR UPDATE to prevent concurrent confirmations
@@ -2178,9 +2216,20 @@ export class DbStorage implements IStorage {
         const confirmedCount = allPayments.filter(p => p.status === 'confirmed').length;
         console.log(`[STORAGE] Legacy activation ${payment.activationId} has ${confirmedCount}/8 payments confirmed`);
         
+        // CRITICAL: Before running reconciliation, check if matrix income already exists
+        // This prevents duplicate income creation when admin re-confirms a payment
+        const existingMatrixIncome = await tx.select()
+          .from(incomeTransactions)
+          .where(and(
+            eq(incomeTransactions.activationId, payment.activationId),
+            sql`${incomeTransactions.incomeType} LIKE 'matrix_level_%'`
+          ));
+        
+        const hasMatrixIncome = existingMatrixIncome.length > 0;
+        
         // Force reconciliation if:
         // 1. User is missing matrix placement (critical fix for PB10004 and similar cases), OR
-        // 2. Activation has >= 3 confirmations (normal legacy fix)
+        // 2. Activation has >= 3 confirmations (normal legacy fix) AND no matrix income exists yet
         if (needsMatrixPlacement) {
           console.log(`[STORAGE] CRITICAL: User ${payment.payerUserId} missing matrix placement - forcing reconciliation...`);
           await this.reconcileMatrixPaymentsForActivation(
@@ -2189,7 +2238,7 @@ export class DbStorage implements IStorage {
             allPayments,
             tx
           );
-        } else if (confirmedCount >= 3) {
+        } else if (confirmedCount >= 3 && !hasMatrixIncome) {
           console.log(`[STORAGE] Running standard legacy reconciliation for activation ${payment.activationId}...`);
           await this.reconcileMatrixPaymentsForActivation(
             payment.activationId,
@@ -2197,6 +2246,8 @@ export class DbStorage implements IStorage {
             allPayments,
             tx
           );
+        } else if (hasMatrixIncome) {
+          console.log(`[STORAGE] Skipping reconciliation - matrix income already exists (prevents duplicate income)`);
         }
       }
       
@@ -2364,6 +2415,12 @@ export class DbStorage implements IStorage {
     try {
       // Execute the logic within the provided transaction or create a new one
       const executeLogic = async (tx: any) => {
+        // CRITICAL: Set SERIALIZABLE isolation if not already in a transaction
+        // (only if this is a new transaction, not when called with existingTx)
+        if (!existingTx) {
+          await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
+        }
+        
         // CRITICAL FIX: Lock activation record FIRST to prevent race conditions
         // This serializes access so only one transaction can complete activation
         console.log(`[ACTIVATION] Acquiring lock on activation ${activationId}...`);
@@ -2534,9 +2591,11 @@ export class DbStorage implements IStorage {
           // Determine binary PLACEMENT using URL-based placement with spillover
           // Priority: sponsor + requested leg → sponsor's downline → global tree
           // sponsorRequestedLeg comes from referral link (?ref=PB10000&leg=left)
+          // CRITICAL: Pass tx to enable row-level locking and prevent race conditions
           const placement = await this.findFirstAvailableBinarySlot(
             activatedUser.sponsorId || undefined,
-            activatedUser.sponsorRequestedLeg || undefined
+            activatedUser.sponsorRequestedLeg || undefined,
+            tx
           );
           
           if (!placement) {
@@ -2853,6 +2912,9 @@ export class DbStorage implements IStorage {
 
   async rejectActivationPayment(id: string, rejectionReason: string): Promise<ActivationPayment | undefined> {
     return await db.transaction(async (tx) => {
+      // CRITICAL: Use SERIALIZABLE isolation to prevent phantom reads and ensure data consistency
+      await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
+      
       // Reject the payment
       const result = await tx.update(activationPayments)
         .set({ 
