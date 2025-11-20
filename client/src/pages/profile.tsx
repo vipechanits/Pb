@@ -196,10 +196,13 @@ export default function Profile() {
       )}
 
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className={user?.role === 'admin' ? "grid w-full grid-cols-4" : "grid w-full grid-cols-3"}>
           <TabsTrigger value="profile" data-testid="tab-profile">Profile Details</TabsTrigger>
           <TabsTrigger value="referrals" data-testid="tab-referrals">Referral Links</TabsTrigger>
           <TabsTrigger value="security" data-testid="tab-security">Security</TabsTrigger>
+          {user?.role === 'admin' && (
+            <TabsTrigger value="fallback-payments" data-testid="tab-fallback-payments">Fallback Payments</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="profile" className="space-y-6 mt-6">
@@ -380,6 +383,12 @@ export default function Profile() {
         <TabsContent value="security" className="space-y-6 mt-6">
           <SecuritySettings />
         </TabsContent>
+
+        {user?.role === 'admin' && (
+          <TabsContent value="fallback-payments" className="space-y-6 mt-6">
+            <FallbackPaymentSettings />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
@@ -866,6 +875,302 @@ function SecuritySettings() {
           </Button>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+
+function FallbackPaymentSettings() {
+  const { user, refreshUser } = useAuth();
+  const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState<"top-reward" | "binary-fallback" | "matrix-fallback">("top-reward");
+  const [qrCodeGenerating, setQrCodeGenerating] = useState(false);
+
+  // State for each fallback type
+  const [topRewardData, setTopRewardData] = useState({
+    holderName: user?.topRewardHolderName || "",
+    mobile: user?.topRewardMobile || "",
+    bankAccount: user?.topRewardBankAccount || "",
+    ifsc: user?.topRewardIfsc || "",
+    upiId: user?.topRewardUpiId || "",
+  });
+
+  const [binaryFallbackData, setBinaryFallbackData] = useState({
+    holderName: user?.binaryFallbackHolderName || "",
+    mobile: user?.binaryFallbackMobile || "",
+    bankAccount: user?.binaryFallbackBankAccount || "",
+    ifsc: user?.binaryFallbackIfsc || "",
+    upiId: user?.binaryFallbackUpiId || "",
+  });
+
+  const [matrixFallbackData, setMatrixFallbackData] = useState({
+    holderName: user?.matrixFallbackHolderName || "",
+    mobile: user?.matrixFallbackMobile || "",
+    bankAccount: user?.matrixFallbackBankAccount || "",
+    ifsc: user?.matrixFallbackIfsc || "",
+    upiId: user?.matrixFallbackUpiId || "",
+  });
+
+  useEffect(() => {
+    if (user) {
+      setTopRewardData({
+        holderName: user.topRewardHolderName || "",
+        mobile: user.topRewardMobile || "",
+        bankAccount: user.topRewardBankAccount || "",
+        ifsc: user.topRewardIfsc || "",
+        upiId: user.topRewardUpiId || "",
+      });
+
+      setBinaryFallbackData({
+        holderName: user.binaryFallbackHolderName || "",
+        mobile: user.binaryFallbackMobile || "",
+        bankAccount: user.binaryFallbackBankAccount || "",
+        ifsc: user.binaryFallbackIfsc || "",
+        upiId: user.binaryFallbackUpiId || "",
+      });
+
+      setMatrixFallbackData({
+        holderName: user.matrixFallbackHolderName || "",
+        mobile: user.matrixFallbackMobile || "",
+        bankAccount: user.matrixFallbackBankAccount || "",
+        ifsc: user.matrixFallbackIfsc || "",
+        upiId: user.matrixFallbackUpiId || "",
+      });
+    }
+  }, [user]);
+
+  const saveFallbackPayments = async (type: "top_reward" | "binary_fallback" | "matrix_fallback") => {
+    try {
+      let data;
+      if (type === "top_reward") {
+        data = {
+          topRewardHolderName: topRewardData.holderName,
+          topRewardMobile: topRewardData.mobile,
+          topRewardBankAccount: topRewardData.bankAccount,
+          topRewardIfsc: topRewardData.ifsc,
+          topRewardUpiId: topRewardData.upiId,
+        };
+      } else if (type === "binary_fallback") {
+        data = {
+          binaryFallbackHolderName: binaryFallbackData.holderName,
+          binaryFallbackMobile: binaryFallbackData.mobile,
+          binaryFallbackBankAccount: binaryFallbackData.bankAccount,
+          binaryFallbackIfsc: binaryFallbackData.ifsc,
+          binaryFallbackUpiId: binaryFallbackData.upiId,
+        };
+      } else {
+        data = {
+          matrixFallbackHolderName: matrixFallbackData.holderName,
+          matrixFallbackMobile: matrixFallbackData.mobile,
+          matrixFallbackBankAccount: matrixFallbackData.bankAccount,
+          matrixFallbackIfsc: matrixFallbackData.ifsc,
+          matrixFallbackUpiId: matrixFallbackData.upiId,
+        };
+      }
+
+      await apiRequest("PATCH", "/api/profile/fallback-payments", data);
+      await refreshUser();
+
+      toast({
+        title: "Payment details saved",
+        description: `${type.replace("_", " ").toUpperCase()} payment details have been successfully updated.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save payment details. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const generateQR = async (type: "top_reward" | "binary_fallback" | "matrix_fallback") => {
+    setQrCodeGenerating(true);
+    try {
+      await apiRequest("POST", "/api/profile/generate-fallback-qr", { type });
+      await refreshUser();
+      toast({
+        title: "QR Code generated",
+        description: "UPI QR code has been successfully generated.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to generate QR code. Make sure you have filled in the UPI ID.",
+        variant: "destructive",
+      });
+    } finally {
+      setQrCodeGenerating(false);
+    }
+  };
+
+  const renderPaymentForm = (
+    type: "top_reward" | "binary_fallback" | "matrix_fallback",
+    data: typeof topRewardData,
+    setData: React.Dispatch<React.SetStateAction<typeof topRewardData>>,
+    qrUrl?: string | null
+  ) => {
+    const title = type === "top_reward" 
+      ? "Top Reward Payment"
+      : type === "binary_fallback"
+      ? "Binary Fallback Payment"
+      : "Matrix Upline Fallback Payment";
+
+    return (
+      <div className="space-y-6">
+        <Alert>
+          <AlertDescription>
+            <strong>What is this?</strong> These payment details are used when {
+              type === "top_reward"
+                ? "users make top reward payments (Slot 2)"
+                : type === "binary_fallback"
+                ? "binary match queue is empty (Slot 1 fallback to admin)"
+                : "matrix uplines are unavailable (Slot 3-7 fallback to admin)"
+            }.
+          </AlertDescription>
+        </Alert>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Account Holder Information</CardTitle>
+            <CardDescription>Name and contact details for this payment type</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Account Holder Name</label>
+              <Input
+                placeholder="Full name as per bank account"
+                value={data.holderName}
+                onChange={(e) => setData({ ...data, holderName: e.target.value })}
+                data-testid={`input-${type}-holder-name`}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Mobile Number</label>
+              <Input
+                placeholder="10-digit mobile number"
+                maxLength={10}
+                value={data.mobile}
+                onChange={(e) => setData({ ...data, mobile: e.target.value })}
+                data-testid={`input-${type}-mobile`}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Bank Account Details</CardTitle>
+            <CardDescription>For receiving payments via bank transfer</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Bank Account Number</label>
+              <Input
+                placeholder="Account number"
+                value={data.bankAccount}
+                onChange={(e) => setData({ ...data, bankAccount: e.target.value })}
+                data-testid={`input-${type}-bank-account`}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">IFSC Code</label>
+              <Input
+                placeholder="11-character IFSC code"
+                maxLength={11}
+                value={data.ifsc}
+                onChange={(e) => setData({ ...data, ifsc: e.target.value.toUpperCase() })}
+                data-testid={`input-${type}-ifsc`}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>UPI Payment Details</CardTitle>
+            <CardDescription>For receiving payments via UPI</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">UPI ID</label>
+              <Input
+                placeholder="yourname@upi"
+                value={data.upiId}
+                onChange={(e) => setData({ ...data, upiId: e.target.value })}
+                data-testid={`input-${type}-upi-id`}
+              />
+            </div>
+
+            {data.upiId && (
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => generateQR(type)}
+                  disabled={qrCodeGenerating}
+                  data-testid={`button-${type}-generate-qr`}
+                >
+                  <QrCode className="mr-2 h-4 w-4" />
+                  {qrCodeGenerating ? "Generating..." : "Generate UPI QR Code"}
+                </Button>
+              </div>
+            )}
+
+            {qrUrl && (
+              <div className="mt-4 p-4 border rounded-lg bg-white dark:bg-card inline-block">
+                <p className="text-sm font-medium mb-2">QR Code Preview:</p>
+                <img src={qrUrl} alt="UPI QR Code" className="w-32 h-32" data-testid={`img-${type}-qr`} />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="bg-muted/30">
+          <CardContent className="pt-6">
+            <Button
+              onClick={() => saveFallbackPayments(type)}
+              className="w-full"
+              data-testid={`button-save-${type}`}
+            >
+              Save {title} Details
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      <Alert className="border-primary/20 bg-primary/5">
+        <AlertTitle>Admin Fallback Payment Configuration</AlertTitle>
+        <AlertDescription>
+          Configure separate payment details for each fallback type. These are used when payments need to be routed to the admin (PB0) due to queue being empty or uplines unavailable.
+        </AlertDescription>
+      </Alert>
+
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="top-reward" data-testid="tab-top-reward">Top Reward</TabsTrigger>
+          <TabsTrigger value="binary-fallback" data-testid="tab-binary-fallback">Binary Fallback</TabsTrigger>
+          <TabsTrigger value="matrix-fallback" data-testid="tab-matrix-fallback">Matrix Fallback</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="top-reward" className="mt-6">
+          {renderPaymentForm("top_reward", topRewardData, setTopRewardData, user?.topRewardQrUrl)}
+        </TabsContent>
+
+        <TabsContent value="binary-fallback" className="mt-6">
+          {renderPaymentForm("binary_fallback", binaryFallbackData, setBinaryFallbackData, user?.binaryFallbackQrUrl)}
+        </TabsContent>
+
+        <TabsContent value="matrix-fallback" className="mt-6">
+          {renderPaymentForm("matrix_fallback", matrixFallbackData, setMatrixFallbackData, user?.matrixFallbackQrUrl)}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

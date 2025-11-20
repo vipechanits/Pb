@@ -5,9 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { Settings, Save, Loader2, Upload, X, Shield, Mail, QrCode } from 'lucide-react';
+import { Settings, Save, Loader2, Upload, X, Shield, Mail, QrCode, Smartphone, Building2, Copy, CheckCircle, ExternalLink, AlertCircle } from 'lucide-react';
+import { useLocation } from 'wouter';
 
 type SystemConfig = {
   id: string;
@@ -43,17 +46,37 @@ type SystemConfig = {
   updatedAt: string;
 };
 
+interface AdminPaymentDetails {
+  userId: string;
+  name: string | null;
+  mobile: string | null;
+  upiId: string | null;
+  bankAccountHolder: string | null;
+  bankAccountNumber?: string | null;
+  bankAccount?: string | null;
+  ifscCode: string | null;
+  paymentQrUrl: string | null;
+}
+
 export default function AdminConfig() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [qrFile, setQrFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [testEmail, setTestEmail] = useState('');
   const [generatedQrCode, setGeneratedQrCode] = useState<string | null>(null);
   const [showGeneratedQR, setShowGeneratedQR] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [showFullAccount, setShowFullAccount] = useState(false);
 
   // Fetch system configuration
   const { data: config, isLoading } = useQuery<SystemConfig>({
     queryKey: ['/api/admin/config'],
+  });
+
+  // Fetch admin (PB0) payment details from user record
+  const { data: paymentDetails, isLoading: isLoadingPayment } = useQuery<AdminPaymentDetails>({
+    queryKey: ['/api/admin/payment-details'],
   });
 
   // Local state for form
@@ -158,6 +181,25 @@ export default function AdminConfig() {
     setFormData(prev => ({ ...prev, [key]: value }));
   };
 
+  // Copy to clipboard helper
+  const copyToClipboard = (text: string, field: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
+    toast({
+      title: 'Copied to clipboard',
+      description: `${field} has been copied`,
+    });
+  };
+
+  // Mask account number (show only last 4 digits)
+  const maskAccount = (account: string | null | undefined): string => {
+    if (!account) return '';
+    if (showFullAccount) return account;
+    if (account.length <= 4) return account;
+    return '•'.repeat(account.length - 4) + account.slice(-4);
+  };
+
   const handleSave = async () => {
     setUploading(true);
     
@@ -236,7 +278,18 @@ export default function AdminConfig() {
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <Tabs defaultValue="settings" className="w-full">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="settings" data-testid="tab-system-settings">
+            System Settings
+          </TabsTrigger>
+          <TabsTrigger value="payment-methods" data-testid="tab-payment-methods">
+            Payment Methods
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="settings" className="mt-6">
+          <div className="grid gap-6 md:grid-cols-2">
         {/* Payment Amounts */}
         <Card>
           <CardHeader>
@@ -369,15 +422,51 @@ export default function AdminConfig() {
         </Card>
 
         {/* Admin Payment Details */}
-        <Card className="md:col-span-2">
+        <Card className="md:col-span-2 border-orange-200 bg-orange-50/30 dark:bg-orange-950/10">
           <CardHeader>
-            <CardTitle>Admin Payment Details</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-orange-600" />
+              Admin Payment Details (Deprecated)
+            </CardTitle>
             <CardDescription>
-              Configure admin UPI and bank account for receiving payments
+              <strong className="text-orange-700 dark:text-orange-400">⚠️ Note:</strong> These fields are deprecated and NO LONGER USED for binary fallback or top reward payments.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Alert className="border-orange-200 bg-orange-100/50 dark:bg-orange-950/30">
+              <AlertCircle className="h-4 w-4 text-orange-600" />
+              <AlertDescription className="space-y-2">
+                <p className="font-medium">Payment Details Have Moved!</p>
+                <p className="text-sm">
+                  Binary fallback payments, top reward payments, and all admin (PB0) payments now use details from the <strong>PB0 user profile</strong>, not from system config.
+                </p>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      const tabTrigger = document.querySelector('[data-testid="tab-payment-methods"]') as HTMLElement;
+                      tabTrigger?.click();
+                    }}
+                    data-testid="button-goto-payment-methods"
+                  >
+                    <Smartphone className="mr-2 h-3 w-3" />
+                    View in Payment Methods Tab
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => navigate('/profile')}
+                    data-testid="button-goto-profile-from-deprecated"
+                  >
+                    <ExternalLink className="mr-2 h-3 w-3" />
+                    Edit in Profile Page
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-60 pointer-events-none">
               <div className="space-y-2">
                 <Label htmlFor="adminUpiId">UPI ID *</Label>
                 <Input
@@ -800,10 +889,238 @@ export default function AdminConfig() {
             )}
           </CardContent>
         </Card>
-      </div>
+          </div>
+        </TabsContent>
+
+        {/* Payment Methods Tab */}
+        <TabsContent value="payment-methods" className="mt-6">
+          {isLoadingPayment ? (
+            <div className="flex items-center justify-center p-12">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          ) : paymentDetails ? (
+            <div className="space-y-6">
+              <Alert className="border-orange-200 bg-orange-50 dark:bg-orange-950/20">
+                <AlertCircle className="h-4 w-4 text-orange-600" />
+                <AlertDescription>
+                  <strong>Sensitive Information:</strong> These are the admin (PB0) payment details where fallback and top reward payments are received. 
+                  To modify these details, use the <button onClick={() => navigate('/profile')} className="underline hover:no-underline font-medium" data-testid="link-manage-profile">Profile page</button>.
+                </AlertDescription>
+              </Alert>
+
+              <div className="grid gap-6 md:grid-cols-2">
+                {/* UPI Payment Details */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Smartphone className="h-5 w-5" />
+                      UPI Payment Details
+                    </CardTitle>
+                    <CardDescription>
+                      Unified Payments Interface information
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {paymentDetails.upiId ? (
+                      <>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">UPI ID</Label>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-mono">{paymentDetails.upiId}</p>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              onClick={() => copyToClipboard(paymentDetails.upiId!, 'UPI ID')}
+                              data-testid="button-copy-admin-upi"
+                            >
+                              {copiedField === 'UPI ID' ? (
+                                <CheckCircle className="h-3 w-3 text-green-600" />
+                              ) : (
+                                <Copy className="h-3 w-3" />
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+
+                        {paymentDetails.mobile && (
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Mobile Number</Label>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-mono">{paymentDetails.mobile}</p>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => copyToClipboard(paymentDetails.mobile!, 'Mobile')}
+                                data-testid="button-copy-admin-mobile"
+                              >
+                                {copiedField === 'Mobile' ? (
+                                  <CheckCircle className="h-3 w-3 text-green-600" />
+                                ) : (
+                                  <Copy className="h-3 w-3" />
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {paymentDetails.paymentQrUrl && (
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">UPI QR Code</Label>
+                            <div className="border rounded-lg p-2 bg-white dark:bg-gray-900 inline-block mt-1">
+                              <img 
+                                src={paymentDetails.paymentQrUrl}
+                                alt="Admin UPI QR Code" 
+                                className="w-32 h-32"
+                                data-testid="img-admin-qr-preview"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <Alert>
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>
+                          UPI details not configured. Please update via Profile page.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Bank Account Details */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Building2 className="h-5 w-5" />
+                      Bank Account Details
+                    </CardTitle>
+                    <CardDescription>
+                      Bank transfer information
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {(() => {
+                      const accountNumber = paymentDetails.bankAccountNumber || paymentDetails.bankAccount;
+                      const hasBankDetails = accountNumber && paymentDetails.ifscCode;
+                      
+                      return hasBankDetails ? (
+                        <>
+                          {paymentDetails.bankAccountHolder && (
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Account Holder Name</Label>
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium">{paymentDetails.bankAccountHolder}</p>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={() => copyToClipboard(paymentDetails.bankAccountHolder!, 'Account Holder')}
+                                  data-testid="button-copy-admin-holder"
+                                >
+                                  {copiedField === 'Account Holder' ? (
+                                    <CheckCircle className="h-3 w-3 text-green-600" />
+                                  ) : (
+                                    <Copy className="h-3 w-3" />
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Bank Account Number</Label>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-mono">{maskAccount(accountNumber)}</p>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 text-xs px-2"
+                                  onClick={() => setShowFullAccount(!showFullAccount)}
+                                  data-testid="button-toggle-account"
+                                >
+                                  {showFullAccount ? 'Hide' : 'Reveal'}
+                                </Button>
+                                {showFullAccount && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    onClick={() => copyToClipboard(accountNumber, 'Account Number')}
+                                    data-testid="button-copy-admin-account"
+                                  >
+                                    {copiedField === 'Account Number' ? (
+                                      <CheckCircle className="h-3 w-3 text-green-600" />
+                                    ) : (
+                                      <Copy className="h-3 w-3" />
+                                    )}
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">IFSC Code</Label>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-mono">{paymentDetails.ifscCode}</p>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => copyToClipboard(paymentDetails.ifscCode!, 'IFSC Code')}
+                                data-testid="button-copy-admin-ifsc"
+                              >
+                                {copiedField === 'IFSC Code' ? (
+                                  <CheckCircle className="h-3 w-3 text-green-600" />
+                                ) : (
+                                  <Copy className="h-3 w-3" />
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <Alert>
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>
+                            Bank account details not configured. Please update via Profile page.
+                          </AlertDescription>
+                        </Alert>
+                      );
+                    })()}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Manage Button */}
+              <div className="flex justify-center pt-4">
+                <Button 
+                  variant="outline" 
+                  onClick={() => navigate('/profile')}
+                  data-testid="button-manage-payment-details"
+                >
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Manage Payment Details in Profile
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Failed to load admin payment details. Please try refreshing the page.
+              </AlertDescription>
+            </Alert>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* Summary and Save Button */}
-      <Card>
+      <Card className="mt-6">
         <CardContent className="pt-6">
           <div className="flex items-center justify-between">
             <div>

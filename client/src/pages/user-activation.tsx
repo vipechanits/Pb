@@ -20,7 +20,8 @@ interface AdminPaymentDetails {
   mobile: string | null;
   upiId: string | null;
   bankAccountHolder: string | null;
-  bankAccount: string | null;
+  bankAccountNumber?: string | null; // New field
+  bankAccount?: string | null; // Legacy field - keep for backward compatibility
   ifscCode: string | null;
   paymentQrUrl: string | null;
 }

@@ -85,12 +85,37 @@ export const users = pgTable("users", {
   name: text("name"),
   mobile: varchar("mobile", { length: 15 }),
   
-  // Payment details - for receiving payments
+  // Payment details - for receiving payments (general/default)
   upiId: text("upi_id"),
   bankAccountHolder: text("bank_account_holder"),
   bankAccountNumber: varchar("bank_account_number", { length: 20 }),
   ifscCode: varchar("ifsc_code", { length: 11 }),
   paymentQrUrl: text("payment_qr_url"), // User's uploaded UPI QR code
+  
+  // Separate payment details for each fallback type (PB0 admin only)
+  // Top Reward Payment Details
+  topRewardHolderName: text("top_reward_holder_name"),
+  topRewardMobile: varchar("top_reward_mobile", { length: 15 }),
+  topRewardBankAccount: varchar("top_reward_bank_account", { length: 20 }),
+  topRewardIfsc: varchar("top_reward_ifsc", { length: 11 }),
+  topRewardUpiId: text("top_reward_upi_id"),
+  topRewardQrUrl: text("top_reward_qr_url"),
+  
+  // Binary Fallback Payment Details
+  binaryFallbackHolderName: text("binary_fallback_holder_name"),
+  binaryFallbackMobile: varchar("binary_fallback_mobile", { length: 15 }),
+  binaryFallbackBankAccount: varchar("binary_fallback_bank_account", { length: 20 }),
+  binaryFallbackIfsc: varchar("binary_fallback_ifsc", { length: 11 }),
+  binaryFallbackUpiId: text("binary_fallback_upi_id"),
+  binaryFallbackQrUrl: text("binary_fallback_qr_url"),
+  
+  // Matrix Fallback Payment Details
+  matrixFallbackHolderName: text("matrix_fallback_holder_name"),
+  matrixFallbackMobile: varchar("matrix_fallback_mobile", { length: 15 }),
+  matrixFallbackBankAccount: varchar("matrix_fallback_bank_account", { length: 20 }),
+  matrixFallbackIfsc: varchar("matrix_fallback_ifsc", { length: 11 }),
+  matrixFallbackUpiId: text("matrix_fallback_upi_id"),
+  matrixFallbackQrUrl: text("matrix_fallback_qr_url"),
   
   // Security
   securityCode: text("security_code"), // Hashed 6-digit security code (bcrypt)
@@ -176,6 +201,27 @@ export const updateProfileSchema = z.object({
   securityCode: z.string().optional().refine((val) => !val || val.length === 6, {
     message: "Security code must be exactly 6 digits"
   }),
+  // Admin fallback payment fields - Top Reward (Slot 2)
+  topRewardHolderName: z.string().optional(),
+  topRewardMobile: z.string().optional(),
+  topRewardBankAccount: z.string().optional(),
+  topRewardIfsc: z.string().optional(),
+  topRewardUpiId: z.string().optional(),
+  topRewardQrUrl: z.string().optional(),
+  // Admin fallback payment fields - Binary Match Fallback (Slot 1)
+  binaryFallbackHolderName: z.string().optional(),
+  binaryFallbackMobile: z.string().optional(),
+  binaryFallbackBankAccount: z.string().optional(),
+  binaryFallbackIfsc: z.string().optional(),
+  binaryFallbackUpiId: z.string().optional(),
+  binaryFallbackQrUrl: z.string().optional(),
+  // Admin fallback payment fields - Matrix Upline Fallback (Slots 3-7)
+  matrixFallbackHolderName: z.string().optional(),
+  matrixFallbackMobile: z.string().optional(),
+  matrixFallbackBankAccount: z.string().optional(),
+  matrixFallbackIfsc: z.string().optional(),
+  matrixFallbackUpiId: z.string().optional(),
+  matrixFallbackQrUrl: z.string().optional(),
 }).refine(
   (data) => {
     // At least one payment method required: UPI or complete bank account details

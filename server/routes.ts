@@ -1532,29 +1532,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to generate QR code" });
     }
   });
+
+  // Update fallback payment details (admin only)
+  app.patch("/api/profile/fallback-payments", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId!);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const allowedFields = [
+        'topRewardHolderName', 'topRewardMobile', 'topRewardBankAccount', 'topRewardIfsc', 'topRewardUpiId',
+        'binaryFallbackHolderName', 'binaryFallbackMobile', 'binaryFallbackBankAccount', 'binaryFallbackIfsc', 'binaryFallbackUpiId',
+        'matrixFallbackHolderName', 'matrixFallbackMobile', 'matrixFallbackBankAccount', 'matrixFallbackIfsc', 'matrixFallbackUpiId'
+      ];
+
+      const updates: any = {};
+      for (const field of allowedFields) {
+        if (req.body[field] !== undefined) {
+          updates[field] = req.body[field];
+        }
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: "No valid fields to update" });
+      }
+
+      const updatedUser = await storage.updateUserProfile(req.session.userId!, updates);
+      if (!updatedUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      res.json({ user: serializeUser(updatedUser) });
+    } catch (error) {
+      console.error("Error updating fallback payment details:", error);
+      res.status(500).json({ error: "Failed to update fallback payment details" });
+    }
+  });
+
+  // Generate QR code for fallback payment types (admin only)
+  app.post("/api/profile/generate-fallback-qr", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId!);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { type } = req.body;
+      if (!['top_reward', 'binary_fallback', 'matrix_fallback'].includes(type)) {
+        return res.status(400).json({ error: "Invalid fallback type" });
+      }
+
+      let upiId: string | null = null;
+      let qrUrlField: string | null = null;
+
+      if (type === 'top_reward') {
+        upiId = user.topRewardUpiId;
+        qrUrlField = 'topRewardQrUrl';
+      } else if (type === 'binary_fallback') {
+        upiId = user.binaryFallbackUpiId;
+        qrUrlField = 'binaryFallbackQrUrl';
+      } else if (type === 'matrix_fallback') {
+        upiId = user.matrixFallbackUpiId;
+        qrUrlField = 'matrixFallbackQrUrl';
+      }
+
+      if (!upiId) {
+        return res.status(400).json({ error: "UPI ID is required for this fallback type" });
+      }
+
+      const qrCode = await generateUserPaymentQR(upiId);
+
+      // Update the appropriate QR URL field
+      const updates = { [qrUrlField!]: qrCode };
+      await storage.updateUserProfile(req.session.userId!, updates);
+
+      res.json({ qrCode });
+    } catch (error) {
+      console.error("Error generating fallback QR code:", error);
+      res.status(500).json({ error: "Failed to generate QR code" });
+    }
+  });
   
   // Get user payment details by userId
   app.get("/api/users/payment-details/:userId", requireAuth, async (req, res) => {
     try {
-      // ALL PAYMENTS TO PB0 FETCH FROM SYSTEM CONFIG
-      if (req.params.userId === 'PB0') {
-        const config = await storage.getSystemConfig();
-        
-        const adminPaymentInfo = {
-          userId: 'PB0',
-          name: config.adminName || 'Admin',
-          mobile: config.adminMobile,
-          upiId: config.adminUpiId,
-          bankAccountHolder: config.adminBankHolderName || config.adminName || 'Admin',
-          bankAccount: config.adminBankAccount,
-          ifscCode: config.adminIfscCode,
-          paymentQrUrl: config.adminQrCodeUrl,
-        };
-        
-        return res.json(adminPaymentInfo);
-      }
-      
-      // For regular users, fetch from user profile
+      // Fetch from user profile (including PB0 admin)
       const user = await storage.getUserByUserId(req.params.userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
@@ -1578,6 +1641,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         mobile: user.mobile,
         upiId: user.upiId,
         bankAccountHolder: user.bankAccountHolder,
+        bankAccountNumber: user.bankAccountNumber,
         ifscCode: user.ifscCode,
         paymentQrUrl,
       };
@@ -1590,20 +1654,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get admin payment details (public endpoint for users to see where to pay)
+  // Supports paymentType query parameter: 'top_reward', 'binary_match', or matrix_level_X
   app.get("/api/admin/payment-details", requireAuth, async (req, res) => {
     try {
-      const config = await storage.getSystemConfig();
+      // Fetch from PB0 user profile
+      const adminUser = await storage.getUserByUserId('PB0');
+      if (!adminUser) {
+        return res.status(404).json({ error: "Admin user not found" });
+      }
+
+      const { paymentType } = req.query;
+      let upiId: string | null | undefined;
+      let mobile: string | null | undefined;
+      let bankAccountHolder: string | null | undefined;
+      let bankAccountNumber: string | null | undefined;
+      let ifscCode: string | null | undefined;
+      let paymentQrUrl: string | null = null;
+
+      // Determine which fallback payment details to use based on payment type
+      if (paymentType === 'top_reward') {
+        // Top reward payment - use dedicated top reward details
+        upiId = adminUser.topRewardUpiId || adminUser.upiId;
+        mobile = adminUser.topRewardMobile || adminUser.mobile;
+        bankAccountHolder = adminUser.topRewardHolderName || adminUser.bankAccountHolder;
+        bankAccountNumber = adminUser.topRewardBankAccount || adminUser.bankAccountNumber;
+        ifscCode = adminUser.topRewardIfsc || adminUser.ifscCode;
+        paymentQrUrl = adminUser.topRewardQrUrl;
+      } else if (paymentType === 'binary_match') {
+        // Binary fallback payment - use dedicated binary fallback details
+        upiId = adminUser.binaryFallbackUpiId || adminUser.upiId;
+        mobile = adminUser.binaryFallbackMobile || adminUser.mobile;
+        bankAccountHolder = adminUser.binaryFallbackHolderName || adminUser.bankAccountHolder;
+        bankAccountNumber = adminUser.binaryFallbackBankAccount || adminUser.bankAccountNumber;
+        ifscCode = adminUser.binaryFallbackIfsc || adminUser.ifscCode;
+        paymentQrUrl = adminUser.binaryFallbackQrUrl;
+      } else if (paymentType && typeof paymentType === 'string' && paymentType.startsWith('matrix_level_')) {
+        // Matrix fallback payment - use dedicated matrix fallback details
+        upiId = adminUser.matrixFallbackUpiId || adminUser.upiId;
+        mobile = adminUser.matrixFallbackMobile || adminUser.mobile;
+        bankAccountHolder = adminUser.matrixFallbackHolderName || adminUser.bankAccountHolder;
+        bankAccountNumber = adminUser.matrixFallbackBankAccount || adminUser.bankAccountNumber;
+        ifscCode = adminUser.matrixFallbackIfsc || adminUser.ifscCode;
+        paymentQrUrl = adminUser.matrixFallbackQrUrl;
+      } else {
+        // Default: use general payment details (for sponsor fallback or unspecified)
+        upiId = adminUser.upiId;
+        mobile = adminUser.mobile;
+        bankAccountHolder = adminUser.bankAccountHolder;
+        bankAccountNumber = adminUser.bankAccountNumber;
+        ifscCode = adminUser.ifscCode;
+        paymentQrUrl = null;
+      }
+
+      // Generate QR code if no pre-generated QR and UPI ID exists
+      if (!paymentQrUrl && upiId) {
+        try {
+          paymentQrUrl = await generateUserPaymentQR(upiId);
+        } catch (error) {
+          console.error("Error generating admin QR code:", error);
+          // Continue without QR code if generation fails
+        }
+      }
       
       // Return only payment-related information
       const adminPaymentInfo = {
         userId: 'PB0',
-        name: config.adminName || 'Admin',
-        mobile: config.adminMobile,
-        upiId: config.adminUpiId,
-        bankAccountHolder: config.adminBankHolderName || config.adminName || 'Admin',
-        bankAccount: config.adminBankAccount,
-        ifscCode: config.adminIfscCode,
-        paymentQrUrl: config.adminQrCodeUrl,
+        name: bankAccountHolder,
+        mobile,
+        upiId,
+        bankAccountHolder,
+        bankAccountNumber,
+        ifscCode,
+        paymentQrUrl,
       };
       
       res.json(adminPaymentInfo);

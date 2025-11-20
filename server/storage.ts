@@ -261,16 +261,36 @@ export class DbStorage implements IStorage {
           password: hashedPassword,
           role: 'admin',
           userId: 'PB0',
-          name: 'Root Administrator',
+          name: 'PAYBACK247 Admin',
           mobile: '9999999999',
           isActivated: true,
           isProfileComplete: true,
           matrixLevel: 0, // Excluded from matrix tree
           matrixPath: 'PB0', // Admin path
           requiresPostActivationProfileUpdate: true, // Force password change on first login
+          // Payment details - MUST be updated by admin via profile page
+          upiId: 'admin@payback247', // Placeholder - UPDATE VIA PROFILE
+          bankAccountHolder: 'PAYBACK247 ADMIN', // Placeholder - UPDATE VIA PROFILE
+          bankAccountNumber: '00000000000000', // Placeholder - UPDATE VIA PROFILE
+          ifscCode: 'SBIN0000000', // Placeholder - UPDATE VIA PROFILE
         });
         console.log('[INIT] ✓ PB0 root admin user created');
+        console.log('[INIT] ⚠️  IMPORTANT: Update admin payment details (UPI & Bank) via Profile page!');
         console.log('[INIT] ⚠️  IMPORTANT: Change root admin password immediately after first login!');
+      } else {
+        // Ensure existing PB0 has payment details for receiving binary fallback and top reward payments
+        if (!pb0Exists.upiId && !pb0Exists.bankAccountNumber) {
+          console.log('[INIT] Updating PB0 with default payment details...');
+          await db.update(users)
+            .set({
+              upiId: 'admin@payback247',
+              bankAccountHolder: 'PAYBACK247 ADMIN',
+              bankAccountNumber: '00000000000000',
+              ifscCode: 'SBIN0000000',
+            })
+            .where(eq(users.userId, 'PB0'));
+          console.log('[INIT] ✓ PB0 payment details added - UPDATE VIA PROFILE!');
+        }
       }
     } catch (error) {
       // CRITICAL: Rethrow production security errors to halt server startup
@@ -454,6 +474,66 @@ export class DbStorage implements IStorage {
       } else {
         normalizedProfile.securityCode = null;
       }
+    }
+    
+    // Admin fallback payment fields - Top Reward (Slot 2)
+    if (profile.topRewardHolderName !== undefined) {
+      normalizedProfile.topRewardHolderName = profile.topRewardHolderName?.trim() || null;
+    }
+    if (profile.topRewardMobile !== undefined) {
+      normalizedProfile.topRewardMobile = profile.topRewardMobile?.trim() || null;
+    }
+    if (profile.topRewardBankAccount !== undefined) {
+      normalizedProfile.topRewardBankAccount = profile.topRewardBankAccount?.trim() || null;
+    }
+    if (profile.topRewardIfsc !== undefined) {
+      normalizedProfile.topRewardIfsc = profile.topRewardIfsc?.trim() || null;
+    }
+    if (profile.topRewardUpiId !== undefined) {
+      normalizedProfile.topRewardUpiId = profile.topRewardUpiId?.trim() || null;
+    }
+    if (profile.topRewardQrUrl !== undefined) {
+      normalizedProfile.topRewardQrUrl = profile.topRewardQrUrl?.trim() || null;
+    }
+    
+    // Admin fallback payment fields - Binary Match Fallback (Slot 1)
+    if (profile.binaryFallbackHolderName !== undefined) {
+      normalizedProfile.binaryFallbackHolderName = profile.binaryFallbackHolderName?.trim() || null;
+    }
+    if (profile.binaryFallbackMobile !== undefined) {
+      normalizedProfile.binaryFallbackMobile = profile.binaryFallbackMobile?.trim() || null;
+    }
+    if (profile.binaryFallbackBankAccount !== undefined) {
+      normalizedProfile.binaryFallbackBankAccount = profile.binaryFallbackBankAccount?.trim() || null;
+    }
+    if (profile.binaryFallbackIfsc !== undefined) {
+      normalizedProfile.binaryFallbackIfsc = profile.binaryFallbackIfsc?.trim() || null;
+    }
+    if (profile.binaryFallbackUpiId !== undefined) {
+      normalizedProfile.binaryFallbackUpiId = profile.binaryFallbackUpiId?.trim() || null;
+    }
+    if (profile.binaryFallbackQrUrl !== undefined) {
+      normalizedProfile.binaryFallbackQrUrl = profile.binaryFallbackQrUrl?.trim() || null;
+    }
+    
+    // Admin fallback payment fields - Matrix Upline Fallback (Slots 3-7)
+    if (profile.matrixFallbackHolderName !== undefined) {
+      normalizedProfile.matrixFallbackHolderName = profile.matrixFallbackHolderName?.trim() || null;
+    }
+    if (profile.matrixFallbackMobile !== undefined) {
+      normalizedProfile.matrixFallbackMobile = profile.matrixFallbackMobile?.trim() || null;
+    }
+    if (profile.matrixFallbackBankAccount !== undefined) {
+      normalizedProfile.matrixFallbackBankAccount = profile.matrixFallbackBankAccount?.trim() || null;
+    }
+    if (profile.matrixFallbackIfsc !== undefined) {
+      normalizedProfile.matrixFallbackIfsc = profile.matrixFallbackIfsc?.trim() || null;
+    }
+    if (profile.matrixFallbackUpiId !== undefined) {
+      normalizedProfile.matrixFallbackUpiId = profile.matrixFallbackUpiId?.trim() || null;
+    }
+    if (profile.matrixFallbackQrUrl !== undefined) {
+      normalizedProfile.matrixFallbackQrUrl = profile.matrixFallbackQrUrl?.trim() || null;
     }
     
     // Use transaction to ensure atomic update and flag recalculation
