@@ -2223,7 +2223,7 @@ export class DbStorage implements IStorage {
           .from(incomeTransactions)
           .where(and(
             eq(incomeTransactions.activationId, payment.activationId),
-            sql`${incomeTransactions.incomeType} LIKE 'matrix_level_%'`
+            sql`${incomeTransactions.incomeType}::text LIKE 'matrix_level_%'`
           ));
         
         const hasMatrixIncome = existingMatrixIncome.length > 0;
