@@ -647,8 +647,8 @@ export class DbStorage implements IStorage {
     if (preferredParentId && preferredParentId !== 'PB0') {
       const preferredParent = await this.getUserByUserId(preferredParentId);
       if (preferredParent && preferredParent.isActivated) {
-        console.log(`[BINARY-PLACEMENT] Searching ${preferredParentId}'s downline for first available slot...`);
-        const sponsorSlot = await this.findFirstSlotInSubtree(preferredParentId, new Set<string>(), tx);
+        console.log(`[BINARY-PLACEMENT] Searching ${preferredParentId}'s downline for first available slot (requested leg: ${requestedLeg || 'none'})...`);
+        const sponsorSlot = await this.findFirstSlotInSubtree(preferredParentId, new Set<string>(), tx, requestedLeg);
         if (sponsorSlot) {
           console.log(`[BINARY-PLACEMENT] Spillover placement in sponsor's downline: ${sponsorSlot.parentId}-${sponsorSlot.leg}`);
           return sponsorSlot;
@@ -659,7 +659,8 @@ export class DbStorage implements IStorage {
     }
 
     // PRIORITY 3: Global tree search (fallback)
-    console.log('[BINARY-PLACEMENT] Searching global tree for first available slot...');
+    // Honor requested leg preference even in global search - try requested leg first at each level
+    console.log(`[BINARY-PLACEMENT] Searching global tree for first available slot (requested leg: ${requestedLeg || 'none'})...`);
     const queue: string[] = [root];
     const visited = new Set<string>();
 
@@ -668,24 +669,28 @@ export class DbStorage implements IStorage {
       if (visited.has(currentParentId)) continue;
       visited.add(currentParentId);
 
-      // Check left leg (with transaction for locking if provided)
-      const leftChildren = await this.getUsersByBinaryParentAndLeg(currentParentId, 'left', tx);
-      if (leftChildren.length === 0) {
-        console.log(`[BINARY-PLACEMENT] Global placement: ${currentParentId}-left`);
-        return { parentId: currentParentId, leg: 'left' };
+      // Determine leg check priority based on requested leg
+      const primaryLeg = requestedLeg || 'left';
+      const secondaryLeg = primaryLeg === 'left' ? 'right' : 'left';
+
+      // Check PRIMARY leg first (with transaction for locking if provided)
+      const primaryChildren = await this.getUsersByBinaryParentAndLeg(currentParentId, primaryLeg, tx);
+      if (primaryChildren.length === 0) {
+        console.log(`[BINARY-PLACEMENT] Global placement: ${currentParentId}-${primaryLeg} (requested: ${requestedLeg || 'none'})`);
+        return { parentId: currentParentId, leg: primaryLeg };
       } else {
-        // Add left child to queue for deeper search
-        queue.push(leftChildren[0].userId);
+        // Add primary child to queue for deeper search
+        queue.push(primaryChildren[0].userId);
       }
 
-      // Check right leg (with transaction for locking if provided)
-      const rightChildren = await this.getUsersByBinaryParentAndLeg(currentParentId, 'right', tx);
-      if (rightChildren.length === 0) {
-        console.log(`[BINARY-PLACEMENT] Global placement: ${currentParentId}-right`);
-        return { parentId: currentParentId, leg: 'right' };
+      // Check SECONDARY leg (with transaction for locking if provided)
+      const secondaryChildren = await this.getUsersByBinaryParentAndLeg(currentParentId, secondaryLeg, tx);
+      if (secondaryChildren.length === 0) {
+        console.log(`[BINARY-PLACEMENT] Global placement: ${currentParentId}-${secondaryLeg} (primary ${primaryLeg} taken, requested: ${requestedLeg || 'none'})`);
+        return { parentId: currentParentId, leg: secondaryLeg };
       } else {
-        // Add right child to queue for deeper search
-        queue.push(rightChildren[0].userId);
+        // Add secondary child to queue for deeper search
+        queue.push(secondaryChildren[0].userId);
       }
     }
 
@@ -695,36 +700,42 @@ export class DbStorage implements IStorage {
   }
 
   // Helper: Find first available slot within a user's downline (subtree)
-  // DEPTH-FIRST SEARCH: Goes deep down left side first, then right side
-  private async findFirstSlotInSubtree(rootUserId: string, visited = new Set<string>(), tx?: any): Promise<{ parentId: string; leg: 'left' | 'right' } | null> {
+  // DEPTH-FIRST SEARCH: Prioritizes requested leg first, then tries opposite leg
+  private async findFirstSlotInSubtree(rootUserId: string, visited = new Set<string>(), tx?: any, requestedLeg?: 'left' | 'right'): Promise<{ parentId: string; leg: 'left' | 'right' } | null> {
     // Prevent infinite loops
     if (visited.has(rootUserId)) return null;
     visited.add(rootUserId);
 
-    // Check current node's left slot (with transaction for locking if provided)
-    const leftChildren = await this.getUsersByBinaryParentAndLeg(rootUserId, 'left', tx);
-    if (leftChildren.length === 0) {
-      // Left slot empty - place here!
-      return { parentId: rootUserId, leg: 'left' };
+    // Determine leg priority: If requestedLeg specified, try it first; otherwise default to left
+    const primaryLeg = requestedLeg || 'left';
+    const secondaryLeg = primaryLeg === 'left' ? 'right' : 'left';
+
+    // Check PRIMARY leg slot first (with transaction for locking if provided)
+    const primaryChildren = await this.getUsersByBinaryParentAndLeg(rootUserId, primaryLeg, tx);
+    if (primaryChildren.length === 0) {
+      // Primary leg empty - place here!
+      console.log(`[BINARY-SPILLOVER] Found empty ${primaryLeg} slot at ${rootUserId} (requested: ${requestedLeg || 'none'})`);
+      return { parentId: rootUserId, leg: primaryLeg };
     }
 
-    // Left slot taken - GO DEEP DOWN into left child's subtree
-    const leftSubtreeSlot = await this.findFirstSlotInSubtree(leftChildren[0].userId, visited, tx);
-    if (leftSubtreeSlot) {
-      return leftSubtreeSlot; // Found slot deep in left subtree
+    // Primary leg taken - GO DEEP DOWN into primary child's subtree (maintain requestedLeg preference)
+    const primarySubtreeSlot = await this.findFirstSlotInSubtree(primaryChildren[0].userId, visited, tx, requestedLeg);
+    if (primarySubtreeSlot) {
+      return primarySubtreeSlot; // Found slot deep in primary subtree
     }
 
-    // Left subtree full - check current node's right slot (with transaction for locking if provided)
-    const rightChildren = await this.getUsersByBinaryParentAndLeg(rootUserId, 'right', tx);
-    if (rightChildren.length === 0) {
-      // Right slot empty - place here!
-      return { parentId: rootUserId, leg: 'right' };
+    // Primary subtree full - check SECONDARY leg slot (with transaction for locking if provided)
+    const secondaryChildren = await this.getUsersByBinaryParentAndLeg(rootUserId, secondaryLeg, tx);
+    if (secondaryChildren.length === 0) {
+      // Secondary leg empty - place here!
+      console.log(`[BINARY-SPILLOVER] Primary ${primaryLeg} full, using ${secondaryLeg} at ${rootUserId} (requested: ${requestedLeg || 'none'})`);
+      return { parentId: rootUserId, leg: secondaryLeg };
     }
 
-    // Right slot taken - GO DEEP DOWN into right child's subtree
-    const rightSubtreeSlot = await this.findFirstSlotInSubtree(rightChildren[0].userId, visited, tx);
-    if (rightSubtreeSlot) {
-      return rightSubtreeSlot; // Found slot deep in right subtree
+    // Secondary leg taken - GO DEEP DOWN into secondary child's subtree (maintain requestedLeg preference)
+    const secondarySubtreeSlot = await this.findFirstSlotInSubtree(secondaryChildren[0].userId, visited, tx, requestedLeg);
+    if (secondarySubtreeSlot) {
+      return secondarySubtreeSlot; // Found slot deep in secondary subtree
     }
 
     // Both subtrees completely full
