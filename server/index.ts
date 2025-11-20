@@ -8,6 +8,7 @@ import ws from "ws";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { storage } from "./storage";
+import { initializeWebSocketServer } from "./websocket";
 import {
   helmetMiddleware,
   ipBlockMiddleware,
@@ -145,6 +146,10 @@ app.use(speedLimiter);
 // Setup PostgreSQL session store
 const PgSession = connectPgSimple(session);
 const sessionPool = new Pool({ connectionString: dbConfig.getDatabaseUrl() });
+const sessionStore = new PgSession({
+  pool: sessionPool,
+  createTableIfMissing: true,
+});
 
 declare module 'http' {
   interface IncomingMessage {
@@ -161,10 +166,7 @@ app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 
 app.use(
   session({
-    store: new PgSession({
-      pool: sessionPool,
-      createTableIfMissing: true,
-    }),
+    store: sessionStore,
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
@@ -231,6 +233,9 @@ app.use((req, res, next) => {
   try {
     console.log('✓ Initializing Express server...');
     const server = await registerRoutes(app);
+
+    // Initialize WebSocket server for real-time notifications
+    initializeWebSocketServer(server, sessionStore, process.env.SESSION_SECRET || 'fallback-secret');
 
     // Health check endpoint for deployment monitoring
     app.get('/health', (_req, res) => {

@@ -560,6 +560,10 @@ export const notifications = pgTable("notifications", {
   // Read status
   isRead: boolean("is_read").notNull().default(false),
   
+  // WebSocket delivery tracking (outbox pattern for delivery guarantees)
+  deliveredAt: timestamp("delivered_at"), // When notification was pushed via WebSocket
+  acknowledgedAt: timestamp("acknowledged_at"), // When client acknowledged receipt
+  
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

@@ -34,6 +34,7 @@ import { eq, and, or, ne, isNull, desc, sql, lt, asc, inArray, count, getTableCo
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "./db";
 import crypto from "crypto";
+import { notificationService } from "./notifications";
 
 export interface IStorage {
   // User methods
@@ -2295,6 +2296,28 @@ export class DbStorage implements IStorage {
       }
       
       console.log(`[STORAGE] Payment updated successfully, creating income for receiver: ${confirmedPayment.receiverUserId}`);
+      
+      // Send real-time notifications to payer (payment confirmed)
+      try {
+        const payerUser = await tx.select().from(users).where(eq(users.userId, confirmedPayment.payerUserId)).limit(1);
+        const receiverUser = confirmedPayment.receiverUserId !== 'PB0' 
+          ? await tx.select().from(users).where(eq(users.userId, confirmedPayment.receiverUserId!)).limit(1)
+          : null;
+        
+        if (payerUser.length > 0) {
+          await notificationService.notifyPaymentConfirmed(
+            confirmedPayment.payerUserId,
+            confirmedPayment.amountInr.toString(),
+            confirmedPayment.paymentType,
+            confirmedPayment.receiverUserId || 'PB0',
+            receiverUser && receiverUser.length > 0 ? receiverUser[0].name : 'Admin',
+            confirmedPayment.activationId
+          );
+        }
+      } catch (notifError) {
+        console.error('[STORAGE] Failed to send payment confirmation notification:', notifError);
+        // Don't fail the transaction if notification fails
+      }
 
       // IMPORTANT: Defer income creation for matrix AND sponsor payments
       // Matrix payments: Receivers determined after matrix placement (during activation)
@@ -2895,6 +2918,22 @@ export class DbStorage implements IStorage {
           }
           
           console.log(`[ACTIVATION] User ${activatedUser.userId} successfully activated and placed in binary tree!`);
+          
+          // Send real-time notification: Activation complete with bell sound
+          try {
+            const totalPaid = payments.reduce((sum, p) => sum + parseFloat(p.amountInr.toString()), 0);
+            
+            await notificationService.notifyActivationComplete(
+              activatedUser.userId,
+              activationId,
+              totalPaid.toString()
+            );
+            
+            console.log(`[NOTIFICATION] Activation complete notification sent to ${activatedUser.userId}`);
+          } catch (notifError) {
+            console.error('[ACTIVATION] Failed to send activation complete notification:', notifError);
+            // Don't fail activation if notification fails
+          }
         }
       };
 
@@ -3674,6 +3713,37 @@ export class DbStorage implements IStorage {
       console.error('[TREE_RECALC] Error recalculating tree counts:', error);
       throw new Error(`Tree count recalculation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+  // WebSocket notification delivery tracking methods
+  async getUndeliveredNotifications(userId: string): Promise<Notification[]> {
+    const results = await this.db
+      .select()
+      .from(notifications)
+      .where(and(
+        eq(notifications.userId, userId),
+        isNull(notifications.deliveredAt)
+      ))
+      .orderBy(notifications.createdAt);
+    
+    return results;
+  }
+
+  async markNotificationDelivered(notificationId: string): Promise<void> {
+    await this.db
+      .update(notifications)
+      .set({ deliveredAt: new Date() })
+      .where(eq(notifications.id, notificationId));
+    
+    console.log(`[STORAGE] Marked notification ${notificationId} as delivered`);
+  }
+
+  async markNotificationAcknowledged(notificationId: string): Promise<void> {
+    await this.db
+      .update(notifications)
+      .set({ acknowledgedAt: new Date() })
+      .where(eq(notifications.id, notificationId));
+    
+    console.log(`[STORAGE] Marked notification ${notificationId} as acknowledged`);
   }
 }
 

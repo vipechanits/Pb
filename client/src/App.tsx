@@ -10,6 +10,7 @@ import { NotificationBell } from '@/components/NotificationBell';
 import { UserProfileDropdown } from '@/components/UserProfileDropdown';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
 import { AuthProvider } from '@/lib/auth-context';
+import { NotificationProvider } from '@/components/NotificationProvider';
 import { ProtectedRoute } from '@/components/protected-route';
 import NotFound from '@/pages/not-found';
 import { Button } from '@/components/ui/button';
@@ -413,10 +414,12 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
+        <NotificationProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Router />
+          </TooltipProvider>
+        </NotificationProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

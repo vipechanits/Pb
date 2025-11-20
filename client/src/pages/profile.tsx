@@ -354,11 +354,21 @@ export default function Profile() {
             </CardContent>
           </Card>
 
-          <div className="flex justify-end">
-            <Button type="submit" disabled={loading} data-testid="button-save-profile">
-              {loading ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </div>
+          <Card className="bg-muted/30">
+            <CardContent className="pt-6">
+              <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
+                <Button 
+                  type="submit" 
+                  disabled={loading} 
+                  data-testid="button-save-profile"
+                  className="w-full sm:w-auto min-w-[200px]"
+                  size="lg"
+                >
+                  {loading ? 'Saving...' : 'Save Profile Changes'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </form>
       </Form>
         </TabsContent>
