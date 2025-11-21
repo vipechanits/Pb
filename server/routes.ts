@@ -2311,6 +2311,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         adminQrCodeUrl: config.adminQrCodeUrl,
         recaptchaSiteKey: config.recaptchaSiteKey,
         recaptchaEnabled: config.recaptchaEnabled,
+        customCaptchaEnabled: config.customCaptchaEnabled,
+        customCaptchaCodeLength: config.customCaptchaCodeLength,
+        customCaptchaCodeType: config.customCaptchaCodeType,
+        customCaptchaColor: config.customCaptchaColor,
       };
       
       res.json(normalizedConfig);
