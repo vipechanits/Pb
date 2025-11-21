@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 /**
  * Hook to play notification sounds using Web Audio API
- * Generates a pleasant double bell chime sound
+ * Generates different sounds for success (double bell), alert (three chimes)
  */
 export function useNotificationSound() {
   const [isMuted, setIsMuted] = useState(() => {
@@ -24,35 +24,51 @@ export function useNotificationSound() {
     return () => document.removeEventListener('click', initAudioContext);
   }, []);
 
-  const playDoubleChime = () => {
+  const playBell = (context: AudioContext, startTime: number, frequency: number, duration: number = 0.3) => {
+    const oscillator = context.createOscillator();
+    const gainNode = context.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(context.destination);
+
+    oscillator.frequency.value = frequency;
+    oscillator.type = 'sine';
+
+    // Bell envelope: quick attack, moderate decay
+    gainNode.gain.setValueAtTime(0, startTime);
+    gainNode.gain.linearRampToValueAtTime(0.3, startTime + 0.01);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+
+    oscillator.start(startTime);
+    oscillator.stop(startTime + duration);
+  };
+
+  const playSuccessSound = () => {
     if (isMuted || !audioContextRef.current) return;
 
     const context = audioContextRef.current;
     const currentTime = context.currentTime;
 
-    // First bell (higher pitch)
-    const playBell = (startTime: number, frequency: number) => {
-      const oscillator = context.createOscillator();
-      const gainNode = context.createGain();
+    // Play two bells with slight delay (pleasant double chime for success)
+    playBell(context, currentTime, 800); // Higher pitch first bell
+    playBell(context, currentTime + 0.15, 600); // Lower pitch second bell
+  };
 
-      oscillator.connect(gainNode);
-      gainNode.connect(context.destination);
+  const playAlertSound = () => {
+    if (isMuted || !audioContextRef.current) return;
 
-      oscillator.frequency.value = frequency;
-      oscillator.type = 'sine';
+    const context = audioContextRef.current;
+    const currentTime = context.currentTime;
 
-      // Bell envelope: quick attack, moderate decay
-      gainNode.gain.setValueAtTime(0, startTime);
-      gainNode.gain.linearRampToValueAtTime(0.3, startTime + 0.01);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + 0.3);
+    // Play three ascending chimes for alert/warning
+    playBell(context, currentTime, 600); // Low pitch
+    playBell(context, currentTime + 0.12, 800); // Medium pitch
+    playBell(context, currentTime + 0.24, 1000); // High pitch
+  };
 
-      oscillator.start(startTime);
-      oscillator.stop(startTime + 0.3);
-    };
-
-    // Play two bells with slight delay
-    playBell(currentTime, 800); // Higher pitch first bell
-    playBell(currentTime + 0.15, 600); // Lower pitch second bell
+  const playDoubleChime = () => {
+    // Alias for playSuccessSound for backward compatibility
+    playSuccessSound();
   };
 
   const toggleMute = () => {
@@ -62,6 +78,8 @@ export function useNotificationSound() {
   };
 
   return {
+    playSuccessSound,
+    playAlertSound,
     playDoubleChime,
     isMuted,
     toggleMute,

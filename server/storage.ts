@@ -3045,7 +3045,32 @@ export class DbStorage implements IStorage {
       // CRITICAL: Use SERIALIZABLE isolation to prevent phantom reads and ensure data consistency
       await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
       
-      // Reject the payment
+      // Step 1: Lock payment row and check status
+      const existingPayment = await tx.select()
+        .from(activationPayments)
+        .where(eq(activationPayments.id, id))
+        .for('update')
+        .limit(1);
+      
+      if (existingPayment.length === 0) {
+        console.log(`[STORAGE] Payment ${id} not found for rejection`);
+        return undefined;
+      }
+      
+      const payment = existingPayment[0];
+      
+      // Step 2: Validate status - can only reject payments that are pending, awaiting_assignment, or submitted
+      if (payment.status === 'confirmed') {
+        throw new Error(`Cannot reject payment in status 'confirmed' - payment has already been confirmed`);
+      }
+      if (payment.status === 'rejected') {
+        throw new Error(`Cannot reject payment in status 'rejected' - payment has already been rejected`);
+      }
+      if (!['pending', 'awaiting_assignment', 'submitted'].includes(payment.status)) {
+        throw new Error(`Cannot reject payment in status '${payment.status}'`);
+      }
+      
+      // Step 3: Reject the payment
       const result = await tx.update(activationPayments)
         .set({ 
           status: 'rejected',
@@ -3056,16 +3081,16 @@ export class DbStorage implements IStorage {
         .where(eq(activationPayments.id, id))
         .returning();
       
-      const payment = result[0];
-      if (!payment) {
+      const rejectedPayment = result[0];
+      if (!rejectedPayment) {
         return undefined;
       }
       
       // If this is a binary_match payment to a real user (not PB0 fallback), release the queue entry
       // Reset from 'reserved' back to 'waiting' so next activation can select it
       // PB0 fallback payments don't have queue entries (queue was empty)
-      if (payment.paymentType === 'binary_match' && payment.receiverUserId !== 'PB0') {
-        console.log(`[STORAGE] Releasing reserved queue entry for user ${payment.receiverUserId} (payment rejected)`);
+      if (rejectedPayment.paymentType === 'binary_match' && rejectedPayment.receiverUserId !== 'PB0') {
+        console.log(`[STORAGE] Releasing reserved queue entry for user ${rejectedPayment.receiverUserId} (payment rejected)`);
         
         const queueReleaseResult = await tx.update(binaryMatchQueue)
           .set({
@@ -3073,8 +3098,8 @@ export class DbStorage implements IStorage {
             paidByActivationId: null, // Clear reservation
           })
           .where(and(
-            eq(binaryMatchQueue.userId, payment.receiverUserId!),
-            eq(binaryMatchQueue.paidByActivationId, payment.activationId),
+            eq(binaryMatchQueue.userId, rejectedPayment.receiverUserId!),
+            eq(binaryMatchQueue.paidByActivationId, rejectedPayment.activationId),
             eq(binaryMatchQueue.status, 'reserved')
           ))
           .returning();
@@ -3086,7 +3111,7 @@ export class DbStorage implements IStorage {
         }
       }
       
-      return payment;
+      return rejectedPayment;
     });
   }
 

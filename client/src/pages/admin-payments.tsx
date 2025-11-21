@@ -143,7 +143,7 @@ export default function AdminPayments() {
       });
 
       // Play alert sound for admin rejection
-      playAlertSound();
+      playSuccessSound();
       
       toast({
         title: 'Success',
@@ -156,9 +156,10 @@ export default function AdminPayments() {
       setAction(null);
     } catch (error) {
       console.error('Error rejecting payment:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to reject payment';
       toast({
         title: 'Error',
-        description: 'Failed to reject payment',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {

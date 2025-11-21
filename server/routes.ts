@@ -2262,9 +2262,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Payment not found" });
       }
       res.json(payment);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error rejecting payment:", error);
-      res.status(500).json({ error: "Failed to reject payment" });
+      // Return the actual error message from validation instead of generic error
+      const errorMessage = error?.message || "Failed to reject payment";
+      res.status(400).json({ error: errorMessage });
     }
   });
 

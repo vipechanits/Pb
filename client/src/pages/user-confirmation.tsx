@@ -67,7 +67,6 @@ export default function UserConfirmationPage() {
         variant: 'destructive',
       });
     } finally {
-      console.log('[CONFIRM] Finally block - resetting processing state');
       setProcessing(false);
     }
   };
@@ -94,7 +93,7 @@ export default function UserConfirmationPage() {
       console.log('[REJECT] Rejection successful:', data);
 
       // Play alert sound for payment rejection
-      playAlertSound();
+      playSuccessSound();
       
       toast({
         title: 'Payment Rejected',
@@ -107,9 +106,10 @@ export default function UserConfirmationPage() {
       setAction(null);
     } catch (error) {
       console.error('[REJECT] Error rejecting payment:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to reject payment';
       toast({
         title: 'Error',
-        description: 'Failed to reject payment',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
