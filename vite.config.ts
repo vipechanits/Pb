@@ -36,5 +36,12 @@ export default defineConfig({
       strict: true,
       deny: ["**/.*"],
     },
+    hmr: process.env.NODE_ENV === 'production' 
+      ? false 
+      : {
+          protocol: 'wss',
+          host: 'payback247.com',
+          port: 443,
+        },
   },
 });

@@ -2401,7 +2401,7 @@ export class DbStorage implements IStorage {
             confirmedPayment.amountInr.toString(),
             confirmedPayment.paymentType,
             confirmedPayment.receiverUserId || 'PB0',
-            receiverUser && receiverUser.length > 0 ? receiverUser[0].name : 'Admin',
+            receiverUser && receiverUser.length > 0 ? (receiverUser[0].name || 'Admin') : 'Admin',
             confirmedPayment.activationId
           );
         }
@@ -3012,7 +3012,7 @@ export class DbStorage implements IStorage {
           
           // Send real-time notification: Activation complete with bell sound
           try {
-            const totalPaid = payments.reduce((sum, p) => sum + parseFloat(p.amountInr.toString()), 0);
+            const totalPaid = payments.reduce((sum: number, p: any) => sum + parseFloat(p.amountInr.toString()), 0);
             
             await notificationService.notifyActivationComplete(
               activatedUser.userId,
@@ -3832,7 +3832,7 @@ export class DbStorage implements IStorage {
   }
   // WebSocket notification delivery tracking methods
   async getUndeliveredNotifications(userId: string): Promise<Notification[]> {
-    const results = await this.db
+    const results = await db
       .select()
       .from(notifications)
       .where(and(
@@ -3845,7 +3845,7 @@ export class DbStorage implements IStorage {
   }
 
   async markNotificationDelivered(notificationId: string): Promise<void> {
-    await this.db
+    await db
       .update(notifications)
       .set({ deliveredAt: new Date() })
       .where(eq(notifications.id, notificationId));
@@ -3854,7 +3854,7 @@ export class DbStorage implements IStorage {
   }
 
   async markNotificationAcknowledged(notificationId: string): Promise<void> {
-    await this.db
+    await db
       .update(notifications)
       .set({ acknowledgedAt: new Date() })
       .where(eq(notifications.id, notificationId));

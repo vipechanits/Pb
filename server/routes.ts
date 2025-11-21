@@ -269,7 +269,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Send verification email
       try {
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        const baseUrl = process.env.APP_URL || 'https://payback247.com';
         await sendVerificationEmail(email, verificationToken, baseUrl);
         console.log(`[SIGNUP] Verification email sent to ${email}`);
       } catch (emailError) {
@@ -509,7 +509,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Send verification email
         try {
-          const baseUrl = `${req.protocol}://${req.get('host')}`;
+          const baseUrl = process.env.APP_URL || 'https://payback247.com';
           await sendVerificationEmail(normalizedEmail, verificationToken, baseUrl);
           console.log(`[RESEND_VERIFY] Verification email sent to ${normalizedEmail}`);
         } catch (emailError) {
@@ -569,9 +569,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
         
         // Send password reset email (async, don't wait)
-        const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-          ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
-          : `http://localhost:5000`;
+        const baseUrl = process.env.APP_URL || 'https://payback247.com';
         
         sendPasswordResetEmail(normalizedEmail, rawToken, baseUrl).catch((err) => {
           console.error('[FORGOT_PASSWORD] Failed to send password reset email:', err);
@@ -1604,8 +1602,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const qrCode = await generateUserPaymentQR(upiId);
 
       // Update the appropriate QR URL field
-      const updates = { [qrUrlField!]: qrCode };
-      await storage.updateUserProfile(req.session.userId!, updates);
+      const updates: Record<string, string | null> = { 
+        name: user.name || '',
+        mobile: user.mobile || '',
+        [qrUrlField!]: qrCode 
+      };
+      await storage.updateUserProfile(req.session.userId!, updates as any);
 
       res.json({ qrCode });
     } catch (error) {
@@ -1614,10 +1616,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Get user payment details by userId
+  // Get user payment details by userId (SECURE: only authorized users can access)
   app.get("/api/users/payment-details/:userId", requireAuth, async (req, res) => {
     try {
-      // Fetch from user profile (including PB0 admin)
+      const requestingUser = await storage.getUserById(req.session.userId as string);
+      if (!requestingUser) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      // Authorization: Only admins or the user themselves can view payment details
+      const isAdmin = requestingUser.role === 'admin';
+      const isSelf = requestingUser.userId === req.params.userId;
+      
+      if (!isAdmin && !isSelf) {
+        return res.status(403).json({ error: "Forbidden - Cannot access another user's payment details" });
+      }
+      
+      // Fetch from user profile
       const user = await storage.getUserByUserId(req.params.userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
