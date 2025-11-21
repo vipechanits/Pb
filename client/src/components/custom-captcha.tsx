@@ -31,12 +31,13 @@ export function CustomCaptcha({ onCaptchaChange, isValid }: CustomCaptchaProps) 
 
   // Generate random CAPTCHA code
   const generateCaptcha = () => {
-    if (!config) return;
+    if (!config || !config.customCaptchaEnabled) return;
 
     const length = config.customCaptchaCodeLength || 6;
+    const codeType = config.customCaptchaCodeType || 'digit';
     let code = '';
 
-    if (config.customCaptchaCodeType === 'text') {
+    if (codeType === 'text') {
       // Mix of letters and numbers
       const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
       for (let i = 0; i < length; i++) {
@@ -57,17 +58,19 @@ export function CustomCaptcha({ onCaptchaChange, isValid }: CustomCaptchaProps) 
 
   // Generate CAPTCHA on component mount or config change
   useEffect(() => {
-    if (config?.customCaptchaEnabled) {
+    if (config && config.customCaptchaEnabled) {
       generateCaptcha();
     }
-  }, [config?.customCaptchaEnabled, config?.customCaptchaCodeLength, config?.customCaptchaCodeType]);
+  }, [config?.customCaptchaEnabled, config?.customCaptchaCodeLength, config?.customCaptchaCodeType, config]);
 
   // Handle user input
   useEffect(() => {
-    onCaptchaChange(userInput);
-  }, [userInput, onCaptchaChange]);
+    if (config?.customCaptchaEnabled) {
+      onCaptchaChange(userInput);
+    }
+  }, [userInput, onCaptchaChange, config?.customCaptchaEnabled]);
 
-  if (!config?.customCaptchaEnabled) {
+  if (!config || !config.customCaptchaEnabled) {
     return null;
   }
 
