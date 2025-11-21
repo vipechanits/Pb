@@ -1,15 +1,115 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
-import { Database, Download, Upload, FileJson, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Database, Download, Upload, FileJson, AlertCircle, CheckCircle2, Cloud, ExternalLink, Clock, BarChart3, Shield } from 'lucide-react';
+import { Loader } from 'lucide-react';
 
 export default function AdminDatabase() {
   const { toast } = useToast();
   const [backupLoading, setBackupLoading] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState(false);
+  const [googleDriveLoading, setGoogleDriveLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [lastBackupTime, setLastBackupTime] = useState<string | null>(null);
+  const [driveBackups, setDriveBackups] = useState<any[]>([]);
+  const [backupHistory, setBackupHistory] = useState<any[]>([]);
+  const [backupStats, setBackupStats] = useState<any>(null);
+  const [showGoogleDriveList, setShowGoogleDriveList] = useState(false);
+  const [showBackupHistory, setShowBackupHistory] = useState(true);
+
+  useEffect(() => {
+    fetchBackupHistory();
+    fetchBackupStats();
+    const interval = setInterval(() => {
+      fetchBackupHistory();
+      fetchBackupStats();
+    }, 30000); // Refresh every 30 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchBackupStats = async () => {
+    try {
+      setStatsLoading(true);
+      const response = await apiRequest('GET', '/api/admin/system/backup-stats');
+      if (!response.ok) throw new Error('Failed to fetch stats');
+      
+      const data = await response.json();
+      setBackupStats(data);
+    } catch (error: any) {
+      console.error('Failed to load backup stats:', error);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showGoogleDriveList) {
+      fetchGoogleDriveBackups();
+    }
+  }, [showGoogleDriveList]);
+
+  const fetchBackupHistory = async () => {
+    try {
+      setHistoryLoading(true);
+      const response = await apiRequest('GET', '/api/admin/system/backup-history');
+      if (!response.ok) throw new Error('Failed to fetch history');
+      
+      const data = await response.json();
+      setBackupHistory(data.history || []);
+    } catch (error: any) {
+      console.error('Failed to load backup history:', error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const fetchGoogleDriveBackups = async () => {
+    try {
+      setGoogleDriveLoading(true);
+      const response = await apiRequest('GET', '/api/admin/system/google-drive-backups');
+      if (!response.ok) throw new Error('Failed to fetch backups');
+      
+      const data = await response.json();
+      setDriveBackups(data.files || []);
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to load Google Drive backups',
+      });
+    } finally {
+      setGoogleDriveLoading(false);
+    }
+  };
+
+  const handleRestoreFromDrive = async (fileId: string, fileName: string) => {
+    if (!confirm(`Restore database from "${fileName}"? This will overwrite all current data.`)) return;
+    
+    try {
+      setRestoreLoading(true);
+      const response = await apiRequest('POST', '/api/admin/system/restore-from-drive', { fileId });
+      if (!response.ok) throw new Error('Failed to restore');
+
+      const result = await response.json();
+      toast({
+        title: 'Success',
+        description: `Database restored from Google Drive!\n${result.summary}`,
+      });
+
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to restore from Google Drive',
+      });
+    } finally {
+      setRestoreLoading(false);
+    }
+  };
 
   const handleBackup = async () => {
     try {
@@ -89,7 +189,7 @@ export default function AdminDatabase() {
       </div>
 
       {/* Backup Features Grid */}
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-3">
         {/* Create Backup Card */}
         <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800">
           <CardHeader>
@@ -132,21 +232,21 @@ export default function AdminDatabase() {
           </CardContent>
         </Card>
 
-        {/* Restore Backup Card */}
+        {/* Restore from File Upload Card */}
         <Card className="border-green-200 bg-green-50 dark:bg-green-950 dark:border-green-800">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-green-900 dark:text-green-100">
               <Upload className="h-5 w-5" />
-              Restore from Backup
+              Restore from File
             </CardTitle>
             <CardDescription className="text-green-800 dark:text-green-200">
-              Upload backup file to restore
+              Upload local backup file
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-3">
               <div className="text-sm text-green-900 dark:text-green-100">
-                <p className="font-semibold mb-2">Restore restores:</p>
+                <p className="font-semibold mb-2">Restore includes:</p>
                 <ul className="space-y-1 text-xs">
                   <li>✓ All database tables</li>
                   <li>✓ Complete user data</li>
@@ -177,32 +277,365 @@ export default function AdminDatabase() {
                 data-testid="button-restore-database"
               >
                 <Upload className="mr-2 h-4 w-4" />
-                {restoreLoading ? 'Restoring...' : 'Upload & Restore Backup'}
+                {restoreLoading ? 'Restoring...' : 'Upload & Restore'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Google Drive Restore Card */}
+        <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-blue-900 dark:text-blue-100">
+              <Cloud className="h-5 w-5" />
+              Restore from Google Drive
+            </CardTitle>
+            <CardDescription className="text-blue-800 dark:text-blue-200">
+              Select backup from cloud
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-3">
+              <div className="text-sm text-blue-900 dark:text-blue-100">
+                <p className="font-semibold mb-2">Cloud restore:</p>
+                <ul className="space-y-1 text-xs">
+                  <li>✓ List all cloud backups</li>
+                  <li>✓ Select any backup</li>
+                  <li>✓ Restore with one click</li>
+                  <li>✓ Version history available</li>
+                </ul>
+              </div>
+              <Button
+                onClick={() => setShowGoogleDriveList(!showGoogleDriveList)}
+                disabled={googleDriveLoading || restoreLoading}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                variant="default"
+                data-testid="button-list-google-drive-backups"
+              >
+                {googleDriveLoading ? (
+                  <>
+                    <Loader className="mr-2 h-4 w-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : showGoogleDriveList ? (
+                  'Hide Cloud Backups'
+                ) : (
+                  <>
+                    <Cloud className="mr-2 h-4 w-4" />
+                    Browse Cloud Backups
+                  </>
+                )}
               </Button>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Important Info Cards */}
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="border-orange-200">
+      {/* Backup History */}
+      {showBackupHistory && (
+        <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-orange-900 dark:text-orange-100">
-              <AlertCircle className="h-5 w-5" />
-              Important Notes
+            <CardTitle className="flex items-center gap-2">
+              <Database className="h-5 w-5" />
+              Recent Backup History
+            </CardTitle>
+            <CardDescription>
+              Auto-backups and manual backups stored in database
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {historyLoading ? (
+              <div className="flex items-center gap-2">
+                <Loader className="h-4 w-4 animate-spin" />
+                <p className="text-sm text-muted-foreground">Loading history...</p>
+              </div>
+            ) : backupHistory.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No backups yet. Auto-backups will start in 24 hours.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2 px-2">Backup Name</th>
+                      <th className="text-left py-2 px-2">Type</th>
+                      <th className="text-left py-2 px-2">Status</th>
+                      <th className="text-left py-2 px-2">Size</th>
+                      <th className="text-left py-2 px-2">Date</th>
+                      <th className="text-left py-2 px-2">Cloud Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {backupHistory.map((backup: any) => (
+                      <tr key={backup.id} className="border-b hover:bg-accent/50">
+                        <td className="py-2 px-2 truncate text-xs" data-testid={`backup-history-name-${backup.id}`}>
+                          {backup.backupName}
+                        </td>
+                        <td className="py-2 px-2">
+                          {backup.isAutomatic ? (
+                            <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100 px-2 py-1 rounded">
+                              Auto
+                            </span>
+                          ) : (
+                            <span className="text-xs bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-2 py-1 rounded">
+                              Manual
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2 px-2">
+                          {backup.status === 'completed' ? (
+                            <span className="text-xs text-green-600 dark:text-green-400 font-semibold">Completed</span>
+                          ) : backup.status === 'failed' ? (
+                            <span className="text-xs text-red-600 dark:text-red-400 font-semibold">Failed</span>
+                          ) : (
+                            <span className="text-xs text-yellow-600 dark:text-yellow-400 font-semibold">Pending</span>
+                          )}
+                        </td>
+                        <td className="py-2 px-2 text-xs">
+                          {backup.fileSizeBytes ? `${(backup.fileSizeBytes / 1024 / 1024).toFixed(2)} MB` : '-'}
+                        </td>
+                        <td className="py-2 px-2 text-xs">
+                          {backup.createdAt ? new Date(backup.createdAt).toLocaleString('en-IN') : '-'}
+                        </td>
+                        <td className="py-2 px-2">
+                          {backup.googleDriveFileId ? (
+                            <div className="flex items-center gap-1">
+                              <Cloud className="h-3 w-3 text-blue-600" />
+                              {backup.googleDriveFolderLink && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-auto p-0 text-xs underline"
+                                  onClick={() => window.open(backup.googleDriveFolderLink, '_blank')}
+                                  data-testid={`link-cloud-${backup.id}`}
+                                >
+                                  View
+                                </Button>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Local only</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Google Drive Backups List */}
+      {showGoogleDriveList && (
+        <Card className="border-blue-300">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Cloud className="h-5 w-5" />
+              Available Backups on Google Drive
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-sm space-y-3 text-muted-foreground">
-            <p>
-              <strong>Backup File Format:</strong> JSON file containing all database tables and metadata
-            </p>
-            <p>
-              <strong>Restore Warning:</strong> Restoring will OVERWRITE all existing database data. Always backup before restoring.
-            </p>
-            <p>
-              <strong>Version Compatibility:</strong> Backups are version 2.0 compatible with all platforms
-            </p>
+          <CardContent>
+            {googleDriveLoading ? (
+              <div className="flex items-center gap-2">
+                <Loader className="h-4 w-4 animate-spin" />
+                <p className="text-sm text-muted-foreground">Loading backups...</p>
+              </div>
+            ) : driveBackups.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No backups found in Google Drive</p>
+            ) : (
+              <div className="space-y-2">
+                {driveBackups.map((file: any) => (
+                  <div key={file.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate" data-testid={`backup-name-${file.id}`}>{file.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {file.createdTime ? new Date(file.createdTime).toLocaleString('en-IN') : 'Unknown date'}
+                        {file.size && ` • ${(parseInt(file.size) / 1024 / 1024).toFixed(2)} MB`}
+                      </p>
+                    </div>
+                    <div className="flex gap-2 ml-2">
+                      {file.webViewLink && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => window.open(file.webViewLink, '_blank')}
+                          data-testid={`link-open-drive-${file.id}`}
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => handleRestoreFromDrive(file.id, file.name)}
+                        disabled={restoreLoading}
+                        data-testid={`button-restore-from-${file.id}`}
+                      >
+                        {restoreLoading ? 'Restoring...' : 'Restore'}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Auto-Backup Status & Statistics */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Backups</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {statsLoading ? (
+              <Loader className="h-4 w-4 animate-spin" />
+            ) : (
+              <div>
+                <p className="text-2xl font-bold" data-testid="stat-total-backups">{backupStats?.totalBackups || 0}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {backupStats?.completedBackups || 0} completed
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Auto-Backups</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {statsLoading ? (
+              <Loader className="h-4 w-4 animate-spin" />
+            ) : (
+              <div>
+                <p className="text-2xl font-bold text-blue-600" data-testid="stat-auto-backups">{backupStats?.autoBackups || 0}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  24-hour schedule
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Cloud Storage</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {statsLoading ? (
+              <Loader className="h-4 w-4 animate-spin" />
+            ) : (
+              <div>
+                <p className="text-2xl font-bold text-green-600" data-testid="stat-cloud-backups">{backupStats?.cloudBackups || 0}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  On Google Drive
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Size</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {statsLoading ? (
+              <Loader className="h-4 w-4 animate-spin" />
+            ) : (
+              <div>
+                <p className="text-2xl font-bold" data-testid="stat-total-size">{backupStats?.totalSizeMB || 0} MB</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  All backups
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Auto-Backup Status */}
+      <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-blue-900 dark:text-blue-100">
+            <Clock className="h-5 w-5" />
+            Automated Backup Schedule
+          </CardTitle>
+          <CardDescription className="text-blue-800 dark:text-blue-200">
+            System automatically backs up database every 24 hours
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="p-4 bg-white dark:bg-slate-900 rounded-lg border">
+              <p className="text-sm text-muted-foreground mb-1">Last Backup</p>
+              <p className="font-semibold text-sm" data-testid="status-last-backup">
+                {statsLoading ? (
+                  'Loading...'
+                ) : backupStats?.lastBackup ? (
+                  new Date(backupStats.lastBackup.createdAt).toLocaleString('en-IN')
+                ) : (
+                  'No backups yet'
+                )}
+              </p>
+            </div>
+            <div className="p-4 bg-white dark:bg-slate-900 rounded-lg border">
+              <p className="text-sm text-muted-foreground mb-1">Next Scheduled</p>
+              <p className="font-semibold text-sm" data-testid="status-next-backup">
+                {statsLoading ? (
+                  'Loading...'
+                ) : backupStats?.nextAutoBackup ? (
+                  new Date(backupStats.nextAutoBackup).toLocaleString('en-IN')
+                ) : (
+                  'In 24 hours'
+                )}
+              </p>
+            </div>
+            <div className="p-4 bg-white dark:bg-slate-900 rounded-lg border">
+              <p className="text-sm text-muted-foreground mb-1">Status</p>
+              <p className="font-semibold text-sm text-green-600 dark:text-green-400">Active</p>
+              <p className="text-xs text-muted-foreground">Auto-backup running</p>
+            </div>
+          </div>
+          <div className="pt-2 text-sm text-blue-900 dark:text-blue-100 space-y-2">
+            <p><strong>What happens automatically:</strong></p>
+            <ul className="space-y-1 text-xs ml-2">
+              <li>✓ Complete database backup every 24 hours</li>
+              <li>✓ All 10 database tables included</li>
+              <li>✓ Automatic upload to Google Drive</li>
+              <li>✓ Backup history tracked in database</li>
+              <li>✓ Fallback to local storage if Cloud fails</li>
+              <li>✓ Can restore from any backup anytime</li>
+            </ul>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Important Info Cards */}
+      <div className="grid gap-6 md:grid-cols-3">
+        <Card className="border-blue-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-blue-900 dark:text-blue-100">
+              <BarChart3 className="h-5 w-5" />
+              What Gets Backed Up
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm space-y-2 text-muted-foreground">
+            <p><strong>All 10 Tables:</strong></p>
+            <ul className="text-xs space-y-1 ml-2">
+              <li>✓ Users & Profiles</li>
+              <li>✓ Activations & Payments</li>
+              <li>✓ Income Transactions</li>
+              <li>✓ Matrix Positions</li>
+              <li>✓ Binary Matching</li>
+              <li>✓ Notifications</li>
+              <li>✓ Re-entry Data</li>
+              <li>✓ System Config</li>
+            </ul>
           </CardContent>
         </Card>
 
@@ -210,19 +643,43 @@ export default function AdminDatabase() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-green-900 dark:text-green-100">
               <CheckCircle2 className="h-5 w-4" />
-              Best Practices
+              Features & Benefits
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-sm space-y-3 text-muted-foreground">
-            <p>
-              <strong>Weekly Backups:</strong> Create backups at least weekly
-            </p>
-            <p>
-              <strong>Store Safely:</strong> Save backups in multiple secure locations
-            </p>
-            <p>
-              <strong>Test Restores:</strong> Test restore procedures monthly to ensure data integrity
-            </p>
+          <CardContent className="text-sm space-y-2 text-muted-foreground">
+            <p><strong>Complete Protection:</strong></p>
+            <ul className="text-xs space-y-1 ml-2">
+              <li>✓ 24-hour auto-backup cycle</li>
+              <li>✓ Google Drive cloud storage</li>
+              <li>✓ Version history tracking</li>
+              <li>✓ One-click manual backup</li>
+              <li>✓ Easy restore capability</li>
+              <li>✓ File size monitoring</li>
+              <li>✓ Backup status dashboard</li>
+              <li>✓ Migration-ready format</li>
+            </ul>
+          </CardContent>
+        </Card>
+
+        <Card className="border-orange-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-orange-900 dark:text-orange-100">
+              <AlertCircle className="h-5 w-5" />
+              Important Notes
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm space-y-2 text-muted-foreground">
+            <p><strong>Backup Details:</strong></p>
+            <ul className="text-xs space-y-1 ml-2">
+              <li>✓ JSON v2.0 format</li>
+              <li>✓ Works with all platforms</li>
+              <li>✓ Includes metadata</li>
+              <li>✓ Restore overwrites all data</li>
+              <li>✓ Create manual backup before restore</li>
+              <li>✓ Test restores monthly</li>
+              <li>✓ Multiple backup locations</li>
+              <li>✓ Secure cloud encryption</li>
+            </ul>
           </CardContent>
         </Card>
       </div>

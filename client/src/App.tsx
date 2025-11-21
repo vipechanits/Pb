@@ -49,6 +49,7 @@ import AdminAnalytics from '@/pages/admin-analytics';
 import AdminConfig from '@/pages/admin-config';
 import DatabaseBackupPage from '@/pages/admin/database';
 import AdminSecurity from '@/pages/admin/security';
+import AdminBackups from '@/pages/admin-backups';
 import { useEffect } from 'react';
 function DashboardLayout({ children, isAdmin = false }: { children: React.ReactNode; isAdmin?: boolean }) {
   const style = {
@@ -393,6 +394,16 @@ function Router() {
           <ProtectedRoute requireAdmin={true}>
             <DashboardLayout isAdmin={true}>
               <AdminSecurity />
+            </DashboardLayout>
+          </ProtectedRoute>
+        )}
+      </Route>
+      
+      <Route path="/admin/backups">
+        {() => (
+          <ProtectedRoute requireAdmin={true}>
+            <DashboardLayout isAdmin={true}>
+              <AdminBackups />
             </DashboardLayout>
           </ProtectedRoute>
         )}

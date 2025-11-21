@@ -9,7 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { Settings, Save, Loader2, Upload, X, Shield, Mail, QrCode, Smartphone, Building2, Copy, CheckCircle, ExternalLink, AlertCircle } from 'lucide-react';
+import { Settings, Save, Loader2, Upload, X, Shield, Mail, QrCode, Smartphone, Building2, Copy, CheckCircle, ExternalLink, AlertCircle, Lock } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useLocation } from 'wouter';
 
 type SystemConfig = {
@@ -36,6 +37,10 @@ type SystemConfig = {
   recaptchaSiteKey: string | null;
   recaptchaSecretKey: string | null;
   recaptchaEnabled: boolean;
+  customCaptchaEnabled: boolean;
+  customCaptchaCodeLength: number;
+  customCaptchaCodeType: string;
+  customCaptchaColor: string;
   emailHost: string | null;
   emailPort: number | null;
   emailUser: string | null;
@@ -703,6 +708,88 @@ export default function AdminConfig() {
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Custom CAPTCHA Configuration */}
+            <div className="space-y-4 p-4 border rounded-lg border-t">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label htmlFor="customCaptchaEnabled" className="text-base font-medium">
+                    Enable Custom CAPTCHA
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Use configurable 6-digit CAPTCHA for additional security verification
+                  </p>
+                </div>
+                <Switch
+                  id="customCaptchaEnabled"
+                  checked={!!getValue('customCaptchaEnabled')}
+                  onCheckedChange={(checked) => handleChange('customCaptchaEnabled', checked)}
+                  data-testid="switch-custom-captcha-enabled"
+                />
+              </div>
+
+              {getValue('customCaptchaEnabled') && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t">
+                  <div className="space-y-2">
+                    <Label htmlFor="customCaptchaCodeType">Text Format</Label>
+                    <Select
+                      value={getStringValue('customCaptchaCodeType')}
+                      onValueChange={(value) => handleChange('customCaptchaCodeType', value)}
+                    >
+                      <SelectTrigger id="customCaptchaCodeType" data-testid="select-captcha-format">
+                        <SelectValue placeholder="Select format" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="digit">Digits Only (0-9)</SelectItem>
+                        <SelectItem value="text">Text & Letters</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Choose character type for CAPTCHA codes
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="customCaptchaColor">Color Theme</Label>
+                    <Select
+                      value={getStringValue('customCaptchaColor')}
+                      onValueChange={(value) => handleChange('customCaptchaColor', value)}
+                    >
+                      <SelectTrigger id="customCaptchaColor" data-testid="select-captcha-color">
+                        <SelectValue placeholder="Select color" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="blue">Blue</SelectItem>
+                        <SelectItem value="red">Red</SelectItem>
+                        <SelectItem value="green">Green</SelectItem>
+                        <SelectItem value="purple">Purple</SelectItem>
+                        <SelectItem value="orange">Orange</SelectItem>
+                        <SelectItem value="gray">Gray</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Select visual color for CAPTCHA display
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="customCaptchaCodeLength">Code Length</Label>
+                    <Input
+                      id="customCaptchaCodeLength"
+                      type="number"
+                      min="4"
+                      max="8"
+                      value={getNumberValue('customCaptchaCodeLength')}
+                      onChange={(e) => handleChange('customCaptchaCodeLength', parseInt(e.target.value) || 6)}
+                      data-testid="input-captcha-length"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Length: 4-8 characters (default 6)
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
           </CardContent>

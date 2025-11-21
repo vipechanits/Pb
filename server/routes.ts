@@ -4294,7 +4294,159 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Enhanced Restore database from backup
+  // Get backup history from database
+  app.get("/api/admin/system/backup-history", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const { backupHistory } = await import('@shared/schema');
+      const history = await db.select().from(backupHistory).orderBy(desc(backupHistory.createdAt)).limit(50);
+      res.json({ history });
+    } catch (error) {
+      console.error("[ADMIN] Failed to get backup history:", error);
+      res.status(500).json({ error: "Failed to get backup history" });
+    }
+  });
+
+  // Get backup statistics and status
+  app.get("/api/admin/system/backup-stats", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const { backupHistory } = await import('@shared/schema');
+      const allBackups = await db.select().from(backupHistory);
+      const completedBackups = allBackups.filter(b => b.status === 'completed');
+      const autoBackups = completedBackups.filter(b => b.isAutomatic);
+      const totalSize = completedBackups.reduce((sum, b) => sum + (b.fileSizeBytes || 0), 0);
+      const lastBackup = allBackups.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+      const lastAutoBackup = autoBackups.sort((a, b) => new Date(b.completedAt || b.createdAt).getTime() - new Date(a.completedAt || a.createdAt).getTime())[0];
+      let nextAutoBackup = new Date();
+      if (lastAutoBackup?.completedAt) {
+        nextAutoBackup = new Date(new Date(lastAutoBackup.completedAt).getTime() + 24 * 60 * 60 * 1000);
+      }
+      res.json({
+        totalBackups: allBackups.length,
+        completedBackups: completedBackups.length,
+        failedBackups: allBackups.filter(b => b.status === 'failed').length,
+        pendingBackups: allBackups.filter(b => b.status === 'pending').length,
+        autoBackups: autoBackups.length,
+        manualBackups: completedBackups.filter(b => !b.isAutomatic).length,
+        totalSizeMB: (totalSize / 1024 / 1024).toFixed(2),
+        lastBackup: lastBackup,
+        nextAutoBackup: nextAutoBackup.toISOString(),
+        cloudBackups: completedBackups.filter(b => b.googleDriveFileId).length,
+      });
+    } catch (error) {
+      console.error("[ADMIN] Failed to get backup stats:", error);
+      res.status(500).json({ error: "Failed to get backup statistics" });
+    }
+  });
+
+  // List backups from Google Drive
+  app.get("/api/admin/system/google-drive-backups", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const { listBackupFiles } = await import('./google-drive-backup');
+      const files = await listBackupFiles();
+      res.json({ files });
+    } catch (error) {
+      console.error("[ADMIN] Failed to list Google Drive backups:", error);
+      res.status(500).json({ error: "Failed to list Google Drive backups - ensure Google Drive is connected" });
+    }
+  });
+
+  // Restore from Google Drive backup
+  app.post("/api/admin/system/restore-from-drive", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const { fileId } = req.body;
+      if (!fileId) {
+        return res.status(400).json({ error: "No file ID provided" });
+      }
+
+      const { downloadBackupFromDrive } = await import('./google-drive-backup');
+      const stream = await downloadBackupFromDrive(fileId);
+      
+      // Convert stream to string
+      let backupContent = '';
+      stream.on('data', (chunk: any) => {
+        backupContent += chunk;
+      });
+
+      await new Promise((resolve, reject) => {
+        stream.on('end', resolve);
+        stream.on('error', reject);
+      });
+
+      const backup = JSON.parse(backupContent);
+
+      // Verify backup structure
+      if (!backup.timestamp) {
+        return res.status(400).json({ error: "Invalid backup file format - missing timestamp" });
+      }
+
+      console.log(`[ADMIN] Starting restore process from Google Drive backup: ${backup.timestamp}`);
+
+      try {
+        // Clear and restore data (in reverse order - foreign key constraints)
+        await db.delete(notifications);
+        await db.delete(activationMatrixPositions);
+        await db.delete(binaryMatchQueue);
+        await db.delete(activationPayments);
+        await db.delete(incomeTransactions);
+        await db.delete(userIncomeSummaries);
+        await db.delete(activations);
+        await db.delete(reentries);
+        await db.delete(users);
+
+        // Restore from new format (v2.0)
+        const data = backup.tables || backup.data;
+
+        if (data.users?.data?.length > 0) {
+          await db.insert(users).values(data.users.data);
+        }
+        if (data.reentries?.data?.length > 0) {
+          await db.insert(reentries).values(data.reentries.data);
+        }
+        if (data.activations?.data?.length > 0) {
+          await db.insert(activations).values(data.activations.data);
+        }
+        if (data.activationPayments?.data?.length > 0) {
+          await db.insert(activationPayments).values(data.activationPayments.data);
+        }
+        if (data.incomeTransactions?.data?.length > 0) {
+          await db.insert(incomeTransactions).values(data.incomeTransactions.data);
+        }
+        if (data.activationMatrixPositions?.data?.length > 0) {
+          await db.insert(activationMatrixPositions).values(data.activationMatrixPositions.data);
+        }
+        if (data.binaryMatchQueue?.data?.length > 0) {
+          await db.insert(binaryMatchQueue).values(data.binaryMatchQueue.data);
+        }
+        if (data.userIncomeSummaries?.data?.length > 0) {
+          await db.insert(userIncomeSummaries).values(data.userIncomeSummaries.data);
+        }
+        if (data.notifications?.data?.length > 0) {
+          await db.insert(notifications).values(data.notifications.data);
+        }
+
+        const summary = `Restored ${data.users?.count || 0} users, ${data.activationPayments?.count || 0} payments, ${data.incomeTransactions?.count || 0} income transactions`;
+        console.log(`[ADMIN] Admin ${req.session.userId} restored database from Google Drive: ${summary}`);
+        
+        res.json({ 
+          success: true, 
+          message: "Platform restored successfully from Google Drive",
+          summary: summary,
+          backupTimestamp: backup.timestamp,
+        });
+      } catch (error) {
+        console.error("[ADMIN] Failed to restore data from Google Drive:", error);
+        res.status(500).json({ 
+          error: "Failed to restore database data", 
+          details: error instanceof Error ? error.message : String(error) 
+        });
+      }
+    } catch (error) {
+      console.error("[ADMIN] Failed to download backup from Google Drive:", error);
+      res.status(500).json({ error: "Failed to download backup from Google Drive" });
+    }
+  });
+
+  // Enhanced Restore database from backup file upload
   app.post("/api/admin/system/restore", adminRateLimiter, requireAdmin, async (req, res) => {
     try {
       const files = req.files as any;

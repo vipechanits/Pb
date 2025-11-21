@@ -384,6 +384,12 @@ export const systemConfig = pgTable("system_config", {
   recaptchaSecretKey: text("recaptcha_secret_key"), // Google reCAPTCHA v2 secret key
   recaptchaEnabled: boolean("recaptcha_enabled").notNull().default(false),
   
+  // Custom CAPTCHA configuration
+  customCaptchaEnabled: boolean("custom_captcha_enabled").notNull().default(false),
+  customCaptchaCodeLength: integer("custom_captcha_code_length").notNull().default(6),
+  customCaptchaCodeType: text("custom_captcha_code_type").notNull().default('digit'), // 'digit' or 'text'
+  customCaptchaColor: text("custom_captcha_color").notNull().default('blue'), // Color selection
+  
   // Email/SMTP configuration
   emailHost: text("email_host"), // SMTP server hostname (e.g., smtp.gmail.com)
   emailPort: integer("email_port").default(587), // SMTP port (587 for TLS, 465 for SSL)
@@ -888,3 +894,29 @@ export type InsertTicket = z.infer<typeof insertTicketSchema>;
 export type Ticket = typeof tickets.$inferSelect;
 export type InsertTicketReply = z.infer<typeof insertTicketReplySchema>;
 export type TicketReply = typeof ticketReplies.$inferSelect;
+
+// Backup History Table
+export const backupStatusEnum = pgEnum("backup_status", ["pending", "completed", "failed"]);
+
+export const backupHistory = pgTable("backup_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  backupName: varchar("backup_name", { length: 255 }).notNull(),
+  status: backupStatusEnum("status").notNull().default('pending'),
+  fileSizeBytes: integer("file_size_bytes"),
+  recordCount: jsonb("record_count"), // JSON with table counts
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+  googleDriveFileId: varchar("google_drive_file_id", { length: 255 }),
+  googleDriveFolderLink: text("google_drive_folder_link"),
+  isAutomatic: boolean("is_automatic").notNull().default(false),
+  backupData: text("backup_data"), // Full backup JSON stored
+  notes: text("notes"),
+});
+
+export const insertBackupHistorySchema = createInsertSchema(backupHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertBackupHistory = z.infer<typeof insertBackupHistorySchema>;
+export type BackupHistory = typeof backupHistory.$inferSelect;

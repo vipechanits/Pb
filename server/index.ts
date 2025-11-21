@@ -9,6 +9,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { storage } from "./storage";
 import { initializeWebSocketServer } from "./websocket";
+import { startBackupScheduler } from "./backup-scheduler";
 import {
   helmetMiddleware,
   ipBlockMiddleware,
@@ -271,6 +272,9 @@ app.use((req, res, next) => {
     await storage.initializeUserIdSequence();
     
     console.log('✓ Database initialized successfully');
+
+    // Start auto-backup scheduler (24-hour interval with Google Drive upload)
+    startBackupScheduler();
 
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;

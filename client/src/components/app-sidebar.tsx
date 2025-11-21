@@ -194,6 +194,11 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       icon: Database,
     },
     {
+      title: 'Backup Management',
+      url: '/admin/backups',
+      icon: Database,
+    },
+    {
       title: 'Security',
       url: '/admin/security',
       icon: Shield,
