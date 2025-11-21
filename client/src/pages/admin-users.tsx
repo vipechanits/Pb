@@ -3,10 +3,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Users, Search, Mail, User, Shield, Filter, X, RefreshCw, ArrowLeft, ArrowRight, CheckCircle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Users, Search, Mail, User, Shield, Filter, X, RefreshCw, ArrowLeft, ArrowRight, CheckCircle, XCircle, ChevronLeft, ChevronRight, Lock, LockOpen } from 'lucide-react';
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { format } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
+import { apiRequest, queryClient } from '@/lib/queryClient';
 import {
   Dialog,
   DialogContent,
@@ -41,6 +43,7 @@ interface AdminUser {
   isProfileComplete: boolean;
   isActivated: boolean;
   activatedAt: string | null;
+  isDisabled: boolean;
   reentryCount: number;
   currentCycleNumber: number;
   isEligibleForReentry: boolean;
@@ -65,6 +68,7 @@ interface IncomeData {
 const USERS_PER_PAGE = 50;
 
 export default function AdminUsers() {
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [activationFilter, setActivationFilter] = useState<string>('all');
   const [roleFilter, setRoleFilter] = useState<string>('all');
@@ -77,6 +81,28 @@ export default function AdminUsers() {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [incomeData, setIncomeData] = useState<IncomeData | null>(null);
+  
+  // Mutation to toggle user disabled status
+  const toggleDisabledMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await apiRequest('POST', `/api/admin/users/${userId}/toggle-disabled`, {});
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      toast({
+        title: 'Success',
+        description: data.message,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to toggle user status',
+      });
+    },
+  });
 
   // Build query params
   const buildQueryParams = () => {
@@ -509,28 +535,51 @@ export default function AdminUsers() {
                       </div>
                     </div>
 
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={async () => {
-                        setSelectedUser(user);
-                        try {
-                          const response = await fetch(`/api/admin/users/${user.userId}/income`, { credentials: 'include' });
-                          if (response.ok) {
-                            const income = await response.json();
-                            setIncomeData(income);
+                    <div className="flex items-center gap-2">
+                      {user.isActivated && (
+                        <Button
+                          size="sm"
+                          variant={user.isDisabled ? 'destructive' : 'outline'}
+                          onClick={() => toggleDisabledMutation.mutate(user.userId)}
+                          disabled={toggleDisabledMutation.isPending}
+                          data-testid={`button-toggle-disabled-${user.userId}`}
+                        >
+                          {user.isDisabled ? (
+                            <>
+                              <Lock className="w-4 h-4 mr-1" />
+                              Enable
+                            </>
+                          ) : (
+                            <>
+                              <LockOpen className="w-4 h-4 mr-1" />
+                              Disable
+                            </>
+                          )}
+                        </Button>
+                      )}
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={async () => {
+                          setSelectedUser(user);
+                          try {
+                            const response = await fetch(`/api/admin/users/${user.userId}/income`, { credentials: 'include' });
+                            if (response.ok) {
+                              const income = await response.json();
+                              setIncomeData(income);
+                            }
+                          } catch (error) {
+                            console.error('Failed to fetch income data:', error);
                           }
-                        } catch (error) {
-                          console.error('Failed to fetch income data:', error);
-                        }
-                      }}
-                      data-testid={`button-view-${user.userId}`}
-                    >
-                      View Details
-                    </Button>
+                        }}
+                        data-testid={`button-view-${user.userId}`}
+                      >
+                        View Details
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              ))}
+                ))}
               </div>
 
               {/* Pagination Controls */}

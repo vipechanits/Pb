@@ -159,6 +159,7 @@ export const users = pgTable("users", {
   // Account status
   isActivated: boolean("is_activated").notNull().default(false),
   activatedAt: timestamp("activated_at"),
+  isDisabled: boolean("is_disabled").notNull().default(false), // Admin can disable activated users
   
   // Re-entry tracking
   reentryCount: integer("reentry_count").notNull().default(0), // Number of times user has re-entered

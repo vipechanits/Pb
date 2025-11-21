@@ -3712,6 +3712,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ADMIN: Toggle user disabled status (disable/enable activated users)
+  app.post("/api/admin/users/:userId/toggle-disabled", adminRateLimiter, requireAdmin, async (req: any, res: any) => {
+    try {
+      const { userId } = req.params;
+      
+      // Get user by PB ID
+      const userResult = await db.select()
+        .from(users)
+        .where(eq(users.userId, userId))
+        .limit(1);
+      
+      const user = userResult[0];
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Can only disable activated users
+      if (!user.isActivated) {
+        return res.status(400).json({ error: "Can only disable activated users" });
+      }
+      
+      // Toggle disabled status
+      const newDisabledStatus = !user.isDisabled;
+      
+      await db.update(users)
+        .set({ isDisabled: newDisabledStatus, updatedAt: new Date() })
+        .where(eq(users.id, user.id));
+      
+      console.log(`[ADMIN] Admin ${req.session.userId} toggled disabled status for ${userId}: ${newDisabledStatus}`);
+      
+      res.json({
+        success: true,
+        userId,
+        isDisabled: newDisabledStatus,
+        message: `User ${userId} is now ${newDisabledStatus ? 'disabled' : 'enabled'}`
+      });
+    } catch (error: any) {
+      console.error("[ADMIN] Failed to toggle user disabled status:", error);
+      res.status(500).json({ error: "Failed to toggle user disabled status", details: error.message });
+    }
+  });
+
   // ============================================================================
   // SECURITY MONITORING - Admin only
   // ============================================================================
@@ -3948,6 +3990,393 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Run cleanup immediately on server startup
   cleanupPendingRegistrations();
+
+  // ===== SYSTEM MANAGEMENT ENDPOINTS =====
+
+  // Maintenance mode state (in-memory)
+  let maintenanceMode = false;
+
+  // Get maintenance status
+  app.get("/api/admin/system/maintenance", adminRateLimiter, requireAdmin, (req, res) => {
+    res.json({ maintenanceMode });
+  });
+
+  // Toggle maintenance mode
+  app.post("/api/admin/system/maintenance", adminRateLimiter, requireAdmin, (req, res) => {
+    try {
+      const { maintenanceMode: mode } = req.body;
+      maintenanceMode = mode;
+      console.log(`[ADMIN] Admin ${req.session.userId} toggled maintenance mode: ${maintenanceMode}`);
+      res.json({ success: true, maintenanceMode });
+    } catch (error) {
+      console.error("[ADMIN] Failed to toggle maintenance mode:", error);
+      res.status(500).json({ error: "Failed to toggle maintenance mode" });
+    }
+  });
+
+  // Admin Dashboard Statistics
+  app.get("/api/admin/dashboard/stats", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      // Get total users count
+      const totalUsersResult = await db.select({ count: count() })
+        .from(users)
+        .where(sql`${users.role} != 'admin'`);
+      const totalUsers = (totalUsersResult[0]?.count as number) || 0;
+
+      // Get pending activations (users with isActivated = false)
+      const pendingActivationsResult = await db.select({ count: count() })
+        .from(users)
+        .where(and(
+          eq(users.isActivated, false),
+          sql`${users.role} != 'admin'`
+        ));
+      const pendingActivations = (pendingActivationsResult[0]?.count as number) || 0;
+
+      // Get pending payments
+      const pendingPaymentsResult = await db.select({ count: count() })
+        .from(activationPayments)
+        .where(eq(activationPayments.status, 'pending'));
+      const pendingPayments = (pendingPaymentsResult[0]?.count as number) || 0;
+
+      // Get total confirmed income
+      const totalIncomeResult = await db.select({ total: sql<string>`COALESCE(SUM(CAST(amount_inr AS DECIMAL)), 0)` })
+        .from(incomeTransactions)
+        .where(eq(incomeTransactions.status, 'confirmed'));
+      const totalIncome = parseFloat((totalIncomeResult[0]?.total as string) || '0') || 0;
+
+      res.json({
+        totalUsers,
+        pendingActivations,
+        pendingPayments,
+        totalIncome,
+      });
+    } catch (error) {
+      console.error("[ADMIN] Failed to fetch dashboard stats:", error);
+      res.status(500).json({ error: "Failed to fetch dashboard statistics" });
+    }
+  });
+
+  // Get Pending Activations
+  app.get("/api/admin/pending-activations", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const pendingUsers = await db.select({
+        id: users.id,
+        userId: users.userId,
+        name: users.name,
+        email: users.email,
+        createdAt: users.createdAt,
+      }).from(users)
+        .where(and(
+          eq(users.isActivated, false),
+          sql`${users.role} != 'admin'`
+        ));
+
+      res.json(pendingUsers);
+    } catch (error) {
+      console.error("[ADMIN] Failed to fetch pending activations:", error);
+      res.status(500).json({ error: "Failed to fetch pending activations" });
+    }
+  });
+
+  // Get Pending Payments
+  app.get("/api/admin/pending-payments", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const pendingPayments = await db.select({
+        id: activationPayments.id,
+        amount: activationPayments.amountInr,
+        status: activationPayments.status,
+        payerUserId: activationPayments.payerUserId,
+        receiverUserId: activationPayments.receiverUserId,
+        paymentType: activationPayments.paymentType,
+        createdAt: activationPayments.createdAt,
+      }).from(activationPayments)
+        .where(eq(activationPayments.status, 'pending'));
+
+      res.json(pendingPayments);
+    } catch (error) {
+      console.error("[ADMIN] Failed to fetch pending payments:", error);
+      res.status(500).json({ error: "Failed to fetch pending payments" });
+    }
+  });
+
+  // Daily Payment Reports
+  app.get("/api/admin/reports/daily", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const receiverType = req.query.receiverType as string | undefined;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      let query = db.select({
+        status: activationPayments.status,
+        count: count(),
+        total: sql<string>`COALESCE(SUM(CAST(amount_inr AS DECIMAL)), 0)`,
+      }).from(activationPayments)
+        .where(sql`${activationPayments.confirmedAt} >= ${today} AND ${activationPayments.confirmedAt} < ${tomorrow}`);
+
+      if (receiverType) {
+        query = query.where(eq(activationPayments.receiverType, receiverType as any));
+      }
+
+      const stats = await query.groupBy(activationPayments.status);
+
+      res.json({
+        date: today.toLocaleDateString('en-IN'),
+        receiverType: receiverType || 'all',
+        payments: stats,
+        totalAmount: stats.reduce((sum, s) => sum + parseFloat(s.total || '0'), 0),
+      });
+    } catch (error) {
+      console.error("[ADMIN] Failed to fetch daily report:", error);
+      res.status(500).json({ error: "Failed to fetch daily report" });
+    }
+  });
+
+  // Weekly Payment Reports
+  app.get("/api/admin/reports/weekly", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const receiverType = req.query.receiverType as string | undefined;
+      const today = new Date();
+      const dayOfWeek = today.getDay();
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - dayOfWeek);
+      startOfWeek.setHours(0, 0, 0, 0);
+
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 7);
+
+      let query = db.select({
+        status: activationPayments.status,
+        count: count(),
+        total: sql<string>`COALESCE(SUM(CAST(amount_inr AS DECIMAL)), 0)`,
+      }).from(activationPayments)
+        .where(sql`${activationPayments.confirmedAt} >= ${startOfWeek} AND ${activationPayments.confirmedAt} < ${endOfWeek}`);
+
+      if (receiverType) {
+        query = query.where(eq(activationPayments.receiverType, receiverType as any));
+      }
+
+      const stats = await query.groupBy(activationPayments.status);
+
+      res.json({
+        weekStart: startOfWeek.toLocaleDateString('en-IN'),
+        weekEnd: new Date(endOfWeek.getTime() - 1).toLocaleDateString('en-IN'),
+        receiverType: receiverType || 'all',
+        payments: stats,
+        totalAmount: stats.reduce((sum, s) => sum + parseFloat(s.total || '0'), 0),
+      });
+    } catch (error) {
+      console.error("[ADMIN] Failed to fetch weekly report:", error);
+      res.status(500).json({ error: "Failed to fetch weekly report" });
+    }
+  });
+
+  // Monthly Payment Reports
+  app.get("/api/admin/reports/monthly", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const receiverType = req.query.receiverType as string | undefined;
+      const today = new Date();
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+
+      let query = db.select({
+        status: activationPayments.status,
+        count: count(),
+        total: sql<string>`COALESCE(SUM(CAST(amount_inr AS DECIMAL)), 0)`,
+      }).from(activationPayments)
+        .where(sql`${activationPayments.confirmedAt} >= ${startOfMonth} AND ${activationPayments.confirmedAt} < ${endOfMonth}`);
+
+      if (receiverType) {
+        query = query.where(eq(activationPayments.receiverType, receiverType as any));
+      }
+
+      const stats = await query.groupBy(activationPayments.status);
+
+      res.json({
+        month: today.toLocaleDateString('en-IN', { year: 'numeric', month: 'long' }),
+        receiverType: receiverType || 'all',
+        payments: stats,
+        totalAmount: stats.reduce((sum, s) => sum + parseFloat(s.total || '0'), 0),
+      });
+    } catch (error) {
+      console.error("[ADMIN] Failed to fetch monthly report:", error);
+      res.status(500).json({ error: "Failed to fetch monthly report" });
+    }
+  });
+
+  // Export CSV - All confirmed payments
+  app.get("/api/admin/reports/export-csv", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const receiverType = req.query.receiverType as string | undefined;
+      let query = db.select({
+        id: activationPayments.id,
+        paymentType: activationPayments.paymentType,
+        amount: activationPayments.amountInr,
+        status: activationPayments.status,
+        payerUserId: activationPayments.payerUserId,
+        receiverUserId: activationPayments.receiverUserId,
+        receiverType: activationPayments.receiverType,
+        confirmedAt: activationPayments.confirmedAt,
+        createdAt: activationPayments.createdAt,
+      }).from(activationPayments).where(eq(activationPayments.status, 'confirmed'));
+
+      if (receiverType) {
+        query = query.where(eq(activationPayments.receiverType, receiverType as any));
+      }
+
+      const allPayments = await query;
+
+      const csvHeader = 'Payment ID,Type,Amount (INR),Payer,Receiver,Receiver Type,Date\n';
+      const csvRows = allPayments.map(p => 
+        `${p.id},"${p.paymentType}","${p.amount}","${p.payerUserId}","${p.receiverUserId || 'Admin'}","${p.receiverType}",${ new Date(p.confirmedAt || '').toLocaleDateString('en-IN')}`
+      ).join('\n');
+
+      const csv = csvHeader + csvRows;
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="payments-report-${Date.now()}.csv"`);
+      res.send(csv);
+    } catch (error) {
+      console.error("[ADMIN] Failed to export CSV:", error);
+      res.status(500).json({ error: "Failed to export CSV" });
+    }
+  });
+
+  // Enhanced Backup database with all tables
+  app.post("/api/admin/system/backup", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      // Fetch all data from all tables
+      const allUsers = await db.select().from(users);
+      const allActivations = await db.select().from(activations);
+      const allActivationPayments = await db.select().from(activationPayments);
+      const allIncomeTransactions = await db.select().from(incomeTransactions);
+      const allNotifications = await db.select().from(notifications);
+      const allReentries = await db.select().from(reentries);
+      const allMatrixPositions = await db.select().from(activationMatrixPositions);
+      const allBinaryMatchQueue = await db.select().from(binaryMatchQueue);
+      const allUserIncomeSummary = await db.select().from(userIncomeSummaries);
+      const config = await db.select().from(systemConfig);
+
+      const backup = {
+        timestamp: new Date().toISOString(),
+        version: "2.0",
+        platform: "PAYBACK247",
+        description: "Complete platform backup including schema, data, and configuration",
+        tables: {
+          users: { count: allUsers.length, data: allUsers },
+          activations: { count: allActivations.length, data: allActivations },
+          activationPayments: { count: allActivationPayments.length, data: allActivationPayments },
+          incomeTransactions: { count: allIncomeTransactions.length, data: allIncomeTransactions },
+          notifications: { count: allNotifications.length, data: allNotifications },
+          reentries: { count: allReentries.length, data: allReentries },
+          activationMatrixPositions: { count: allMatrixPositions.length, data: allMatrixPositions },
+          binaryMatchQueue: { count: allBinaryMatchQueue.length, data: allBinaryMatchQueue },
+          userIncomeSummaries: { count: allUserIncomeSummary.length, data: allUserIncomeSummary },
+          systemConfig: { count: config.length, data: config },
+        },
+        summary: {
+          totalUsers: allUsers.length,
+          totalActivations: allActivations.length,
+          totalPayments: allActivationPayments.length,
+          totalIncomeTransactions: allIncomeTransactions.length,
+          totalNotifications: allNotifications.length,
+        },
+      };
+
+      console.log(`[ADMIN] Admin ${req.session.userId} created complete platform backup with ${allUsers.length} users, ${allActivationPayments.length} payments`);
+
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="payback247-backup-${Date.now()}.json"`);
+      res.send(JSON.stringify(backup, null, 2));
+    } catch (error) {
+      console.error("[ADMIN] Failed to create backup:", error);
+      res.status(500).json({ error: "Failed to create backup" });
+    }
+  });
+
+  // Enhanced Restore database from backup
+  app.post("/api/admin/system/restore", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const files = req.files as any;
+      if (!files || !files.file) {
+        return res.status(400).json({ error: "No file provided" });
+      }
+
+      const file = files.file as any;
+      const backupContent = file.data.toString('utf-8');
+      const backup = JSON.parse(backupContent);
+
+      // Verify backup structure
+      if (!backup.timestamp) {
+        return res.status(400).json({ error: "Invalid backup file format - missing timestamp" });
+      }
+
+      console.log(`[ADMIN] Starting restore process from backup: ${backup.timestamp}`);
+
+      try {
+        // Clear and restore data (in reverse order - foreign key constraints)
+        await db.delete(notifications);
+        await db.delete(activationMatrixPositions);
+        await db.delete(binaryMatchQueue);
+        await db.delete(activationPayments);
+        await db.delete(incomeTransactions);
+        await db.delete(userIncomeSummaries);
+        await db.delete(activations);
+        await db.delete(reentries);
+        await db.delete(users);
+
+        // Restore from new format (v2.0)
+        const data = backup.tables || backup.data;
+
+        if (data.users?.data?.length > 0) {
+          await db.insert(users).values(data.users.data);
+        }
+        if (data.reentries?.data?.length > 0) {
+          await db.insert(reentries).values(data.reentries.data);
+        }
+        if (data.activations?.data?.length > 0) {
+          await db.insert(activations).values(data.activations.data);
+        }
+        if (data.activationPayments?.data?.length > 0) {
+          await db.insert(activationPayments).values(data.activationPayments.data);
+        }
+        if (data.incomeTransactions?.data?.length > 0) {
+          await db.insert(incomeTransactions).values(data.incomeTransactions.data);
+        }
+        if (data.activationMatrixPositions?.data?.length > 0) {
+          await db.insert(activationMatrixPositions).values(data.activationMatrixPositions.data);
+        }
+        if (data.binaryMatchQueue?.data?.length > 0) {
+          await db.insert(binaryMatchQueue).values(data.binaryMatchQueue.data);
+        }
+        if (data.userIncomeSummaries?.data?.length > 0) {
+          await db.insert(userIncomeSummaries).values(data.userIncomeSummaries.data);
+        }
+        if (data.notifications?.data?.length > 0) {
+          await db.insert(notifications).values(data.notifications.data);
+        }
+
+        const summary = `Restored ${data.users?.count || 0} users, ${data.activationPayments?.count || 0} payments, ${data.incomeTransactions?.count || 0} income transactions`;
+        console.log(`[ADMIN] Admin ${req.session.userId} restored database: ${summary}`);
+        
+        res.json({ 
+          success: true, 
+          message: "Platform restored successfully",
+          summary: summary,
+          backupTimestamp: backup.timestamp,
+        });
+      } catch (error) {
+        console.error("[ADMIN] Failed to restore data:", error);
+        res.status(500).json({ 
+          error: "Failed to restore database data", 
+          details: error instanceof Error ? error.message : String(error) 
+        });
+      }
+    } catch (error) {
+      console.error("[ADMIN] Failed to process backup file:", error);
+      res.status(500).json({ error: "Failed to process backup file" });
+    }
+  });
 
   const httpServer = createServer(app);
 

@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Shield, Ban, CheckCircle, AlertTriangle, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { Shield, Ban, CheckCircle, AlertTriangle, RefreshCw, Power } from "lucide-react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 
 type SecurityStats = {
@@ -26,6 +26,49 @@ export default function AdminSecurity() {
   const { toast } = useToast();
   const [ipToBlock, setIpToBlock] = useState("");
   const [ipToUnblock, setIpToUnblock] = useState("");
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [maintenanceLoading, setMaintenanceLoading] = useState(false);
+
+  useEffect(() => {
+    fetchMaintenanceStatus();
+  }, []);
+
+  const fetchMaintenanceStatus = async () => {
+    try {
+      const response = await apiRequest('GET', '/api/admin/system/maintenance');
+      if (response.ok) {
+        const data = await response.json();
+        setMaintenanceMode(data.maintenanceMode);
+      }
+    } catch (error) {
+      console.error('Failed to fetch maintenance status:', error);
+    }
+  };
+
+  const handleToggleMaintenance = async () => {
+    try {
+      setMaintenanceLoading(true);
+      const response = await apiRequest('POST', '/api/admin/system/maintenance', {
+        maintenanceMode: !maintenanceMode,
+      });
+
+      if (!response.ok) throw new Error('Failed to toggle maintenance mode');
+
+      setMaintenanceMode(!maintenanceMode);
+      toast({
+        title: 'Success',
+        description: `Maintenance mode is now ${!maintenanceMode ? 'ON' : 'OFF'}`,
+      });
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to toggle maintenance mode',
+      });
+    } finally {
+      setMaintenanceLoading(false);
+    }
+  };
 
   const { data: securityStats, isLoading } = useQuery<SecurityStats>({
     queryKey: ["/api/admin/security/stats"],
@@ -123,6 +166,37 @@ export default function AdminSecurity() {
           Refresh
         </Button>
       </div>
+
+      {/* Maintenance Mode Toggle */}
+      <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950 dark:border-orange-800">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Power className="h-5 w-5" />
+            Maintenance Mode
+          </CardTitle>
+          <CardDescription>
+            Enable to block all regular users (admins bypass)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between p-4 border rounded-lg">
+            <div>
+              <p className="font-medium">Status: {maintenanceMode ? 'ON' : 'OFF'}</p>
+              <p className="text-sm text-muted-foreground">
+                {maintenanceMode ? 'Platform is in maintenance mode' : 'Platform is operational'}
+              </p>
+            </div>
+            <Button
+              onClick={handleToggleMaintenance}
+              disabled={maintenanceLoading}
+              variant={maintenanceMode ? 'destructive' : 'default'}
+              data-testid="button-toggle-maintenance"
+            >
+              {maintenanceLoading ? 'Updating...' : (maintenanceMode ? 'Turn OFF' : 'Turn ON')}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Statistics */}
       <div className="grid gap-4 md:grid-cols-2">
