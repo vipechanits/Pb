@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AlertCircle, Mail, Lock, Hash } from 'lucide-react';
 import { useRecaptcha } from '@/hooks/use-recaptcha';
 import { apiRequest } from '@/lib/queryClient';
+import { CustomCaptcha } from '@/components/custom-captcha';
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
@@ -27,6 +28,7 @@ export default function LoginPage() {
   const [unverifiedEmail, setUnverifiedEmail] = useState('');
   const [resendingEmail, setResendingEmail] = useState(false);
   const [resendSuccess, setResendSuccess] = useState('');
+  const [captchaCode, setCaptchaCode] = useState('');
   const recaptchaRef = useRef<HTMLDivElement>(null);
   const { isLoaded, isEnabled, renderRecaptcha, executeRecaptcha } = useRecaptcha();
 
@@ -275,6 +277,13 @@ export default function LoginPage() {
                   </p>
                 </div>
               </TabsContent>
+
+              {/* Custom CAPTCHA */}
+              <CustomCaptcha 
+                onCaptchaChange={setCaptchaCode} 
+                isValid={captchaCode === ''} 
+                data-testid="custom-captcha-login"
+              />
 
               <Button type="submit" className="w-full" disabled={loginMode === 'password' ? passwordLoading : pinLoading} data-testid="button-login">
                 {(loginMode === 'password' ? passwordLoading : pinLoading) ? 'Logging in...' : loginMode === 'pin' ? 'Log In with PIN' : 'Log In'}

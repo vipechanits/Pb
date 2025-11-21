@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Mail } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 import { useRecaptcha } from '@/hooks/use-recaptcha';
+import { CustomCaptcha } from '@/components/custom-captcha';
 
 export default function SignupPage() {
   const [, setLocation] = useLocation();
@@ -23,6 +24,7 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [captchaCode, setCaptchaCode] = useState('');
   const recaptchaRef = useRef<HTMLDivElement>(null);
   const { isLoaded, isEnabled, renderRecaptcha, executeRecaptcha } = useRecaptcha();
 
@@ -249,6 +251,13 @@ export default function SignupPage() {
                 <div ref={recaptchaRef} className="g-recaptcha" data-testid="recaptcha-widget"></div>
               </div>
             )}
+
+            {/* Custom CAPTCHA */}
+            <CustomCaptcha 
+              onCaptchaChange={setCaptchaCode} 
+              isValid={captchaCode === ''} 
+              data-testid="custom-captcha-signup"
+            />
 
             {/* Terms & Conditions Checkbox */}
             <div className="flex items-start space-x-2" data-testid="checkbox-terms-container">
