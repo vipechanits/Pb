@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Shield, Users, TrendingUp, Zap, GitBranch, Grid3x3, ArrowRight, Check } from 'lucide-react';
+import { Shield, Users, TrendingUp, Zap, GitBranch, Grid3x3, ArrowRight, Check, Heart, HandHelping } from 'lucide-react';
 import logoUrl from '@assets/payback247-logo_1763267164811.png';
 import { useSystemConfig, formatINR } from '@/hooks/use-system-config';
 
@@ -72,7 +72,7 @@ export default function Landing() {
       answer: `Sign up with your email, complete your profile with payment details (UPI ID, bank account), then activate your account by making 8 payments to designated members (${formatINR(config.paymentSlots.slot0Amount)} to sponsor, ${formatINR(config.paymentSlots.slot1Amount)} to binary match, ${formatINR(config.paymentSlots.slot2Amount)} top reward, and ${formatINR(config.matrixLevel1Amount)} to each of 5 matrix levels).`
     },
     {
-      question: 'What is the 2+5 non-working matrix?',
+      question: 'What is the 2x5 non-working matrix?',
       answer: `You only need 2 direct referrals. After that, our system automatically places new members in your 5-level matrix (breadth-first), creating passive income without constant recruiting. Each matrix level can earn you ${formatINR(config.matrixLevel1Amount)} per member.`
     },
     {
@@ -122,10 +122,10 @@ export default function Landing() {
           <div className="max-w-4xl mx-auto text-center space-y-8">
             <div className="space-y-4">
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight">
-                Build Your Financial Future
+                Empower Community, Achieve Financial Freedom
               </h1>
               <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto">
-                Join PAYBACK247's non-working matrix system. Earn passive income through proven 2+5 structure with direct peer-to-peer payments.
+                Join PAYBACK247 and be part of a community where everyone helps each other first. Support members in need through our 2x5 system, and receive help multiplied back through direct peer-to-peer payments.
               </p>
             </div>
 
@@ -141,29 +141,96 @@ export default function Landing() {
               </Button>
               <div className="text-sm text-muted-foreground">
                 {isLoading ? (
-                  <>
-                    <div className="flex items-center justify-center gap-2">
-                      <Skeleton className="h-4 w-4 rounded-full" />
-                      <Skeleton className="h-4 w-40" />
-                    </div>
-                    <div className="flex items-center justify-center gap-2 mt-1">
-                      <Skeleton className="h-4 w-4 rounded-full" />
-                      <Skeleton className="h-4 w-36" />
-                    </div>
-                  </>
+                  <div className="flex items-center justify-center gap-2">
+                    <Skeleton className="h-4 w-4 rounded-full" />
+                    <Skeleton className="h-4 w-40" />
+                  </div>
                 ) : (
-                  <>
-                    <div className="flex items-center justify-center gap-2">
-                      <Check className="h-4 w-4 text-green-500" />
-                      <span>{formatINR(config.totalActivationCost)} one-time activation</span>
-                    </div>
-                    <div className="flex items-center justify-center gap-2 mt-1">
-                      <Check className="h-4 w-4 text-green-500" />
-                      <span>8 payments of {formatINR(config.paymentSlots.slot3Amount)} each</span>
-                    </div>
-                  </>
+                  <div className="flex items-center justify-center gap-2">
+                    <Check className="h-4 w-4 text-green-500" />
+                    <span>{formatINR(config.totalActivationCost)} one-time activation</span>
+                  </div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Philosophy Section */}
+      <section className="py-16 sm:py-20">
+        <div className="container mx-auto px-4 sm:px-6">
+          <div className="max-w-4xl mx-auto">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl sm:text-4xl font-bold mb-4">Our Philosophy</h2>
+              <p className="text-muted-foreground text-lg">
+                Give First, Receive With Gratitude
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-8 items-center">
+              <Card className="border-none shadow-sm bg-gradient-to-br from-primary/10 to-transparent">
+                <CardHeader>
+                  <div className="w-14 h-14 rounded-full bg-primary/20 flex items-center justify-center mb-4">
+                    <HandHelping className="w-7 h-7 text-primary" />
+                  </div>
+                  <CardTitle className="text-2xl">Step 1: Give Help & Support</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-muted-foreground leading-relaxed">
+                    When you join PAYBACK247, you activate your account by helping others. Your 8 payments go directly to members below you - you're the first to give. This creates a community of mutual support where everyone helps lift each other up.
+                  </p>
+                  <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
+                    <li className="flex items-start gap-2">
+                      <Check className="h-4 w-4 text-green-500 mt-1 shrink-0" />
+                      <span>Support members who came before you</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check className="h-4 w-4 text-green-500 mt-1 shrink-0" />
+                      <span>Build genuine relationships through giving</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check className="h-4 w-4 text-green-500 mt-1 shrink-0" />
+                      <span>Create a culture of generosity</span>
+                    </li>
+                  </ul>
+                </CardContent>
+              </Card>
+
+              <Card className="border-none shadow-sm bg-gradient-to-br from-purple-500/10 to-transparent">
+                <CardHeader>
+                  <div className="w-14 h-14 rounded-full bg-purple-500/20 flex items-center justify-center mb-4">
+                    <Heart className="w-7 h-7 text-purple-500" />
+                  </div>
+                  <CardTitle className="text-2xl">Step 2: Receive With Gratitude</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-muted-foreground leading-relaxed">
+                    As new members join below you and activate their accounts, they do the same thing - help others. You receive help from them as they grow and expand the network. What you gave comes back multiplied through a network that truly values mutual support.
+                  </p>
+                  <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
+                    <li className="flex items-start gap-2">
+                      <Check className="h-4 w-4 text-green-500 mt-1 shrink-0" />
+                      <span>Receive payments from your growing network</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check className="h-4 w-4 text-green-500 mt-1 shrink-0" />
+                      <span>Earn through matrix and binary income</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check className="h-4 w-4 text-green-500 mt-1 shrink-0" />
+                      <span>Unlimited re-entry cycles for continuous earnings</span>
+                    </li>
+                  </ul>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="mt-12 p-8 bg-primary/5 rounded-lg border border-primary/20 text-center">
+              <p className="text-lg font-semibold text-foreground mb-2">The Circle of Giving</p>
+              <p className="text-muted-foreground max-w-2xl mx-auto">
+                PAYBACK247 is built on a simple but powerful principle: a thriving community where everyone both gives and receives. By helping others first, you create genuine value and build lasting relationships. Your success comes naturally when others around you succeed.
+              </p>
             </div>
           </div>
         </div>
@@ -196,41 +263,13 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Income Streams */}
-      <section className="py-16 sm:py-20">
-        <div className="container mx-auto px-4 sm:px-6">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">Multiple Income Streams</h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              Earn from 8 different payment slots totaling {formatINR(config.totalActivationCost)} per activation cycle
-            </p>
-          </div>
-          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {incomeStreams.map((stream, index) => (
-              <Card key={index} className="hover-elevate">
-                <CardHeader>
-                  <stream.icon className="w-10 h-10 text-primary mb-3" />
-                  <div className="flex items-baseline justify-between gap-2">
-                    <CardTitle className="text-lg">{stream.title}</CardTitle>
-                    <span className="text-2xl font-bold text-primary">{stream.amount}</span>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{stream.description}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* Feature Highlight */}
       <section className="py-16 sm:py-20 bg-primary text-primary-foreground">
         <div className="container mx-auto px-4 sm:px-6">
           <div className="max-w-5xl mx-auto">
             <div className="grid md:grid-cols-2 gap-12 items-center">
               <div className="space-y-6">
-                <h2 className="text-3xl sm:text-4xl font-bold">The 2+5 Matrix System</h2>
+                <h2 className="text-3xl sm:text-4xl font-bold">The 2x5 Matrix System</h2>
                 <p className="text-lg opacity-90 leading-relaxed">
                   Our revolutionary non-working matrix requires only 2 direct referrals. The system automatically places new members in your 5-level matrix through FIFO (First-In-First-Out) placement, creating passive income without constant recruiting.
                 </p>

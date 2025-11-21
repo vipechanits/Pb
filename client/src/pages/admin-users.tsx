@@ -3,10 +3,17 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Users, Search, Mail, User, Shield, Filter, X, RefreshCw, ArrowLeft, ArrowRight, CheckCircle, XCircle } from 'lucide-react';
+import { Users, Search, Mail, User, Shield, Filter, X, RefreshCw, ArrowLeft, ArrowRight, CheckCircle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface AdminUser {
   id: string;
@@ -41,7 +48,21 @@ interface AdminUser {
   emailVerified: boolean;
   createdAt: string;
   updatedAt: string;
+  pendingConfirmCount: number;
 }
+
+interface IncomeData {
+  direct_sponsor: string;
+  binary_match: string;
+  matrix_level_1: string;
+  matrix_level_2: string;
+  matrix_level_3: string;
+  matrix_level_4: string;
+  matrix_level_5: string;
+  total: string;
+}
+
+const USERS_PER_PAGE = 50;
 
 export default function AdminUsers() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -52,6 +73,10 @@ export default function AdminUsers() {
   const [matrixLevelFilter, setMatrixLevelFilter] = useState<string>('all');
   const [reentryEligibleFilter, setReentryEligibleFilter] = useState<string>('all');
   const [binaryQualifiedFilter, setBinaryQualifiedFilter] = useState<string>('all');
+  const [pendingConfirmFilter, setPendingConfirmFilter] = useState<string>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  const [incomeData, setIncomeData] = useState<IncomeData | null>(null);
 
   // Build query params
   const buildQueryParams = () => {
@@ -64,6 +89,7 @@ export default function AdminUsers() {
     if (matrixLevelFilter !== 'all') params.append('matrixLevel', matrixLevelFilter);
     if (reentryEligibleFilter !== 'all') params.append('reentryEligible', reentryEligibleFilter);
     if (binaryQualifiedFilter !== 'all') params.append('binaryQualified', binaryQualifiedFilter);
+    if (pendingConfirmFilter !== 'all') params.append('pendingConfirm', pendingConfirmFilter);
     return params.toString();
   };
 
@@ -88,16 +114,28 @@ export default function AdminUsers() {
     setMatrixLevelFilter('all');
     setReentryEligibleFilter('all');
     setBinaryQualifiedFilter('all');
+    setPendingConfirmFilter('all');
   };
 
   const hasActiveFilters = searchQuery || activationFilter !== 'all' || roleFilter !== 'all' || 
     binaryLegFilter !== 'all' || sponsorIdFilter || matrixLevelFilter !== 'all' || 
-    reentryEligibleFilter !== 'all' || binaryQualifiedFilter !== 'all';
+    reentryEligibleFilter !== 'all' || binaryQualifiedFilter !== 'all' || pendingConfirmFilter !== 'all';
 
   const totalUsers = users?.length || 0;
   const activeUsers = users?.filter(u => u.isActivated).length || 0;
   const adminUsers = users?.filter(u => u.role === 'admin').length || 0;
   const pendingUsers = users?.filter(u => !u.isActivated).length || 0;
+
+  // Pagination logic
+  const startIndex = (currentPage - 1) * USERS_PER_PAGE;
+  const endIndex = startIndex + USERS_PER_PAGE;
+  const paginatedUsers = users?.slice(startIndex, endIndex) || [];
+  const totalPages = Math.ceil((users?.length || 0) / USERS_PER_PAGE);
+
+  const handleClearFilters = () => {
+    clearAllFilters();
+    setCurrentPage(1);
+  };
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -183,7 +221,7 @@ export default function AdminUsers() {
               <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={clearAllFilters}
+                onClick={handleClearFilters}
                 data-testid="button-clear-filters"
               >
                 <X className="w-4 h-4 mr-2" />
@@ -291,17 +329,33 @@ export default function AdminUsers() {
                 <SelectItem value="false">Not Qualified</SelectItem>
               </SelectContent>
             </Select>
+
+            {/* Pending Confirm Request */}
+            <Select value={pendingConfirmFilter} onValueChange={setPendingConfirmFilter}>
+              <SelectTrigger data-testid="select-pending-confirm">
+                <SelectValue placeholder="Pending Confirm Request" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Users</SelectItem>
+                <SelectItem value="has">Has Pending</SelectItem>
+                <SelectItem value="none">No Pending</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>
-            All Users 
-            {users && <span className="text-muted-foreground font-normal ml-2">({users.length} result{users.length !== 1 ? 's' : ''})</span>}
-          </CardTitle>
-          <CardDescription>Comprehensive user list with all details</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>
+                All Users 
+                {users && <span className="text-muted-foreground font-normal ml-2">({users.length} result{users.length !== 1 ? 's' : ''})</span>}
+              </CardTitle>
+              <CardDescription>Showing {startIndex + 1}-{Math.min(endIndex, totalUsers)} of {totalUsers} users</CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           {isLoading ? (
@@ -315,8 +369,9 @@ export default function AdminUsers() {
               <p className="text-sm">Try adjusting your filter criteria</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {users.map((user) => (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                {paginatedUsers.map((user) => (
                 <div
                   key={user.id}
                   className="p-4 border rounded-lg hover-elevate"
@@ -454,16 +509,285 @@ export default function AdminUsers() {
                       </div>
                     </div>
 
-                    <Button variant="outline" size="sm" data-testid={`button-view-${user.userId}`}>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={async () => {
+                        setSelectedUser(user);
+                        try {
+                          const response = await fetch(`/api/admin/users/${user.userId}/income`, { credentials: 'include' });
+                          if (response.ok) {
+                            const income = await response.json();
+                            setIncomeData(income);
+                          }
+                        } catch (error) {
+                          console.error('Failed to fetch income data:', error);
+                        }
+                      }}
+                      data-testid={`button-view-${user.userId}`}
+                    >
                       View Details
                     </Button>
                   </div>
                 </div>
               ))}
+              </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between pt-4 border-t">
+                  <div className="text-sm text-muted-foreground">
+                    Page {currentPage} of {totalPages}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      data-testid="button-prev-page"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      data-testid="button-next-page"
+                    >
+                      Next
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* User Detail Dialog */}
+      <Dialog open={!!selectedUser} onOpenChange={(open) => !open && setSelectedUser(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{selectedUser?.name || 'User Details'}</DialogTitle>
+          </DialogHeader>
+          {selectedUser && (
+            <ScrollArea className="flex-1 pr-4">
+              <div className="space-y-4">
+                {/* Header */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold">{selectedUser.userId}</span>
+                    {selectedUser.role === 'admin' && (
+                      <Badge variant="default" className="text-xs">
+                        <Shield className="w-3 h-3 mr-1" />
+                        Admin
+                      </Badge>
+                    )}
+                    <Badge variant={selectedUser.isActivated ? 'default' : 'secondary'} className={selectedUser.isActivated ? 'bg-green-600' : ''}>
+                      {selectedUser.isActivated ? 'Activated' : 'Pending'}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{selectedUser.email}</p>
+                  {selectedUser.mobile && <p className="text-sm text-muted-foreground">{selectedUser.mobile}</p>}
+                </div>
+
+                {/* Basic Info */}
+                <div className="space-y-2 pt-4 border-t">
+                  <h3 className="font-semibold text-sm">Basic Information</h3>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-muted-foreground text-xs">Email Verified</p>
+                      <p className="font-medium">{selectedUser.emailVerified ? 'Yes' : 'No'}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Profile Complete</p>
+                      <p className="font-medium">{selectedUser.isProfileComplete ? 'Yes' : 'No'}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Joined</p>
+                      <p className="font-medium">{format(new Date(selectedUser.createdAt), 'MMM d, yyyy')}</p>
+                    </div>
+                    {selectedUser.activatedAt && (
+                      <div>
+                        <p className="text-muted-foreground text-xs">Activated</p>
+                        <p className="font-medium">{format(new Date(selectedUser.activatedAt), 'MMM d, yyyy')}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Sponsorship */}
+                {selectedUser.sponsorId && (
+                  <div className="space-y-2 pt-4 border-t">
+                    <h3 className="font-semibold text-sm">Sponsorship</h3>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="text-muted-foreground text-xs">Sponsor ID</p>
+                        <p className="font-mono font-semibold">{selectedUser.sponsorId}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">Requested Leg</p>
+                        <p className="font-medium capitalize">{selectedUser.sponsorRequestedLeg || 'N/A'}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Binary Information */}
+                <div className="space-y-2 pt-4 border-t">
+                  <h3 className="font-semibold text-sm">Binary Information</h3>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-muted-foreground text-xs">Left Leg</p>
+                      <p className="font-medium">{selectedUser.leftLegCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Right Leg</p>
+                      <p className="font-medium">{selectedUser.rightLegCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Personal Left</p>
+                      <p className="font-medium">{selectedUser.personalLeftCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Personal Right</p>
+                      <p className="font-medium">{selectedUser.personalRightCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Binary Qualified</p>
+                      <p className="font-medium flex items-center gap-1">
+                        {selectedUser.binaryQualified ? (
+                          <>
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                            Yes
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="w-4 h-4 text-red-600" />
+                            No
+                          </>
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Matched Pairs</p>
+                      <p className="font-medium">{selectedUser.binaryMatchedPairs}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Matrix Information */}
+                {selectedUser.matrixLevel && (
+                  <div className="space-y-2 pt-4 border-t">
+                    <h3 className="font-semibold text-sm">Matrix Information</h3>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="text-muted-foreground text-xs">Matrix Level</p>
+                        <p className="font-medium">Level {selectedUser.matrixLevel}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">Matrix Parent</p>
+                        <p className="font-mono text-xs">{selectedUser.matrixParentId || 'Root'}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">Position</p>
+                        <p className="font-medium">{selectedUser.matrixPosition || 'N/A'}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Re-entry Information */}
+                <div className="space-y-2 pt-4 border-t">
+                  <h3 className="font-semibold text-sm">Re-entry Information</h3>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-muted-foreground text-xs">Current Cycle</p>
+                      <p className="font-medium">#{selectedUser.currentCycleNumber}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Total Re-entries</p>
+                      <p className="font-medium">{selectedUser.reentryCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Eligible for Re-entry</p>
+                      <p className="font-medium">{selectedUser.isEligibleForReentry ? 'Yes' : 'No'}</p>
+                    </div>
+                    {selectedUser.lastReentryAt && (
+                      <div>
+                        <p className="text-muted-foreground text-xs">Last Re-entry</p>
+                        <p className="font-medium">{format(new Date(selectedUser.lastReentryAt), 'MMM d, yyyy')}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Referrals */}
+                <div className="space-y-2 pt-4 border-t">
+                  <h3 className="font-semibold text-sm">Network</h3>
+                  <div className="text-sm">
+                    <p className="text-muted-foreground text-xs">Total Referrals</p>
+                    <p className="font-medium">{selectedUser.totalReferrals}</p>
+                  </div>
+                </div>
+
+                {/* Income Breakdown */}
+                {incomeData && (
+                  <div className="space-y-2 pt-4 border-t">
+                    <h3 className="font-semibold text-sm">Income Earned</h3>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="text-muted-foreground text-xs">Direct Sponsor</p>
+                        <p className="font-medium">₹{incomeData.direct_sponsor}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">Binary Match</p>
+                        <p className="font-medium">₹{incomeData.binary_match}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">Matrix Level 1</p>
+                        <p className="font-medium">₹{incomeData.matrix_level_1}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">Matrix Level 2</p>
+                        <p className="font-medium">₹{incomeData.matrix_level_2}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">Matrix Level 3</p>
+                        <p className="font-medium">₹{incomeData.matrix_level_3}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">Matrix Level 4</p>
+                        <p className="font-medium">₹{incomeData.matrix_level_4}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">Matrix Level 5</p>
+                        <p className="font-medium">₹{incomeData.matrix_level_5}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">Total Income</p>
+                        <p className="font-semibold text-base">₹{incomeData.total}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Pending Confirm Requests */}
+                {selectedUser.pendingConfirmCount > 0 && (
+                  <div className="space-y-2 pt-4 border-t">
+                    <h3 className="font-semibold text-sm text-orange-600">Payment Requests Pending Confirmation</h3>
+                    <p className="text-sm font-medium">{selectedUser.pendingConfirmCount} request{selectedUser.pendingConfirmCount !== 1 ? 's' : ''} awaiting admin confirmation</p>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

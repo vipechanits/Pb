@@ -2453,6 +2453,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         matrixLevel,
         reentryEligible,
         binaryQualified,
+        pendingConfirm,
       } = req.query;
 
       // Start with all users
@@ -2531,8 +2532,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Order by creation date (newest first)
       const allUsers = await query.orderBy(desc(users.createdAt));
 
+      // Get pending confirm counts for all users
+      const pendingConfirmCounts = await db.select({
+        receiverUserId: activationPayments.receiverUserId,
+        count: count(),
+      })
+        .from(activationPayments)
+        .where(eq(activationPayments.status, 'submitted'))
+        .groupBy(activationPayments.receiverUserId);
+
+      const pendingCountMap = new Map(
+        pendingConfirmCounts.map(item => [item.receiverUserId, item.count])
+      );
+
       // Remove sensitive data
-      const sanitizedUsers = allUsers.map(user => ({
+      let sanitizedUsers = allUsers.map(user => ({
         id: user.id,
         userId: user.userId,
         email: user.email,
@@ -2565,12 +2579,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
         emailVerified: user.emailVerified,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
+        pendingConfirmCount: pendingCountMap.get(user.userId) || 0,
       }));
+
+      // Apply pending confirm filter after getting counts
+      if (pendingConfirm === 'has') {
+        sanitizedUsers = sanitizedUsers.filter(u => u.pendingConfirmCount > 0);
+      } else if (pendingConfirm === 'none') {
+        sanitizedUsers = sanitizedUsers.filter(u => u.pendingConfirmCount === 0);
+      }
 
       res.json(sanitizedUsers);
     } catch (error) {
       console.error("Error fetching users:", error);
       res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
+
+  // Admin: Get user income breakdown by type
+  app.get("/api/admin/users/:userId/income", requireAdmin, async (req, res) => {
+    try {
+      const { userId } = req.params;
+
+      const incomeData = await db.select({
+        incomeType: incomeTransactions.incomeType,
+        total: sql<string>`CAST(COALESCE(SUM(${incomeTransactions.amountInr}), 0) AS VARCHAR)`,
+      })
+        .from(incomeTransactions)
+        .where(eq(incomeTransactions.userId, userId))
+        .groupBy(incomeTransactions.incomeType);
+
+      // Build response with all income types, defaulting to 0 if not present
+      const response = {
+        direct_sponsor: '0.00',
+        binary_match: '0.00',
+        matrix_level_1: '0.00',
+        matrix_level_2: '0.00',
+        matrix_level_3: '0.00',
+        matrix_level_4: '0.00',
+        matrix_level_5: '0.00',
+        total: '0.00',
+      };
+
+      let totalAmount = 0;
+
+      incomeData.forEach((item) => {
+        const total = item.total as string;
+        const amount = parseFloat(total || '0');
+        switch (item.incomeType) {
+          case 'direct_sponsor':
+            response.direct_sponsor = total || '0.00';
+            break;
+          case 'binary_match':
+            response.binary_match = total || '0.00';
+            break;
+          case 'matrix_level_1':
+            response.matrix_level_1 = total || '0.00';
+            break;
+          case 'matrix_level_2':
+            response.matrix_level_2 = total || '0.00';
+            break;
+          case 'matrix_level_3':
+            response.matrix_level_3 = total || '0.00';
+            break;
+          case 'matrix_level_4':
+            response.matrix_level_4 = total || '0.00';
+            break;
+          case 'matrix_level_5':
+            response.matrix_level_5 = total || '0.00';
+            break;
+        }
+        totalAmount += amount;
+      });
+
+      response.total = totalAmount.toFixed(2);
+
+      res.json(response);
+    } catch (error) {
+      console.error("Error fetching user income:", error);
+      res.status(500).json({ error: "Failed to fetch user income" });
     }
   });
 
@@ -3713,6 +3800,154 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to unblock IP", details: error?.message });
     }
   });
+
+  // Admin: Manually trigger cleanup of old pending payments
+  app.post("/api/admin/cleanup/pending-payments", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      
+      const result = await db.delete(activationPayments)
+        .where(
+          and(
+            eq(activationPayments.status, 'pending'),
+            sql`${activationPayments.createdAt} < ${sevenDaysAgo}`
+          )
+        );
+
+      console.log(`[CLEANUP] Admin ${req.session.userId} triggered cleanup. Deleted ${result.rowCount} old pending payments`);
+      
+      res.json({
+        success: true,
+        message: `Cleanup completed. Deleted ${result.rowCount} pending payments older than 7 days`,
+        deletedCount: result.rowCount,
+      });
+    } catch (error) {
+      console.error("[CLEANUP] Failed to cleanup pending payments:", error);
+      res.status(500).json({ error: "Failed to cleanup pending payments" });
+    }
+  });
+
+  // Auto cleanup: Run every 24 hours to delete pending payments older than 7 days
+  const CLEANUP_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
+  
+  async function cleanupOldPendingPayments() {
+    try {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      
+      const result = await db.delete(activationPayments)
+        .where(
+          and(
+            eq(activationPayments.status, 'pending'),
+            sql`${activationPayments.createdAt} < ${sevenDaysAgo}`
+          )
+        );
+
+      if ((result.rowCount ?? 0) > 0) {
+        console.log(`[AUTO-CLEANUP] Successfully deleted ${result.rowCount ?? 0} pending payments older than 7 days`);
+      }
+    } catch (error) {
+      console.error("[AUTO-CLEANUP] Failed to cleanup old pending payments:", error);
+    }
+  }
+
+  // Start auto cleanup on server startup
+  setInterval(cleanupOldPendingPayments, CLEANUP_INTERVAL);
+  
+  // Run cleanup immediately on server startup (optional)
+  cleanupOldPendingPayments();
+
+  // Admin: Manually trigger cleanup of pending registrations with no payments in 7 days
+  app.post("/api/admin/cleanup/pending-registrations", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      
+      // Find pending users with no payments in 7+ days AND no activation records (not partially activated)
+      const pendingUsersToDelete = await db.select({ id: users.id, userId: users.userId })
+        .from(users)
+        .where(
+          and(
+            eq(users.isActivated, false),
+            sql`${users.createdAt} < ${sevenDaysAgo}`,
+            sql`${users.id} NOT IN (SELECT DISTINCT payer_wallet FROM ${activations})`
+          )
+        );
+
+      let totalDeleted = 0;
+      const deletedUserIds = [];
+
+      // Delete each pending user and their associated data
+      for (const user of pendingUsersToDelete) {
+        try {
+          // Delete associated records in cascade
+          await db.delete(notifications).where(eq(notifications.userId, user.userId));
+          await db.delete(incomeTransactions).where(eq(incomeTransactions.userId, user.userId));
+          await db.delete(users).where(eq(users.id, user.id));
+
+          deletedUserIds.push(user.userId);
+          totalDeleted++;
+        } catch (error) {
+          console.error(`[CLEANUP] Failed to delete pending user ${user.userId}:`, error);
+        }
+      }
+
+      console.log(`[CLEANUP] Admin ${req.session.userId} triggered pending registration cleanup. Deleted ${totalDeleted} users with no activity in 7 days: ${deletedUserIds.join(', ')}`);
+      
+      res.json({
+        success: true,
+        message: `Cleanup completed. Deleted ${totalDeleted} pending registrations with no activity in 7+ days (excluding partial activations)`,
+        deletedCount: totalDeleted,
+        deletedUserIds,
+      });
+    } catch (error) {
+      console.error("[CLEANUP] Failed to cleanup pending registrations:", error);
+      res.status(500).json({ error: "Failed to cleanup pending registrations" });
+    }
+  });
+
+  // Auto cleanup: Run every 24 hours to delete pending registrations with no payments in 7 days
+  async function cleanupPendingRegistrations() {
+    try {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      
+      // Find pending users with no payments in 7+ days AND no activation records (not partially activated)
+      const pendingUsersToDelete = await db.select({ id: users.id, userId: users.userId })
+        .from(users)
+        .where(
+          and(
+            eq(users.isActivated, false),
+            sql`${users.createdAt} < ${sevenDaysAgo}`,
+            sql`${users.id} NOT IN (SELECT DISTINCT payer_wallet FROM ${activations})`
+          )
+        );
+
+      let totalDeleted = 0;
+
+      // Delete each pending user and their associated data
+      for (const user of pendingUsersToDelete) {
+        try {
+          // Delete associated records in cascade
+          await db.delete(notifications).where(eq(notifications.userId, user.userId));
+          await db.delete(incomeTransactions).where(eq(incomeTransactions.userId, user.userId));
+          await db.delete(users).where(eq(users.id, user.id));
+          totalDeleted++;
+        } catch (error) {
+          console.error(`[AUTO-CLEANUP] Failed to delete pending user ${user.userId}:`, error);
+        }
+      }
+
+      if (totalDeleted > 0) {
+        console.log(`[AUTO-CLEANUP] Successfully deleted ${totalDeleted} pending registrations with no activity in 7+ days (excluding partial activations)`);
+      }
+    } catch (error) {
+      console.error("[AUTO-CLEANUP] Failed to cleanup pending registrations:", error);
+    }
+  }
+
+  // Start auto cleanup for pending registrations
+  setInterval(cleanupPendingRegistrations, CLEANUP_INTERVAL);
+  
+  // Run cleanup immediately on server startup
+  cleanupPendingRegistrations();
 
   const httpServer = createServer(app);
 

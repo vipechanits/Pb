@@ -26,7 +26,7 @@ export function NotificationBell() {
   // Fetch notifications with unread count
   const { data, isLoading } = useQuery<NotificationResponse>({
     queryKey: ['/api/notifications'],
-    refetchInterval: 30000, // Poll every 30 seconds
+    refetchInterval: 5000, // Poll every 5 seconds for real-time notifications
     enabled: true,
   });
 

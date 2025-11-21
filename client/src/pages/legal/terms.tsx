@@ -82,7 +82,7 @@ export default function TermsAndConditions() {
               </p>
               <ul>
                 <li><strong>Binary Tree Structure:</strong> Each member can have up to 2 direct referrals (left and right legs)</li>
-                <li><strong>Global Matrix (2+5 Non-Working):</strong> A 5-level deep matrix with automatic FIFO placement</li>
+                <li><strong>Global Matrix (2x5 Non-Working):</strong> A 5-level deep matrix with automatic FIFO placement</li>
                 <li><strong>8-Payment Activation System:</strong> New members make 8 direct payments to activate their account (₹5,000 total)</li>
                 <li><strong>Binary Matching Queue:</strong> Members are matched in pairs for binary income (3:3 ratio)</li>
                 <li><strong>Unlimited Re-entry:</strong> Members can re-enter after completing one activation cycle</li>
@@ -252,7 +252,7 @@ export default function TermsAndConditions() {
                 You are solely responsible for ensuring that your participation in PAYBACK247 complies with all applicable laws in your jurisdiction, including:
               </p>
               <ul>
-                <li>MLM and network marketing regulations</li>
+                <li>MLM and affiliate marketing regulations</li>
                 <li>Tax reporting and payment obligations</li>
                 <li>Consumer protection laws</li>
                 <li>Financial services regulations</li>
