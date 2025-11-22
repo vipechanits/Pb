@@ -255,7 +255,7 @@ export default function SignupPage() {
             {/* Custom CAPTCHA */}
             <CustomCaptcha 
               onCaptchaChange={setCaptchaCode} 
-              isValid={captchaCode === ''} 
+              isValid={captchaCode !== ''} 
               data-testid="custom-captcha-signup"
             />
 

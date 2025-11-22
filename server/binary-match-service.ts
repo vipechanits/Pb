@@ -1,16 +1,16 @@
 import { eq, sql, and, isNull, asc } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { users, binaryMatchQueue, incomeTransactions, userIncomeSummaries, type User } from "@shared/schema";
+import { users, binaryMatchQueue, incomeTransactions, userIncomeSummaries, systemConfig, type User, type SystemConfig } from "@shared/schema";
 
 /**
- * BinaryMatchService - Handles QUEUE-BASED 3:3 binary matching
+ * BinaryMatchService - Handles QUEUE-BASED matching (configurable ratio)
  * 
  * Rules:
  * 1. ONE-TIME Qualification: User must have 1 personal left + 1 personal right (forever qualified)
- * 2. Building pairs: 3 left + 3 right = 1 matched pair (self + spill counts)
- * 3. Queue entry: When user builds 3:3 pair → enters FIFO queue
+ * 2. Building pairs: Configurable left + right ratio = 1 matched pair (self + spill counts)
+ * 3. Queue entry: When user builds matched pair → enters FIFO queue
  * 4. Payment trigger: Each new activation pays FIRST person in queue (₹1000)
- * 5. Re-entry: After receiving payment, user exits queue. Can re-enter with new 3:3 pair.
+ * 5. Re-entry: After receiving payment, user exits queue. Can re-enter with new pair.
  * 6. Carry forward: Unmatched legs carry to next cycle
  */
 export class BinaryMatchService {
@@ -18,6 +18,24 @@ export class BinaryMatchService {
 
   constructor(db: NodePgDatabase<any>) {
     this.db = db;
+  }
+
+  /**
+   * Get matching ratios from system config
+   */
+  private async getMatchingRatios(): Promise<{ left: number; right: number }> {
+    try {
+      const config = await this.db.select().from(systemConfig).limit(1);
+      if (config.length > 0) {
+        return {
+          left: config[0].binaryMatchingRatioLeft || 3,
+          right: config[0].binaryMatchingRatioRight || 3,
+        };
+      }
+    } catch (error) {
+      console.error('[BINARY-MATCH-QUEUE] Error fetching config, using defaults:', error);
+    }
+    return { left: 3, right: 3 };
   }
 
   /**
@@ -70,9 +88,13 @@ export class BinaryMatchService {
 
     console.log(`[BINARY-MATCH-QUEUE] User ${userId} total unmatched: ${totalUnmatchedLeft}L, ${totalUnmatchedRight}R`);
 
-    // Calculate 3:3 pairs
-    const leftPairs = Math.floor(totalUnmatchedLeft / 3);
-    const rightPairs = Math.floor(totalUnmatchedRight / 3);
+    // Get configurable matching ratios
+    const ratios = await this.getMatchingRatios();
+    console.log(`[BINARY-MATCH-QUEUE] Using matching ratios - Left: ${ratios.left}, Right: ${ratios.right}`);
+
+    // Calculate pairs using configurable ratios
+    const leftPairs = Math.floor(totalUnmatchedLeft / ratios.left);
+    const rightPairs = Math.floor(totalUnmatchedRight / ratios.right);
     const completePairs = Math.min(leftPairs, rightPairs);
 
     // Update tracking (even if no pairs - prevents reprocessing)
@@ -99,8 +121,8 @@ export class BinaryMatchService {
     console.log(`[BINARY-MATCH-QUEUE] User ${userId} has ${completePairs} complete pair(s)! Adding to queue...`);
 
     // Calculate remaining unmatched after taking pairs for queue
-    const usedLeft = completePairs * 3;
-    const usedRight = completePairs * 3;
+    const usedLeft = completePairs * ratios.left;
+    const usedRight = completePairs * ratios.right;
     const remainingLeft = totalUnmatchedLeft - usedLeft;
     const remainingRight = totalUnmatchedRight - usedRight;
 

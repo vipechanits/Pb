@@ -390,6 +390,9 @@ export const systemConfig = pgTable("system_config", {
   customCaptchaCodeType: text("custom_captcha_code_type").notNull().default('digit'), // 'digit' or 'text'
   customCaptchaColor: text("custom_captcha_color").notNull().default('blue'), // Color selection
   
+  // Auto-backup scheduling (in hours: 24, 12, or 1)
+  autoBackupScheduleHours: integer("auto_backup_schedule_hours").notNull().default(24), // 24, 12, or 1 hour intervals
+  
   // Email/SMTP configuration
   emailHost: text("email_host"), // SMTP server hostname (e.g., smtp.gmail.com)
   emailPort: integer("email_port").default(587), // SMTP port (587 for TLS, 465 for SSL)
@@ -398,6 +401,15 @@ export const systemConfig = pgTable("system_config", {
   emailFrom: text("email_from"), // From email address
   emailSecure: boolean("email_secure").notNull().default(false), // true for SSL (port 465), false for TLS (port 587)
   emailEnabled: boolean("email_enabled").notNull().default(false), // Enable/disable email sending
+  
+  // Module management - JSON array of enabled modules
+  enabledModules: text("enabled_modules").default(JSON.stringify(["registration", "activation", "binary", "matrix", "reentry", "admin", "backup"])),
+  
+  // Admin notification settings
+  adminNotificationsEnabled: boolean("admin_notifications_enabled").notNull().default(true),
+  
+  // Auto-backup toggle
+  autoBackupEnabled: boolean("auto_backup_enabled").notNull().default(true),
   
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

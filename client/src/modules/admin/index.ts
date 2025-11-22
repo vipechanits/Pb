@@ -1,0 +1,10 @@
+// Admin Module - Dashboard, user management, configuration
+export { default as AdminDashboardPage } from '@/pages/admin-dashboard';
+export { default as AdminUsersPage } from '@/pages/admin-users';
+export { default as AdminPaymentsPage } from '@/pages/admin-payments';
+export { default as AdminConfigPage } from '@/pages/admin-config';
+export { default as AdminSettingsPage } from '@/pages/admin-settings';
+export { default as AdminAnalyticsPage } from '@/pages/admin-analytics';
+export { default as AdminPaymentReportPage } from '@/pages/admin-payments-report';
+export { default as AdminDatabasePage } from '@/pages/admin/database';
+export { default as AdminSecurityPage } from '@/pages/admin/security';

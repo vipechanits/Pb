@@ -12,6 +12,8 @@ import crypto from "crypto";
 import { sendVerificationEmail, sendPasswordResetEmail, sendPasswordChangedEmail } from "./lib/email";
 import { IncomeService } from "./income-service";
 import { verifyRecaptcha } from "./security-helpers";
+import { notificationRepository } from "./notification-repository";
+import { broadcastToUser } from "./websocket-adapter";
 import {
   authRateLimiter,
   paymentRateLimiter,
@@ -1616,22 +1618,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Get user payment details by userId (SECURE: only authorized users can access)
+  // Get user payment details by userId (fetch for payment submissions)
   app.get("/api/users/payment-details/:userId", requireAuth, async (req, res) => {
     try {
-      const requestingUser = await storage.getUserById(req.session.userId as string);
-      if (!requestingUser) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-      
-      // Authorization: Only admins or the user themselves can view payment details
-      const isAdmin = requestingUser.role === 'admin';
-      const isSelf = requestingUser.userId === req.params.userId;
-      
-      if (!isAdmin && !isSelf) {
-        return res.status(403).json({ error: "Forbidden - Cannot access another user's payment details" });
-      }
-      
       // Fetch from user profile
       const user = await storage.getUserByUserId(req.params.userId);
       if (!user) {
@@ -1903,6 +1892,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.log('[ACTIVATION] No in-progress re-entry to link');
       }
+
+      // Create real-time notification for user about activation request
+      try {
+        const notification = await notificationRepository.createNotification({
+          userId: user.userId!,
+          type: 'activation_complete',
+          title: 'Activation Started',
+          message: `Your activation has started. You need to complete 8 peer-to-peer payments of ₹${(parseInt(process.env.PAYMENT_AMOUNT || '5000') / 100).toLocaleString('en-IN')} each`,
+          metadata: {
+            activationId: activationId,
+          },
+          deliveredAt: null,
+          acknowledgedAt: null,
+        });
+
+        const wasDelivered = broadcastToUser(user.userId!, {
+          id: notification.id,
+          type: notification.type,
+          title: notification.title,
+          message: notification.message,
+          metadata: notification.metadata,
+          createdAt: notification.createdAt,
+        });
+
+        if (wasDelivered) {
+          await notificationRepository.markNotificationDelivered(notification.id);
+        }
+      } catch (notifError) {
+        console.error('[ACTIVATION-REQUEST] Failed to create notification:', notifError);
+      }
+
+      // Notify sponsor about new downline member activation
+      if (user.sponsorId && user.sponsorId !== 'PB0') {
+        try {
+          const notification = await notificationRepository.createNotification({
+            userId: user.sponsorId,
+            type: 'new_referral',
+            title: 'Downline Member Activated',
+            message: `${user.name || user.userId} (your referral) has started their activation`,
+            metadata: {
+              activationId: activationId,
+              referralName: user.name || user.userId,
+            },
+            deliveredAt: null,
+            acknowledgedAt: null,
+          });
+
+          const wasDelivered = broadcastToUser(user.sponsorId, {
+            id: notification.id,
+            type: notification.type,
+            title: notification.title,
+            message: notification.message,
+            metadata: notification.metadata,
+            createdAt: notification.createdAt,
+          });
+
+          if (wasDelivered) {
+            await notificationRepository.markNotificationDelivered(notification.id);
+          }
+        } catch (notifError) {
+          console.error('[DOWNLINE-ACTIVATION] Failed to create notification:', notifError);
+        }
+      }
       
       res.status(201).json(result);
     } catch (error: any) {
@@ -2158,6 +2210,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!payment) {
         return res.status(404).json({ error: "Payment not found" });
       }
+
+      console.log(`[SUBMIT-PAYMENT] Payment ${payment.id} submitted by ${user.userId} for receiver ${payment.receiverUserId}, amount: ₹${payment.amountInr}`);
+
+      // Create real-time notification for receiver
+      try {
+        const receiverUserId = payment.receiverUserId;
+        const payerName = user.name || user.userId;
+        
+        console.log(`[SUBMIT-PAYMENT] Creating notification for receiver ${receiverUserId}`);
+        
+        const amountInRupees = typeof payment.amountInr === 'string' ? parseFloat(payment.amountInr) : 0;
+        const notification = await notificationRepository.createNotification({
+          userId: receiverUserId,
+          type: 'payment_received',
+          title: 'Payment Awaiting Confirmation',
+          message: `${payerName} submitted ₹${amountInRupees.toLocaleString('en-IN')} - needs your confirmation`,
+          metadata: {
+            activationId: payment.activationId,
+            payerUserId: user.userId,
+            payerName: payerName,
+            amount: payment.amountInr,
+            paymentType: payment.paymentType,
+          },
+          deliveredAt: null,
+          acknowledgedAt: null,
+        });
+
+        console.log(`[SUBMIT-PAYMENT] Notification created: ${notification.id}`);
+
+        // Broadcast to receiver in real-time (WebSocket)
+        const wasDelivered = broadcastToUser(receiverUserId, {
+          id: notification.id,
+          type: notification.type as any,
+          title: notification.title,
+          message: notification.message,
+          metadata: notification.metadata,
+          createdAt: notification.createdAt,
+        });
+
+        if (wasDelivered) {
+          console.log(`[SUBMIT-PAYMENT] Real-time notification delivered to ${receiverUserId}`);
+          await notificationRepository.markNotificationDelivered(notification.id);
+        } else {
+          console.log(`[SUBMIT-PAYMENT] Receiver ${receiverUserId} offline - notification queued`);
+        }
+      } catch (notifError) {
+        console.error('[SUBMIT-PAYMENT] Failed to create/broadcast notification:', notifError);
+      }
+
       res.json(payment);
     } catch (error) {
       console.error("Error submitting payment proof:", error);
@@ -2227,6 +2328,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // - Deferred incomes (sponsor, matrix) created when all 8 payments confirmed
       // See storage.ts lines 1176-1720 for complete implementation
 
+      // Create real-time notification for payer about payment confirmation
+      try {
+        const payerUserId = payment.payerUserId;
+        const confirmationName = user.name || user.userId;
+        
+        const amountInRupees = typeof payment.amount === 'number' ? payment.amount / 100 : 0;
+        const notification = await notificationRepository.createNotification({
+          userId: payerUserId,
+          type: 'payment_confirmed',
+          title: 'Payment Confirmed',
+          message: `Your payment of ₹${amountInRupees.toLocaleString('en-IN')} has been confirmed by ${confirmationName}`,
+          metadata: {
+            paymentId: payment.id,
+            confirmedBy: user.userId,
+            confirmedByName: confirmationName,
+            amount: payment.amount,
+            paymentType: payment.paymentType,
+          },
+          deliveredAt: null,
+          acknowledgedAt: null,
+        });
+
+        const wasDelivered = broadcastToUser(payerUserId, {
+          id: notification.id,
+          type: notification.type,
+          title: notification.title,
+          message: notification.message,
+          metadata: notification.metadata,
+          createdAt: notification.createdAt,
+        });
+
+        if (wasDelivered) {
+          await notificationRepository.markNotificationDelivered(notification.id);
+        }
+      } catch (notifError) {
+        console.error('[CONFIRM-PAYMENT] Failed to create notification:', notifError);
+      }
+
       res.json(payment);
     } catch (error: any) {
       console.error("[CONFIRM-ROUTE] Error confirming payment:", error);
@@ -2276,6 +2415,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!payment) {
         return res.status(404).json({ error: "Payment not found" });
       }
+
+      // Create notification for payer (sender) - NOT receiver
+      try {
+        const payerUserId = payment.payerUserId;
+        const rejectorName = user.name || user.userId;
+        
+        console.log(`[REJECT-PAYMENT] Creating rejection notification for payer ${payerUserId}`);
+        
+        const amountInRupees = typeof payment.amount === 'number' ? payment.amount / 100 : 0;
+        const notification = await notificationRepository.createNotification({
+          userId: payerUserId,
+          type: 'payment_rejected',
+          title: 'Payment Rejected',
+          message: `Your payment of ₹${amountInRupees.toLocaleString('en-IN')} was rejected. Reason: ${validationResult.data.rejectionReason || 'No reason provided'}`,
+          metadata: {
+            paymentId: payment.id,
+            rejectedBy: user.userId,
+            rejectedByName: rejectorName,
+            amount: payment.amount,
+            paymentType: payment.paymentType,
+            rejectionReason: validationResult.data.rejectionReason,
+          },
+          deliveredAt: null,
+          acknowledgedAt: null,
+        });
+
+        console.log(`[REJECT-PAYMENT] Rejection notification created: ${notification.id}`);
+
+        // Broadcast to payer in real-time (WebSocket)
+        const wasDelivered = broadcastToUser(payerUserId, {
+          id: notification.id,
+          type: notification.type,
+          title: notification.title,
+          message: notification.message,
+          metadata: notification.metadata,
+          createdAt: notification.createdAt,
+        });
+
+        if (wasDelivered) {
+          console.log(`[REJECT-PAYMENT] Real-time notification delivered to payer ${payerUserId}`);
+          await notificationRepository.markNotificationDelivered(notification.id);
+        } else {
+          console.log(`[REJECT-PAYMENT] Payer ${payerUserId} offline - notification queued`);
+        }
+      } catch (notifError) {
+        console.error('[REJECT-PAYMENT] Failed to create notification:', notifError);
+      }
+
       res.json(payment);
     } catch (error: any) {
       console.error("Error rejecting payment:", error);
@@ -2967,19 +3154,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // GET /api/notifications - Get user's notifications with unread count
   app.get("/api/notifications", requireAuth, async (req: any, res) => {
     try {
+      // Disable caching - notifications must always be fresh
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
+      
       const queryResult = getNotificationsQuerySchema.safeParse(req.query);
       if (!queryResult.success) {
         return res.status(400).json({ error: "Invalid query parameters", details: queryResult.error });
       }
 
       const { limit, offset, isRead } = queryResult.data;
-      const userId = req.session.userId;
+      
+      // Convert internal UUID to PB ID - notifications store PB IDs, not UUIDs
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      const pbUserId = user.userId; // Use PB ID (e.g., "PB10002")
 
       const [notifications, unreadCount] = await Promise.all([
-        storage.getNotificationsByUserId(userId, limit, offset, isRead),
-        storage.getUnreadNotificationCount(userId),
+        storage.getNotificationsByUserId(pbUserId, limit, offset, isRead),
+        storage.getUnreadNotificationCount(pbUserId),
       ]);
 
+      console.log(`[NOTIFICATIONS] Fetched ${notifications.length} notifications for ${pbUserId}`);
       res.json({ notifications, unreadCount });
     } catch (error) {
       console.error("Error fetching notifications:", error);
@@ -2991,17 +3191,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/notifications/:id/read", requireAuth, async (req: any, res) => {
     try {
       const notificationId = req.params.id;
-      const userId = req.session.userId;
+      
+      // Convert internal UUID to PB ID
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      const pbUserId = user.userId;
 
       // Fetch notification to verify ownership
-      const existingNotification = await storage.getNotificationsByUserId(userId, 1000, 0);
+      const existingNotification = await storage.getNotificationsByUserId(pbUserId, 1000, 0);
       const notification = existingNotification.find(n => n.id === notificationId);
 
       if (!notification) {
         return res.status(404).json({ error: "Notification not found" });
       }
 
-      if (notification.userId !== userId) {
+      if (notification.userId !== pbUserId) {
         return res.status(403).json({ error: "Forbidden - Cannot access another user's notification" });
       }
 
@@ -3020,8 +3227,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // POST /api/notifications/mark-all-read - Mark all user's notifications as read
   app.post("/api/notifications/mark-all-read", requireAuth, async (req: any, res) => {
     try {
-      const userId = req.session.userId;
-      const affectedCount = await storage.markAllNotificationsAsRead(userId);
+      // Convert internal UUID to PB ID
+      const user = await storage.getUserById(req.session.userId as string);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      const pbUserId = user.userId;
+      const affectedCount = await storage.markAllNotificationsAsRead(pbUserId);
 
       res.json({ affectedCount });
     } catch (error) {
@@ -3325,24 +3538,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "User not found or not activated" });
       }
 
-      // Get all queue entries for this user with payer information
+      // Get all queue entries for this user
       const queueHistory = await db
         .select({
-          id: sql`binary_match_queue.id`.as('id'),
-          queuePosition: sql`binary_match_queue.queue_position`.as('queue_position'),
-          enteredAt: sql`binary_match_queue.entered_at`.as('entered_at'),
-          paidAt: sql`binary_match_queue.paid_at`.as('paid_at'),
-          status: sql`binary_match_queue.status`.as('status'),
-          amountInr: sql`binary_match_queue.amount_inr`.as('amount_inr'),
-          paidByActivationId: sql`binary_match_queue.paid_by_activation_id`.as('paid_by_activation_id'),
-          payerUserId: sql`ap.payer_user_id`.as('payer_user_id'),
-          payerName: sql`u.name`.as('payer_name'),
+          id: binaryMatchQueue.id,
+          queuePosition: binaryMatchQueue.queuePosition,
+          enteredAt: binaryMatchQueue.enteredAt,
+          paidAt: binaryMatchQueue.paidAt,
+          status: binaryMatchQueue.status,
+          amountInr: binaryMatchQueue.amountInr,
+          paidByActivationId: binaryMatchQueue.paidByActivationId,
+          payerUserId: activationPayments.payerUserId,
+          payerName: users.name,
         })
-        .from(sql`binary_match_queue`)
-        .leftJoin(sql`activation_payments ap`, sql`binary_match_queue.paid_by_activation_id = ap.activation_id AND ap.payment_type = 'binary_match'`)
-        .leftJoin(sql`users u`, sql`ap.payer_user_id = u.user_id`)
-        .where(sql`binary_match_queue.user_id = ${user.userId}`)
-        .orderBy(sql`binary_match_queue.entered_at DESC`);
+        .from(binaryMatchQueue)
+        .leftJoin(activationPayments, and(
+          eq(binaryMatchQueue.paidByActivationId, activationPayments.activationId),
+          eq(activationPayments.paymentType, 'binary_match')
+        ))
+        .leftJoin(users, eq(activationPayments.payerUserId, users.userId))
+        .where(eq(binaryMatchQueue.userId, user.userId))
+        .orderBy(desc(binaryMatchQueue.enteredAt));
 
       res.json(queueHistory);
     } catch (error) {
@@ -3362,16 +3578,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get queue entries to show when user qualified and entered queue
       const pairHistory = await db
         .select({
-          id: sql`binary_match_queue.id`.as('id'),
-          enteredAt: sql`binary_match_queue.entered_at`.as('entered_at'),
-          queuePosition: sql`binary_match_queue.queue_position`.as('queue_position'),
-          status: sql`binary_match_queue.status`.as('status'),
-          paidAt: sql`binary_match_queue.paid_at`.as('paid_at'),
-          amountInr: sql`binary_match_queue.amount_inr`.as('amount_inr'),
+          id: binaryMatchQueue.id,
+          enteredAt: binaryMatchQueue.enteredAt,
+          queuePosition: binaryMatchQueue.queuePosition,
+          status: binaryMatchQueue.status,
+          paidAt: binaryMatchQueue.paidAt,
+          amountInr: binaryMatchQueue.amountInr,
         })
-        .from(sql`binary_match_queue`)
-        .where(sql`binary_match_queue.user_id = ${user.userId}`)
-        .orderBy(sql`binary_match_queue.entered_at DESC`);
+        .from(binaryMatchQueue)
+        .where(eq(binaryMatchQueue.userId, user.userId))
+        .orderBy(desc(binaryMatchQueue.enteredAt));
 
       res.json(pairHistory);
     } catch (error) {
@@ -4112,18 +4328,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
 
-      let query = db.select({
+      const stats = await db.select({
         status: activationPayments.status,
         count: count(),
         total: sql<string>`COALESCE(SUM(CAST(amount_inr AS DECIMAL)), 0)`,
       }).from(activationPayments)
-        .where(sql`${activationPayments.confirmedAt} >= ${today} AND ${activationPayments.confirmedAt} < ${tomorrow}`);
-
-      if (receiverType) {
-        query = query.where(eq(activationPayments.receiverType, receiverType as any));
-      }
-
-      const stats = await query.groupBy(activationPayments.status);
+        .where(
+          receiverType 
+            ? and(
+                sql`${activationPayments.confirmedAt} >= ${today} AND ${activationPayments.confirmedAt} < ${tomorrow}`,
+                eq(activationPayments.receiverType, receiverType as any)
+              )
+            : sql`${activationPayments.confirmedAt} >= ${today} AND ${activationPayments.confirmedAt} < ${tomorrow}`
+        )
+        .groupBy(activationPayments.status);
 
       res.json({
         date: today.toLocaleDateString('en-IN'),
@@ -4150,18 +4368,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const endOfWeek = new Date(startOfWeek);
       endOfWeek.setDate(startOfWeek.getDate() + 7);
 
-      let query = db.select({
+      const stats = await db.select({
         status: activationPayments.status,
         count: count(),
         total: sql<string>`COALESCE(SUM(CAST(amount_inr AS DECIMAL)), 0)`,
       }).from(activationPayments)
-        .where(sql`${activationPayments.confirmedAt} >= ${startOfWeek} AND ${activationPayments.confirmedAt} < ${endOfWeek}`);
-
-      if (receiverType) {
-        query = query.where(eq(activationPayments.receiverType, receiverType as any));
-      }
-
-      const stats = await query.groupBy(activationPayments.status);
+        .where(
+          receiverType 
+            ? and(
+                sql`${activationPayments.confirmedAt} >= ${startOfWeek} AND ${activationPayments.confirmedAt} < ${endOfWeek}`,
+                eq(activationPayments.receiverType, receiverType as any)
+              )
+            : sql`${activationPayments.confirmedAt} >= ${startOfWeek} AND ${activationPayments.confirmedAt} < ${endOfWeek}`
+        )
+        .groupBy(activationPayments.status);
 
       res.json({
         weekStart: startOfWeek.toLocaleDateString('en-IN'),
@@ -4184,18 +4404,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
       const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
 
-      let query = db.select({
+      const stats = await db.select({
         status: activationPayments.status,
         count: count(),
         total: sql<string>`COALESCE(SUM(CAST(amount_inr AS DECIMAL)), 0)`,
       }).from(activationPayments)
-        .where(sql`${activationPayments.confirmedAt} >= ${startOfMonth} AND ${activationPayments.confirmedAt} < ${endOfMonth}`);
-
-      if (receiverType) {
-        query = query.where(eq(activationPayments.receiverType, receiverType as any));
-      }
-
-      const stats = await query.groupBy(activationPayments.status);
+        .where(
+          receiverType 
+            ? and(
+                sql`${activationPayments.confirmedAt} >= ${startOfMonth} AND ${activationPayments.confirmedAt} < ${endOfMonth}`,
+                eq(activationPayments.receiverType, receiverType as any)
+              )
+            : sql`${activationPayments.confirmedAt} >= ${startOfMonth} AND ${activationPayments.confirmedAt} < ${endOfMonth}`
+        )
+        .groupBy(activationPayments.status);
 
       res.json({
         month: today.toLocaleDateString('en-IN', { year: 'numeric', month: 'long' }),

@@ -73,14 +73,18 @@ export class BinaryMatchingService {
     const newLeft = Math.max(0, (user.leftLegCount || 0) - (user.binaryLastMatchedLeftCount || 0)) + (user.binaryUnmatchedLeft || 0);
     const newRight = Math.max(0, (user.rightLegCount || 0) - (user.binaryLastMatchedRightCount || 0)) + (user.binaryUnmatchedRight || 0);
 
-    // Get matching ratio from config (default 3)
-    const matchingRatio = config.binaryMatchingRatio || 3;
+    // Get matching ratios from config (default 3:3)
+    // Ratio 3:3 means: 3 left legs + 3 right legs = 1 matched pair
+    const ratioLeft = config.binaryMatchingRatioLeft || 3;
+    const ratioRight = config.binaryMatchingRatioRight || 3;
     
-    // Calculate how many pairs can be matched
-    const pairsMatched = Math.floor(Math.min(newLeft, newRight) / matchingRatio);
+    // Calculate how many complete pairs can be matched
+    // With 10 left + 3 right and 3:3 ratio: min(10/3, 3/3) = min(3, 1) = 1 match
+    // With 10 left + 10 right and 3:3 ratio: min(10/3, 10/3) = min(3, 3) = 3 matches
+    const pairsMatched = Math.min(Math.floor(newLeft / ratioLeft), Math.floor(newRight / ratioRight));
     
     if (pairsMatched === 0) {
-      // No pairs to match, but update unmatched counts
+      // No complete pairs to match, but update unmatched counts
       await db
         .update(users)
         .set({
@@ -91,13 +95,14 @@ export class BinaryMatchingService {
         })
         .where(eq(users.userId, userId));
         
-      console.log(`[BINARY_MATCH] User ${userId} no pairs to match (L:${newLeft}, R:${newRight}, ratio:${matchingRatio})`);
+      console.log(`[BINARY_MATCH] User ${userId} no complete pairs (L:${newLeft}/${ratioLeft}, R:${newRight}/${ratioRight})`);
       return { pairsMatched: 0, incomeGenerated: 0 };
     }
 
     // Calculate unmatched activations (carry forward)
-    const unmatchedLeft = newLeft - (pairsMatched * matchingRatio);
-    const unmatchedRight = newRight - (pairsMatched * matchingRatio);
+    // Each matched pair consumes ratioLeft from left and ratioRight from right
+    const unmatchedLeft = newLeft - (pairsMatched * ratioLeft);
+    const unmatchedRight = newRight - (pairsMatched * ratioRight);
 
     // Get income amount per pair from config (default ₹1000)
     const incomePerPair = parseFloat(config.binaryMatchPaymentAmount?.toString() || '1000');
@@ -127,7 +132,7 @@ export class BinaryMatchingService {
       sourceUserId: null, // Binary matching comes from team, not specific user
       triggeredBy: 'activation',
       confirmedAt: new Date(),
-      notes: `${pairsMatched} pairs matched (${matchingRatio}:${matchingRatio} ratio)`,
+      notes: `${pairsMatched} pairs matched (${ratioLeft}:${ratioRight} ratio)`,
     };
 
     await db.insert(incomeTransactions).values(incomeRecord);
@@ -140,7 +145,7 @@ export class BinaryMatchingService {
       SET binary_match_income = user_income_summaries.binary_match_income + ${totalIncome}
     `);
 
-    console.log(`[BINARY_MATCH] User ${userId} matched ${pairsMatched} pairs, earned ₹${totalIncome}, unmatched: L:${unmatchedLeft}, R:${unmatchedRight}`);
+    console.log(`[BINARY_MATCH] User ${userId} matched ${pairsMatched} pairs (L:${newLeft}/${ratioLeft}, R:${newRight}/${ratioRight}), earned ₹${totalIncome}, unmatched: L:${unmatchedLeft}, R:${unmatchedRight}`);
     
     return { pairsMatched, incomeGenerated: totalIncome };
   }

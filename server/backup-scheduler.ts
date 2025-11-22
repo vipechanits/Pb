@@ -1,12 +1,20 @@
 import { db } from './db';
-import { users, activations, activationPayments, incomeTransactions, notifications, reentries, activationMatrixPositions, binaryMatchQueue, userIncomeSummaries, backupHistory } from '@shared/schema';
+import { users, activations, activationPayments, incomeTransactions, notifications, reentries, activationMatrixPositions, binaryMatchQueue, userIncomeSummaries, backupHistory, systemConfig } from '@shared/schema';
 import { uploadBackupToDrive } from './google-drive-backup';
 import { eq, count, sql } from 'drizzle-orm';
 
-const BACKUP_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+let currentBackupInterval = 24 * 60 * 60 * 1000; // Default 24 hours in milliseconds
+let backupIntervalHandle: NodeJS.Timeout | null = null;
 
 async function createAndUploadBackup() {
   try {
+    // Check if auto-backup is enabled in system config
+    const configCheck = await db.query.systemConfig.findFirst();
+    if (configCheck && !configCheck.autoBackupEnabled) {
+      console.log('[AUTO-BACKUP] Auto-backup is disabled. Skipping backup...');
+      return;
+    }
+    
     console.log('[AUTO-BACKUP] Starting automatic backup...');
     
     // Create backup entry in database
@@ -28,7 +36,7 @@ async function createAndUploadBackup() {
     const allActivationMatrixPositions = await db.select().from(activationMatrixPositions);
     const allBinaryMatchQueue = await db.select().from(binaryMatchQueue);
     const allUserIncomeSummaries = await db.select().from(userIncomeSummaries);
-    const systemConfig = await db.select().from(sql`system_config`);
+    const systemConfigData = await db.select().from(sql`system_config`);
 
     const backup = {
       version: '2.0',
@@ -43,7 +51,7 @@ async function createAndUploadBackup() {
         activationMatrixPositions: { count: allActivationMatrixPositions.length, data: allActivationMatrixPositions },
         binaryMatchQueue: { count: allBinaryMatchQueue.length, data: allBinaryMatchQueue },
         userIncomeSummaries: { count: allUserIncomeSummaries.length, data: allUserIncomeSummaries },
-        systemConfig: { count: 1, data: systemConfig },
+        systemConfig: { count: 1, data: systemConfigData },
       },
       summary: {
         totalUsers: allUsers.length,
@@ -109,16 +117,50 @@ async function createAndUploadBackup() {
   }
 }
 
+async function updateBackupSchedule() {
+  try {
+    const config = await db.select().from(systemConfig).limit(1);
+    if (config.length > 0) {
+      const scheduleHours = config[0].autoBackupScheduleHours || 24;
+      const newInterval = scheduleHours * 60 * 60 * 1000;
+      
+      if (newInterval !== currentBackupInterval) {
+        currentBackupInterval = newInterval;
+        console.log(`[AUTO-BACKUP] Backup schedule updated to every ${scheduleHours} hour(s)`);
+        
+        // Clear old interval and restart with new interval
+        if (backupIntervalHandle) {
+          clearInterval(backupIntervalHandle);
+        }
+        
+        backupIntervalHandle = setInterval(() => {
+          createAndUploadBackup().catch(err => console.error('[AUTO-BACKUP] Scheduled backup failed:', err));
+        }, currentBackupInterval);
+      }
+    }
+  } catch (error) {
+    console.error('[AUTO-BACKUP] Failed to update backup schedule:', error);
+  }
+}
+
 export function startBackupScheduler() {
-  console.log('[AUTO-BACKUP] Starting 24-hour backup scheduler...');
+  console.log('[AUTO-BACKUP] Starting backup scheduler...');
   
   // Run backup immediately on startup
   createAndUploadBackup().catch(err => console.error('[AUTO-BACKUP] Initial backup failed:', err));
   
-  // Schedule backup every 24 hours
-  setInterval(() => {
+  // Load initial schedule from config
+  updateBackupSchedule().catch(err => console.error('[AUTO-BACKUP] Failed to load initial schedule:', err));
+  
+  // Schedule backup with current interval
+  backupIntervalHandle = setInterval(() => {
     createAndUploadBackup().catch(err => console.error('[AUTO-BACKUP] Scheduled backup failed:', err));
-  }, BACKUP_INTERVAL);
+  }, currentBackupInterval);
+  
+  // Check for schedule updates every 5 minutes
+  setInterval(() => {
+    updateBackupSchedule().catch(err => console.error('[AUTO-BACKUP] Failed to check schedule update:', err));
+  }, 5 * 60 * 1000);
 
-  console.log('[AUTO-BACKUP] Backup scheduler initialized - backups every 24 hours');
+  console.log('[AUTO-BACKUP] Backup scheduler initialized');
 }

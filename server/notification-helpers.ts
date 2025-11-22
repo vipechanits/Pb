@@ -31,36 +31,42 @@ export type {
   ProfileIncompleteMetadata,
 };
 
+// Helper to format amount as INR currency
+function formatAmount(amount: string | number): string {
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  return Number.isInteger(num) ? num.toString() : num.toFixed(0);
+}
+
 // Message template helpers
 export const NotificationMessages = {
   paymentReceived: (meta: PaymentReceivedMetadata) => ({
     title: 'Payment Received',
-    message: `You received ₹${meta.amount} from ${meta.payerName} (${meta.payerUserId}) for ${formatSlotType(meta.slotType)}. Please confirm or reject this payment.`,
+    message: `You received ₹${formatAmount(meta.amount)} from ${meta.payerName} (${meta.payerUserId}) for ${formatSlotType(meta.slotType)}. Please confirm or reject this payment.`,
   }),
 
   paymentConfirmed: (meta: PaymentConfirmedMetadata) => ({
     title: 'Payment Confirmed',
-    message: `Your payment of ₹${meta.amount} to ${meta.receiverName} (${meta.receiverUserId}) for ${formatSlotType(meta.slotType)} has been confirmed.`,
+    message: `Your payment of ₹${formatAmount(meta.amount)} to ${meta.receiverName} (${meta.receiverUserId}) for ${formatSlotType(meta.slotType)} has been confirmed.`,
   }),
 
   paymentRejected: (meta: PaymentRejectedMetadata) => ({
     title: 'Payment Rejected',
-    message: `Your payment of ₹${meta.amount} to ${meta.receiverName} (${meta.receiverUserId}) for ${formatSlotType(meta.slotType)} was rejected. Reason: ${meta.reason}. Please resubmit with correct details.`,
+    message: `Your payment of ₹${formatAmount(meta.amount)} to ${meta.receiverName} (${meta.receiverUserId}) for ${formatSlotType(meta.slotType)} was rejected. Reason: ${meta.reason}. Please resubmit with correct details.`,
   }),
 
   incomeEarned: (meta: IncomeEarnedMetadata) => ({
     title: 'Income Earned',
-    message: `You earned ₹${meta.amount} from ${formatIncomeType(meta.incomeType, meta.level)} when ${meta.sourceName} (${meta.sourceUserId}) activated.`,
+    message: `You earned ₹${formatAmount(meta.amount)} from ${formatIncomeType(meta.incomeType, meta.level)} when ${meta.sourceName} (${meta.sourceUserId}) activated.`,
   }),
 
   activationComplete: (meta: ActivationCompleteMetadata) => ({
     title: 'Activation Complete',
-    message: `Congratulations! Your activation is complete. Total amount: ₹${meta.totalAmount}. You can now start building your network.`,
+    message: `Congratulations! Your activation is complete. Total amount: ₹${formatAmount(meta.totalAmount)}. You can now start building your network.`,
   }),
 
   reentryEligible: (meta: ReentryEligibleMetadata) => ({
     title: 'Re-entry Available',
-    message: `Congratulations! You've completed matrix level ${meta.matrixLevel} in cycle ${meta.cycleNumber} and earned ₹${meta.totalEarnings}. You're now eligible to re-enter the system.`,
+    message: `Congratulations! You've completed matrix level ${meta.matrixLevel} in cycle ${meta.cycleNumber} and earned ₹${formatAmount(meta.totalEarnings)}. You're now eligible to re-enter the system.`,
   }),
 
   newReferral: (meta: NewReferralMetadata) => ({
@@ -70,7 +76,7 @@ export const NotificationMessages = {
 
   binaryMatch: (meta: BinaryMatchMetadata) => ({
     title: 'Binary Match Income',
-    message: `You earned ₹${meta.amount} from ${meta.pairsMatched} binary pair matches (Left: ${meta.leftCount}, Right: ${meta.rightCount}).`,
+    message: `You earned ₹${formatAmount(meta.amount)} from ${meta.pairsMatched} binary pair matches (Left: ${meta.leftCount}, Right: ${meta.rightCount}).`,
   }),
 
   profileIncomplete: (meta: ProfileIncompleteMetadata) => ({

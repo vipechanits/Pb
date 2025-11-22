@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { User } from '@shared/schema';
 import { useToast } from '@/hooks/use-toast';
-import { apiRequest, resetCsrfToken } from './queryClient';
+import { apiRequest, resetCsrfToken, fetchCsrfToken } from './queryClient';
 
 interface AuthContextType {
   user: Omit<User, 'password'> | null;
@@ -42,25 +42,77 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string, recaptchaToken?: string) => {
-    const response = await apiRequest('POST', '/api/auth/login', { email, password, recaptchaToken });
-    const data = await response.json();
-    setUser(data.user);
-    toast({
-      title: 'Welcome back!',
-      description: 'You have successfully logged in.',
-    });
-    return data.user;
+    try {
+      // Step 1: Submit login credentials
+      const response = await apiRequest('POST', '/api/auth/login', { email, password, recaptchaToken });
+      const data = await response.json();
+      
+      // Step 2: Fetch fresh CSRF token to ensure it's established
+      await fetchCsrfToken();
+      
+      // Step 3: Verify session is established by fetching current user
+      const meResponse = await fetch('/api/auth/me', {
+        credentials: 'include',
+      });
+      
+      if (meResponse.ok) {
+        const meData = await meResponse.json();
+        setUser(meData.user);
+        toast({
+          title: 'Welcome back!',
+          description: 'You have successfully logged in.',
+        });
+        return meData.user;
+      } else {
+        // Session verification failed, but login succeeded - set user from login response
+        setUser(data.user);
+        toast({
+          title: 'Welcome back!',
+          description: 'You have successfully logged in.',
+        });
+        return data.user;
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
+    }
   };
 
   const loginWithPin = async (email: string, pin: string) => {
-    const response = await apiRequest('POST', '/api/auth/login-with-pin', { email, pin });
-    const data = await response.json();
-    setUser(data.user);
-    toast({
-      title: 'Welcome back!',
-      description: 'You have successfully logged in with your PIN.',
-    });
-    return data.user;
+    try {
+      // Step 1: Submit PIN login credentials
+      const response = await apiRequest('POST', '/api/auth/login-with-pin', { email, pin });
+      const data = await response.json();
+      
+      // Step 2: Fetch fresh CSRF token to ensure it's established
+      await fetchCsrfToken();
+      
+      // Step 3: Verify session is established by fetching current user
+      const meResponse = await fetch('/api/auth/me', {
+        credentials: 'include',
+      });
+      
+      if (meResponse.ok) {
+        const meData = await meResponse.json();
+        setUser(meData.user);
+        toast({
+          title: 'Welcome back!',
+          description: 'You have successfully logged in with your PIN.',
+        });
+        return meData.user;
+      } else {
+        // Session verification failed, but login succeeded - set user from login response
+        setUser(data.user);
+        toast({
+          title: 'Welcome back!',
+          description: 'You have successfully logged in with your PIN.',
+        });
+        return data.user;
+      }
+    } catch (error) {
+      console.error('PIN login error:', error);
+      throw error;
+    }
   };
 
   const signup = async (email: string, password: string, sponsorId?: string, binaryLeg?: string) => {

@@ -632,7 +632,7 @@ export default function UserActivationPage() {
                         </div>
 
                         {/* Expandable Payment Details */}
-                        {isExpanded && (payment.status === 'submitted' || payment.status === 'confirmed' || payment.status === 'rejected') && (
+                        {isExpanded && (
                           <div className="border-t bg-muted/30 p-4 space-y-4">
                             <h4 className="font-semibold text-sm">Payment Details</h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -747,6 +747,19 @@ export default function UserActivationPage() {
                                 )}
                               </div>
                             </div>
+
+                            {/* Payment QR Code */}
+                            {payment.paymentQrUrl && (
+                              <div className="flex flex-col items-center space-y-2 pt-4 border-t">
+                                <span className="text-muted-foreground text-sm">Payment QR Code:</span>
+                                <img 
+                                  src={payment.paymentQrUrl} 
+                                  alt="Payment QR Code" 
+                                  className="w-32 h-32 border rounded-md"
+                                  data-testid="img-payment-qr"
+                                />
+                              </div>
+                            )}
 
                             {/* Additional Information */}
                             {(payment.rejectionReason || payment.notes || payment.offlineProofUrl) && (
@@ -867,7 +880,7 @@ export default function UserActivationPage() {
                         </div>
 
                         {/* Expandable Payment Details */}
-                        {isExpanded && (payment.status === 'submitted' || payment.status === 'confirmed' || payment.status === 'rejected') && (
+                        {isExpanded && (
                           <div className="border-t bg-muted/30 p-4 space-y-4">
                             <h4 className="font-semibold text-sm">Payment Details</h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -982,6 +995,19 @@ export default function UserActivationPage() {
                                 )}
                               </div>
                             </div>
+
+                            {/* Payment QR Code */}
+                            {payment.paymentQrUrl && (
+                              <div className="flex flex-col items-center space-y-2 pt-4 border-t">
+                                <span className="text-muted-foreground text-sm">Payment QR Code:</span>
+                                <img 
+                                  src={payment.paymentQrUrl} 
+                                  alt="Payment QR Code" 
+                                  className="w-32 h-32 border rounded-md"
+                                  data-testid="img-payment-qr"
+                                />
+                              </div>
+                            )}
 
                             {/* Additional Information */}
                             {(payment.rejectionReason || payment.notes || payment.offlineProofUrl) && (

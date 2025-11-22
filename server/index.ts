@@ -172,7 +172,7 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      maxAge: 365 * 24 * 60 * 60 * 1000, // 365 days (1 year) - persistent login
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days - persistent login
       httpOnly: true,
       secure: true, // Always use secure cookies (Replit provides HTTPS)
       sameSite: 'lax',
@@ -276,12 +276,35 @@ app.use((req, res, next) => {
     // Start auto-backup scheduler (24-hour interval with Google Drive upload)
     startBackupScheduler();
 
-    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    // Global error handler - MUST be after all routes
+    app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
       const message = err.message || "Internal Server Error";
+      const errorId = `ERROR_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-      console.error(`Error ${status}: ${message}`, err);
-      res.status(status).json({ message });
+      console.error(`[${errorId}] Error ${status}: ${message}`);
+      console.error(`[${errorId}] URL: ${req.method} ${req.path}`);
+      console.error(`[${errorId}] Stack:`, err.stack);
+      
+      try {
+        if (!res.headersSent) {
+          res.status(status).json({ message, errorId });
+        }
+      } catch (sendErr) {
+        console.error(`[${errorId}] Failed to send error response:`, sendErr);
+      }
+    });
+
+    // Handle uncaught exceptions
+    process.on('uncaughtException', (err) => {
+      console.error('[UNCAUGHT EXCEPTION]', err);
+      console.error('[UNCAUGHT EXCEPTION] Stack:', err.stack);
+    });
+
+    // Handle unhandled promise rejections
+    process.on('unhandledRejection', (reason, promise) => {
+      console.error('[UNHANDLED REJECTION]', reason);
+      console.error('[UNHANDLED REJECTION] Promise:', promise);
     });
 
     // importantly only setup vite in development and after

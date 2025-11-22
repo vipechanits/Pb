@@ -1,6 +1,14 @@
 import { notificationRepository } from './notification-repository';
 import { broadcastToUser } from './websocket-adapter';
 import type { InsertNotification } from '@shared/schema';
+import { db } from './db';
+import { systemConfig } from '@shared/schema';
+
+// Helper to format amount as INR currency (whole numbers)
+function formatAmount(amount: string | number): string {
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  return Number.isInteger(num) ? num.toString() : num.toFixed(0);
+}
 
 /**
  * Central notification service that handles both database persistence and WebSocket delivery
@@ -9,8 +17,16 @@ export class NotificationService {
   /**
    * Create and broadcast a notification to a user
    * Stores in database and immediately pushes via WebSocket if user is online
+   * Respects global adminNotificationsEnabled toggle
    */
   async notify(notification: InsertNotification): Promise<string> {
+    // Check if notifications are globally enabled
+    const config = await db.query.systemConfig.findFirst();
+    if (config && !config.adminNotificationsEnabled) {
+      // Return empty ID if notifications are disabled - don't create or broadcast
+      return '';
+    }
+    
     // 1. Persist notification to database
     const createdNotification = await notificationRepository.createNotification(notification);
     
@@ -47,7 +63,7 @@ export class NotificationService {
       userId,
       type: 'payment_confirmed',
       title: 'Payment Confirmed',
-      message: `Your ₹${amount} payment for ${slotType} has been confirmed by ${receiverName}`,
+      message: `Your ₹${formatAmount(amount)} payment for ${slotType} has been confirmed by ${receiverName}`,
       relatedEntityType: 'activation_payment',
       relatedEntityId: activationId,
       metadata: {
@@ -73,7 +89,7 @@ export class NotificationService {
       userId,
       type: 'activation_complete',
       title: 'Activation Complete',
-      message: `Congratulations! Your activation is complete. Total paid: ₹${totalAmount}`,
+      message: `Congratulations! Your activation is complete. Total paid: ₹${formatAmount(totalAmount)}`,
       relatedEntityType: 'activation',
       relatedEntityId: activationId,
       metadata: {
@@ -128,7 +144,7 @@ export class NotificationService {
       userId,
       type: 'income_earned',
       title: 'Income Earned',
-      message: `You earned ₹${amount} from ${incomeType}${levelText}`,
+      message: `You earned ₹${formatAmount(amount)} from ${incomeType}${levelText}`,
       relatedEntityType: 'income',
       relatedEntityId: sourceUserId,
       metadata: {
@@ -157,7 +173,7 @@ export class NotificationService {
       userId: receiverId,
       type: 'payment_received',
       title: 'Payment Received',
-      message: `${payerName} paid you ₹${amount} for ${slotType}`,
+      message: `${payerName} paid you ₹${formatAmount(amount)} for ${slotType}`,
       relatedEntityType: 'activation_payment',
       relatedEntityId: activationId,
       metadata: {

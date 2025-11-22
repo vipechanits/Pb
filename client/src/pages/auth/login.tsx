@@ -281,7 +281,7 @@ export default function LoginPage() {
               {/* Custom CAPTCHA */}
               <CustomCaptcha 
                 onCaptchaChange={setCaptchaCode} 
-                isValid={captchaCode === ''} 
+                isValid={captchaCode !== ''} 
                 data-testid="custom-captcha-login"
               />
 

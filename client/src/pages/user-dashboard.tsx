@@ -20,6 +20,7 @@ import { DashboardTreePreviews } from '@/components/dashboard/DashboardTreePrevi
 import { useSystemConfig } from '@/hooks/use-system-config';
 import { QuickActions } from '@/components/QuickActions';
 import { ProgressWidget, TeamStats, EarningsOverview } from '@/components/DashboardWidgets';
+import { InstallAppButton } from '@/components/InstallAppButton';
 
 interface IncomeSummary {
   totalEarnings: string;
@@ -200,142 +201,286 @@ export default function UserDashboard() {
   ];
 
   return (
-    <div className="container mx-auto p-4 sm:p-6 lg:p-8 space-y-6 pb-20 lg:pb-8" data-testid="user-dashboard">
-      {/* Header Section */}
-      <DashboardHeader
-        userName={user?.name}
-        userEmail={user?.email}
-        userId={user?.userId}
-        isActivated={isActivated}
-        reentryStatus={reentryStatus}
-      />
-
-      {/* Activation Status Alert */}
-      {!isActivated && (
-        <Alert className="border-primary/20 bg-primary/5">
-          <Rocket className="h-4 w-4" />
-          <AlertTitle>Complete Your Activation</AlertTitle>
-          <AlertDescription className="space-y-2">
-            <p>Your account is not yet activated. Complete all 8 payments to activate your account and start earning!</p>
-            <Link href="/user/activation">
-              <Button size="sm" className="mt-2" data-testid="button-complete-activation">
-                Complete Activation →
-              </Button>
-            </Link>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Quick Actions - Always visible */}
-      <QuickActions />
-
-      {/* Referral Links - Only shown after activation */}
-      {isActivated && (
-        <DashboardReferralLinks
-          leftLegLink={leftLegLink}
-          rightLegLink={rightLegLink}
-          copiedLeft={copiedLeft}
-          copiedRight={copiedRight}
-          onCopyLeft={() => copyToClipboard(leftLegLink, 'left')}
-          onCopyRight={() => copyToClipboard(rightLegLink, 'right')}
-        />
-      )}
-
-      {/* Dashboard Widgets Grid */}
-      {isActivated && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <ProgressWidget 
-            currentCycle={reentryStatus?.currentCycleNumber}
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5" data-testid="user-dashboard">
+      <div className="container mx-auto p-4 sm:p-6 lg:p-8 space-y-8 pb-20 lg:pb-8">
+        {/* ===== SECTION 1: USER PROFILE & STATUS ===== */}
+        <section className="space-y-4">
+          <div className="bg-gradient-to-r from-primary/10 to-primary/5 dark:from-primary/20 dark:to-primary/10 rounded-lg p-3 border border-primary/20">
+            <h2 className="text-xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">Account Overview</h2>
+          </div>
+          <DashboardHeader
+            userName={user?.name}
+            userEmail={user?.email}
+            userId={user?.userId}
             isActivated={isActivated}
-            matrixComplete={reentryStatus?.isMatrixComplete}
+            reentryStatus={reentryStatus}
           />
-          <TeamStats 
-            totalReferrals={directReferrals?.length || 0}
-            leftLeg={user?.leftLegCount || 0}
-            rightLeg={user?.rightLegCount || 0}
-          />
-          <EarningsOverview
-            totalEarnings={totalEarnings}
-            sponsorIncome={sponsorIncome}
-            binaryIncome={binaryIncome}
-            matrixIncome={matrixIncome}
-          />
-        </div>
-      )}
+        </section>
 
-      {/* Tree Previews */}
-      {isActivated && (
-        <DashboardTreePreviews binaryTree={binaryTree} matrixTree={matrixTree} />
-      )}
-
-      {!isActivated && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Getting Started</CardTitle>
-            <CardDescription>
-              Complete your activation to unlock all features
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <h3 className="font-semibold">Next Steps:</h3>
-              <ol className="list-decimal list-inside space-y-2 text-sm">
-                <li className="text-muted-foreground">Complete your profile with payment details</li>
-                <li className="font-medium">Complete all 8 activation payments</li>
-                <li className="text-muted-foreground">Wait for payment confirmations</li>
-                <li className="text-muted-foreground">Your account will be automatically activated</li>
-                <li className="text-muted-foreground">Start sharing referral links and earning!</li>
-              </ol>
+        {/* ===== SECTION 2: ACTIVATION STATUS ===== */}
+        {!isActivated && (
+          <section className="space-y-4">
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 rounded-lg p-3 border border-amber-200/50 dark:border-amber-800/50">
+              <h2 className="text-xl font-bold text-amber-700 dark:text-amber-400">Activation Required</h2>
             </div>
-          </CardContent>
-        </Card>
-      )}
+            <Alert className="border-2 border-amber-300/50 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/40 shadow-md">
+              <Rocket className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              <AlertTitle className="text-amber-900 dark:text-amber-200 font-semibold">Complete Your Activation</AlertTitle>
+              <AlertDescription className="space-y-3 text-amber-800/90 dark:text-amber-300/90">
+                <p className="font-medium">Your account is not yet activated. Complete all 8 payments to unlock full earning potential!</p>
+                <Link href="/user/activation">
+                  <Button size="sm" className="mt-2 bg-amber-600 hover:bg-amber-700 text-white" data-testid="button-complete-activation">
+                    <Rocket className="mr-2 h-3 w-3" />
+                    Complete Activation →
+                  </Button>
+                </Link>
+              </AlertDescription>
+            </Alert>
+          </section>
+        )}
 
-      {/* Re-entry Confirmation Dialog */}
-      <AlertDialog open={showReentryDialog} onOpenChange={setShowReentryDialog}>
-        <AlertDialogContent data-testid="dialog-reentry-confirm">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <RefreshCw className="w-5 h-5 text-amber-600" />
-              Confirm Re-entry
-            </AlertDialogTitle>
-            <AlertDialogDescription className="space-y-3">
-              <p>
-                You are about to initiate a re-entry into the PAYBACK247 system. This will:
-              </p>
-              <ul className="list-disc list-inside space-y-1 text-sm">
-                <li>Create a new activation cycle requiring 8 payments to designated members</li>
-                <li>Place you back in the global matrix system</li>
-                <li>Allow you to earn from all income streams again</li>
-              </ul>
-              <p className="font-semibold">
-                Total investment: ₹{config.totalActivationCost.toLocaleString('en-IN')}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                You will need to complete all 8 peer-to-peer payments to activate this cycle.
-              </p>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-cancel-reentry">Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => initiateReentryMutation.mutate()}
-              disabled={initiateReentryMutation.isPending}
-              className="bg-amber-600 hover:bg-amber-700"
-              data-testid="button-confirm-reentry"
-            >
-              {initiateReentryMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Initiating...
-                </>
-              ) : (
-                'Confirm Re-entry'
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        {/* ===== SECTION 3: QUICK ACTIONS ===== */}
+        <section className="space-y-4">
+          <div className="bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/30 rounded-lg p-3 border border-blue-200/50 dark:border-blue-800/50 flex items-center justify-between">
+            <h2 className="text-xl font-bold text-blue-700 dark:text-blue-400">Quick Actions</h2>
+            <InstallAppButton />
+          </div>
+          <div className="hover-elevate">
+            <QuickActions />
+          </div>
+        </section>
+
+        {/* ===== SECTION 4: REFERRAL NETWORK (After Activation) ===== */}
+        {isActivated && (
+          <section className="space-y-4">
+            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30 rounded-lg p-3 border border-emerald-200/50 dark:border-emerald-800/50">
+              <h2 className="text-xl font-bold text-emerald-700 dark:text-emerald-400">Grow Your Network</h2>
+              <p className="text-sm text-emerald-700/70 dark:text-emerald-400/70 mt-1">Share referral links with your team members</p>
+            </div>
+            <div className="hover-elevate">
+              <DashboardReferralLinks
+                leftLegLink={leftLegLink}
+                rightLegLink={rightLegLink}
+                copiedLeft={copiedLeft}
+                copiedRight={copiedRight}
+                onCopyLeft={() => copyToClipboard(leftLegLink, 'left')}
+                onCopyRight={() => copyToClipboard(rightLegLink, 'right')}
+              />
+            </div>
+          </section>
+        )}
+
+        {/* ===== SECTION 5: PERFORMANCE METRICS (After Activation) ===== */}
+        {isActivated && (
+          <section className="space-y-4">
+            <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 rounded-lg p-3 border border-purple-200/50 dark:border-purple-800/50">
+              <h2 className="text-xl font-bold text-purple-700 dark:text-purple-400">Performance Overview</h2>
+              <p className="text-sm text-purple-700/70 dark:text-purple-400/70 mt-1">Your current cycle progress and earnings</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="hover-elevate">
+                <ProgressWidget 
+                  currentCycle={reentryStatus?.currentCycleNumber}
+                  isActivated={isActivated}
+                  matrixComplete={reentryStatus?.isMatrixComplete}
+                />
+              </div>
+              <div className="hover-elevate">
+                <TeamStats 
+                  totalReferrals={directReferrals?.length || 0}
+                  leftLeg={user?.leftLegCount || 0}
+                  rightLeg={user?.rightLegCount || 0}
+                />
+              </div>
+              <div className="hover-elevate">
+                <EarningsOverview
+                  totalEarnings={totalEarnings}
+                  sponsorIncome={sponsorIncome}
+                  binaryIncome={binaryIncome}
+                  matrixIncome={matrixIncome}
+                />
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* ===== SECTION 6: INCOME BREAKDOWN (After Activation) ===== */}
+        {isActivated && incomeSummary && (
+          <section className="space-y-4">
+            <div className="bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-950/30 dark:to-blue-950/30 rounded-lg p-3 border border-indigo-200/50 dark:border-indigo-800/50">
+              <h2 className="text-xl font-bold text-indigo-700 dark:text-indigo-400">Income Streams</h2>
+              <p className="text-sm text-indigo-700/70 dark:text-indigo-400/70 mt-1">Detailed breakdown of your earnings by source</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <Card className="border-0 bg-gradient-to-br from-blue-50/50 to-cyan-50/50 dark:from-blue-950/40 dark:to-cyan-950/40 shadow-md hover-elevate transition-all duration-300">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-400">Direct Sponsor Income</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-blue-900 dark:text-blue-200">₹{parseFloat(incomeSummary.directSponsorIncome || '0').toLocaleString('en-IN')}</div>
+                </CardContent>
+              </Card>
+              <Card className="border-0 bg-gradient-to-br from-emerald-50/50 to-teal-50/50 dark:from-emerald-950/40 dark:to-teal-950/40 shadow-md hover-elevate transition-all duration-300">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Binary Match Income</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-emerald-900 dark:text-emerald-200">₹{parseFloat(incomeSummary.binaryMatchIncome || '0').toLocaleString('en-IN')}</div>
+                </CardContent>
+              </Card>
+              <Card className="border-0 bg-gradient-to-br from-purple-50/50 to-pink-50/50 dark:from-purple-950/40 dark:to-pink-950/40 shadow-md hover-elevate transition-all duration-300">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-purple-700 dark:text-purple-400">Matrix Income (5 Levels)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-purple-900 dark:text-purple-200">₹{matrixIncome.toLocaleString('en-IN')}</div>
+                </CardContent>
+              </Card>
+            </div>
+          </section>
+        )}
+
+        {/* ===== SECTION 7: BINARY & MATRIX TREES (After Activation) ===== */}
+        {isActivated && (
+          <section className="space-y-4">
+            <div className="bg-gradient-to-r from-rose-50 to-orange-50 dark:from-rose-950/30 dark:to-orange-950/30 rounded-lg p-3 border border-rose-200/50 dark:border-rose-800/50">
+              <h2 className="text-xl font-bold text-rose-700 dark:text-rose-400">Network Trees</h2>
+              <p className="text-sm text-rose-700/70 dark:text-rose-400/70 mt-1">Visualize your binary placement and matrix positioning</p>
+            </div>
+            <div className="hover-elevate">
+              <DashboardTreePreviews binaryTree={binaryTree} matrixTree={matrixTree} />
+            </div>
+          </section>
+        )}
+
+        {/* ===== SECTION 8: RE-ENTRY OPPORTUNITIES (After Matrix Completion) ===== */}
+        {isActivated && reentryStatus?.isMatrixComplete && (
+          <section className="space-y-4">
+            <div className="bg-gradient-to-r from-emerald-100/50 to-green-100/50 dark:from-emerald-900/40 dark:to-green-900/40 rounded-lg p-3 border border-emerald-300/50 dark:border-emerald-700/50">
+              <h2 className="text-xl font-bold text-emerald-700 dark:text-emerald-300">Re-Entry Available</h2>
+              <p className="text-sm text-emerald-700/70 dark:text-emerald-300/70 mt-1">Congratulations! You can re-enter and earn more</p>
+            </div>
+            <Card className="border-0 border-t-4 border-t-green-500 bg-gradient-to-br from-green-50/50 to-emerald-50/50 dark:from-green-950/40 dark:to-emerald-950/40 shadow-lg hover-elevate transition-all duration-300">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-400">
+                  <Trophy className="h-6 w-6 text-green-600 dark:text-green-400" />
+                  Matrix Completion
+                </CardTitle>
+                <CardDescription className="text-green-700/80 dark:text-green-400/80">
+                  You have completed your matrix! Click below to initiate a new cycle and continue earning.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button 
+                  onClick={() => setShowReentryDialog(true)}
+                  className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold shadow-md"
+                  data-testid="button-initiate-reentry"
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Initiate Re-entry
+                </Button>
+              </CardContent>
+            </Card>
+          </section>
+        )}
+
+        {/* ===== SECTION 9: GETTING STARTED (For Non-Activated Users) ===== */}
+        {!isActivated && (
+          <section className="space-y-4">
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 rounded-lg p-3 border border-blue-200/50 dark:border-blue-800/50">
+              <h2 className="text-xl font-bold text-blue-700 dark:text-blue-400">Getting Started</h2>
+              <p className="text-sm text-blue-700/70 dark:text-blue-400/70 mt-1">Follow these steps to activate your account</p>
+            </div>
+            <Card className="border-0 bg-gradient-to-br from-slate-50/50 to-slate-100/50 dark:from-slate-950/40 dark:to-slate-900/40 shadow-md">
+              <CardContent className="pt-6 space-y-4">
+                <div className="space-y-3">
+                  <div className="flex gap-4 items-start p-3 rounded-lg hover-elevate transition-all duration-200 bg-white/50 dark:bg-slate-950/50">
+                    <Badge className="mt-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold text-sm h-8 w-8 flex items-center justify-center rounded-full">1</Badge>
+                    <div className="flex-1">
+                      <p className="font-semibold text-foreground">Complete Your Profile</p>
+                      <p className="text-sm text-muted-foreground">Add payment details (UPI, Bank, etc.)</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-4 items-start p-3 rounded-lg hover-elevate transition-all duration-200 bg-white/50 dark:bg-slate-950/50">
+                    <Badge className="mt-1 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold text-sm h-8 w-8 flex items-center justify-center rounded-full">2</Badge>
+                    <div className="flex-1">
+                      <p className="font-semibold text-foreground">Make 8 Payments</p>
+                      <p className="text-sm text-muted-foreground">Complete all 8 peer-to-peer payments (₹5,000 total)</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-4 items-start p-3 rounded-lg hover-elevate transition-all duration-200 bg-white/50 dark:bg-slate-950/50">
+                    <Badge className="mt-1 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white font-bold text-sm h-8 w-8 flex items-center justify-center rounded-full">3</Badge>
+                    <div className="flex-1">
+                      <p className="font-semibold text-foreground">Wait for Confirmations</p>
+                      <p className="text-sm text-muted-foreground">Admin will verify and confirm each payment</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-4 items-start p-3 rounded-lg hover-elevate transition-all duration-200 bg-white/50 dark:bg-slate-950/50">
+                    <Badge className="mt-1 bg-gradient-to-r from-green-500 to-green-600 text-white font-bold text-sm h-8 w-8 flex items-center justify-center rounded-full">4</Badge>
+                    <div className="flex-1">
+                      <p className="font-semibold text-foreground">Account Activated</p>
+                      <p className="text-sm text-muted-foreground">Automatic activation upon full payment confirmation</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-4 items-start p-3 rounded-lg hover-elevate transition-all duration-200 bg-white/50 dark:bg-slate-950/50">
+                    <Badge className="mt-1 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-bold text-sm h-8 w-8 flex items-center justify-center rounded-full">5</Badge>
+                    <div className="flex-1">
+                      <p className="font-semibold text-foreground">Start Earning</p>
+                      <p className="text-sm text-muted-foreground">Share referral links and build your network for income</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+        )}
+
+        {/* Re-entry Confirmation Dialog */}
+        <AlertDialog open={showReentryDialog} onOpenChange={setShowReentryDialog}>
+          <AlertDialogContent data-testid="dialog-reentry-confirm">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <RefreshCw className="w-5 h-5 text-amber-600" />
+                Confirm Re-entry
+              </AlertDialogTitle>
+              <AlertDialogDescription className="space-y-3">
+                <p>
+                  You are about to initiate a re-entry into the PAYBACK247 system. This will:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-sm">
+                  <li>Create a new activation cycle requiring 8 payments to designated members</li>
+                  <li>Place you back in the global matrix system</li>
+                  <li>Allow you to earn from all income streams again</li>
+                </ul>
+                <p className="font-semibold">
+                  Total investment: ₹{config.totalActivationCost.toLocaleString('en-IN')}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  You will need to complete all 8 peer-to-peer payments to activate this cycle.
+                </p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-cancel-reentry">Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => initiateReentryMutation.mutate()}
+                disabled={initiateReentryMutation.isPending}
+                className="bg-amber-600 hover:bg-amber-700"
+                data-testid="button-confirm-reentry"
+              >
+                {initiateReentryMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Initiating...
+                  </>
+                ) : (
+                  'Confirm Re-entry'
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
     </div>
   );
 }

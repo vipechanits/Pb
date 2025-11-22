@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { CheckCircle, QrCode, AlertTriangle, Mail, Lock, Shield, Hash } from 'lucide-react';
+import { CheckCircle, QrCode, AlertTriangle, Mail, Lock, Shield, Hash, Copy, Check } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { ReferralLinks } from '@/components/referral-links';
@@ -25,6 +25,7 @@ export default function Profile() {
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [showQR, setShowQR] = useState(false);
   const [showProfileDialog, setShowProfileDialog] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // Show profile completion dialog on first visit
   useEffect(() => {
@@ -100,6 +101,16 @@ export default function Profile() {
         variant: 'destructive',
       });
     }
+  };
+
+  const copyToClipboard = (text: string, fieldName: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldName);
+    setTimeout(() => setCopiedField(null), 2000);
+    toast({
+      title: 'Copied',
+      description: `${fieldName} copied to clipboard`,
+    });
   };
 
   const handleDialogClose = (open: boolean) => {
@@ -374,6 +385,126 @@ export default function Profile() {
           </Card>
         </form>
       </Form>
+
+      {/* Payment Details Display - Show saved payment info with copy buttons */}
+      {(user?.upiId || user?.bankAccountNumber) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Hash className="h-5 w-5" />
+              Your Payment Details
+            </CardTitle>
+            <CardDescription>Your saved payment information for receiving payments</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* UPI ID */}
+            {user?.upiId && (
+              <div className="border rounded-lg p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">UPI ID</p>
+                    <p className="font-mono font-semibold text-lg">{user.upiId}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => copyToClipboard(user.upiId!, 'UPI ID')}
+                    data-testid="button-copy-upi"
+                  >
+                    {copiedField === 'UPI ID' ? (
+                      <Check className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Bank Account Number */}
+            {user?.bankAccountNumber && (
+              <div className="border rounded-lg p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm text-muted-foreground">Account Number</p>
+                    <p className="font-mono font-semibold text-lg">{user.bankAccountNumber}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => copyToClipboard(user.bankAccountNumber!, 'Account Number')}
+                    data-testid="button-copy-account"
+                  >
+                    {copiedField === 'Account Number' ? (
+                      <Check className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* IFSC Code */}
+            {user?.ifscCode && (
+              <div className="border rounded-lg p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">IFSC Code</p>
+                    <p className="font-mono font-semibold text-lg">{user.ifscCode}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => copyToClipboard(user.ifscCode!, 'IFSC Code')}
+                    data-testid="button-copy-ifsc"
+                  >
+                    {copiedField === 'IFSC Code' ? (
+                      <Check className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Account Holder */}
+            {user?.bankAccountHolder && (
+              <div className="border rounded-lg p-4">
+                <p className="text-sm text-muted-foreground">Account Holder</p>
+                <p className="font-semibold text-lg">{user.bankAccountHolder}</p>
+              </div>
+            )}
+
+            {/* Payment QR Code */}
+            {user?.upiId && user?.name && user?.mobile && (
+              <div className="pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={generateQRCode}
+                  className="w-full"
+                  data-testid="button-generate-payment-qr"
+                >
+                  <QrCode className="mr-2 h-4 w-4" />
+                  Generate Payment QR Code
+                </Button>
+
+                {showQR && qrCode && (
+                  <div className="mt-4 p-4 border rounded-lg bg-white dark:bg-card flex flex-col items-center">
+                    <p className="text-sm font-medium mb-2">Share Your Payment QR:</p>
+                    <img src={qrCode} alt="Payment QR Code" className="w-48 h-48" data-testid="img-payment-qr-display" />
+                    <p className="text-xs text-muted-foreground text-center mt-2">
+                      Others can scan this QR to send you payments directly
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
         </TabsContent>
 
         <TabsContent value="referrals" className="mt-6">

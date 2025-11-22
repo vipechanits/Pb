@@ -41,6 +41,9 @@ type SystemConfig = {
   customCaptchaCodeLength: number;
   customCaptchaCodeType: string;
   customCaptchaColor: string;
+  autoBackupScheduleHours: number;
+  adminNotificationsEnabled: boolean;
+  autoBackupEnabled: boolean;
   emailHost: string | null;
   emailPort: number | null;
   emailUser: string | null;
@@ -48,6 +51,7 @@ type SystemConfig = {
   emailFrom: string | null;
   emailSecure: boolean;
   emailEnabled: boolean;
+  enabledModules?: string;
   updatedAt: string;
 };
 
@@ -284,9 +288,12 @@ export default function AdminConfig() {
       </div>
 
       <Tabs defaultValue="settings" className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsList className="grid w-full max-w-2xl grid-cols-3">
           <TabsTrigger value="settings" data-testid="tab-system-settings">
             System Settings
+          </TabsTrigger>
+          <TabsTrigger value="modules" data-testid="tab-enabled-modules">
+            Enabled Modules
           </TabsTrigger>
           <TabsTrigger value="payment-methods" data-testid="tab-payment-methods">
             Payment Methods
@@ -792,6 +799,73 @@ export default function AdminConfig() {
               )}
             </div>
 
+            {/* Auto-Backup Schedule Configuration */}
+            <div className="space-y-4 p-4 border rounded-lg border-t">
+              <div className="space-y-2">
+                <Label htmlFor="autoBackupScheduleHours" className="text-base font-medium">
+                  Auto-Backup Schedule
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  Configure how frequently automatic backups are created and uploaded to Google Drive
+                </p>
+              </div>
+              
+              <Select
+                value={String(getNumberValue('autoBackupScheduleHours'))}
+                onValueChange={(value) => handleChange('autoBackupScheduleHours', parseInt(value))}
+              >
+                <SelectTrigger id="autoBackupScheduleHours" data-testid="select-backup-schedule">
+                  <SelectValue placeholder="Select schedule" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">Every 1 Hour (Frequent)</SelectItem>
+                  <SelectItem value="12">Every 12 Hours (Twice Daily)</SelectItem>
+                  <SelectItem value="24">Every 24 Hours (Daily)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                More frequent backups provide better data protection but use more storage space
+              </p>
+
+              {/* Auto-Backup Toggle */}
+              <div className="flex items-center justify-between pt-4 border-t">
+                <div className="space-y-1">
+                  <Label htmlFor="autoBackupEnabled" className="text-base font-medium">
+                    Enable Automatic Backups
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Turn automatic backups on or off globally
+                  </p>
+                </div>
+                <Switch
+                  id="autoBackupEnabled"
+                  checked={!!getValue('autoBackupEnabled')}
+                  onCheckedChange={(checked) => handleChange('autoBackupEnabled', checked)}
+                  data-testid="switch-auto-backup-enabled"
+                />
+              </div>
+            </div>
+
+            {/* Admin Notifications Configuration */}
+            <div className="space-y-4 p-4 border rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label htmlFor="adminNotificationsEnabled" className="text-base font-medium">
+                    Admin Bell Notifications
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Enable or disable the admin notification bell for payment and system alerts
+                  </p>
+                </div>
+                <Switch
+                  id="adminNotificationsEnabled"
+                  checked={!!getValue('adminNotificationsEnabled')}
+                  onCheckedChange={(checked) => handleChange('adminNotificationsEnabled', checked)}
+                  data-testid="switch-admin-notifications"
+                />
+              </div>
+            </div>
+
           </CardContent>
         </Card>
 
@@ -1203,6 +1277,63 @@ export default function AdminConfig() {
               </AlertDescription>
             </Alert>
           )}
+        </TabsContent>
+
+        <TabsContent value="modules" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Enabled Modules</CardTitle>
+              <CardDescription>
+                Toggle modules on/off to enable or disable features across the platform
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {['registration', 'activation', 'binary', 'matrix', 'reentry', 'admin', 'backup'].map((module) => {
+                const enabledModulesStr = formData.enabledModules !== undefined 
+                  ? formData.enabledModules 
+                  : config?.enabledModules;
+                let modules: string[] = [];
+                try {
+                  modules = enabledModulesStr ? JSON.parse(enabledModulesStr) : [];
+                } catch {
+                  modules = ['registration', 'activation', 'binary', 'matrix', 'reentry', 'admin', 'backup'];
+                }
+                const isEnabled = modules.includes(module);
+                
+                return (
+                  <div key={module} className="flex items-center justify-between p-4 border rounded-lg hover-elevate transition-colors">
+                    <div className="flex-1">
+                      <Label className="capitalize text-base font-medium cursor-pointer">{module} Module</Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {module === 'registration' && 'User signup, login, email verification'}
+                        {module === 'activation' && 'User activation, 8-payment system'}
+                        {module === 'binary' && 'Binary tree, pair matching, spillover'}
+                        {module === 'matrix' && 'Global matrix, 5-level income'}
+                        {module === 'reentry' && 'Multi-cycle re-entry, cycle management'}
+                        {module === 'admin' && 'Admin dashboard, user management'}
+                        {module === 'backup' && 'Database backup and restore'}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={isEnabled}
+                      onCheckedChange={(checked) => {
+                        let updatedModules = [...modules];
+                        if (checked) {
+                          if (!updatedModules.includes(module)) {
+                            updatedModules.push(module);
+                          }
+                        } else {
+                          updatedModules = updatedModules.filter((m) => m !== module);
+                        }
+                        handleChange('enabledModules', JSON.stringify(updatedModules));
+                      }}
+                      data-testid={`toggle-module-${module}`}
+                    />
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 

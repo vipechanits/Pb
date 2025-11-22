@@ -145,6 +145,15 @@ export function PaymentSubmissionDialog({
           </div>
 
           {/* Receiver Payment Details with UPI/Bank Tabs */}
+          {!receiverDetails && payment.receiverUserId === null && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Receiver not yet assigned. Complete and confirm the first 3 payments (Sponsor, Binary Match, and Top Reward) first. Matrix receivers will be assigned automatically after your account is activated.
+              </AlertDescription>
+            </Alert>
+          )}
+          
           {receiverDetails && (
             <Card>
               <CardContent className="pt-6">

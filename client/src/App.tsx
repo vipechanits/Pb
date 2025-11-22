@@ -50,7 +50,24 @@ import AdminConfig from '@/pages/admin-config';
 import DatabaseBackupPage from '@/pages/admin/database';
 import AdminSecurity from '@/pages/admin/security';
 import AdminBackups from '@/pages/admin-backups';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+
+// Register service worker for PWA capabilities
+function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then((registration) => {
+          console.log('Service Worker registered successfully:', registration);
+        })
+        .catch((error) => {
+          console.log('Service Worker registration failed:', error);
+        });
+    });
+  }
+}
+
 function DashboardLayout({ children, isAdmin = false }: { children: React.ReactNode; isAdmin?: boolean }) {
   const style = {
     '--sidebar-width': '24rem',
@@ -415,6 +432,10 @@ function Router() {
 }
 
 export default function App() {
+  useEffect(() => {
+    // Register service worker on app load
+    registerServiceWorker();
+  }, []);
   // Fetch CSRF token on app load
   useEffect(() => {
     fetchCsrfToken().catch((error) => {

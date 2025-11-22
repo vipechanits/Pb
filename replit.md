@@ -1,122 +1,45 @@
 # PAYBACK247 - P2P Income Platform
 
 ## Overview
-PAYBACK247 is a peer-to-peer income platform for network marketing, featuring binary pairing income, multi-level matrix rewards, and a manual payment tracking system with administrator approval. The platform enables user account activation, referral network building, earnings monitoring, and profile management. Administrators can manage configurations, approve payments, and access analytics. A key capability is multi-cycle re-entry, allowing users to earn from subsequent matrix completions, with all administrative fees and fallback payments routed to the central administrator (PB0).
+PAYBACK247 is a peer-to-peer income platform for network marketing, featuring binary pairing income, multi-level matrix rewards, and a manual payment tracking system with administrator approval. The platform supports user account activation, referral network building, earnings monitoring, and profile management. Administrators can manage configurations, approve payments, and access analytics. Key capabilities include multi-cycle re-entry and routing of administrative fees and fallback payments to a central administrator (PB0). The platform is designed with a modular SaaS architecture, allowing for scalable and flexible feature management.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
 ## System Architecture
 
-### Frontend
-- **Framework**: React with TypeScript (Vite).
-- **Routing**: Wouter.
-- **State Management**: TanStack React Query.
+### UI/UX Decisions
+- **Frontend**: React with TypeScript (Vite)
+- **Routing**: Wouter
+- **State Management**: TanStack React Query
 - **UI**: shadcn/ui (Radix UI + Tailwind CSS) following Material Design, with custom themes.
-- **Authentication**: Email/password login with session management.
 - **Design System**: Tailwind CSS, Inter and JetBrains Mono fonts.
 - **Mobile-First Design**: Responsive UI with mobile bottom navigation and quick actions.
 - **Notification Sounds**: Web Audio API with double-chime for success and triple-chime for alerts.
 
-### Backend
-- **Server Framework**: Express.js with TypeScript (Node.js).
-- **API Structure**: RESTful API (`/api` prefix).
+### Technical Implementations
+- **Backend**: Express.js with TypeScript (Node.js)
+- **API Structure**: RESTful API (`/api` prefix)
 - **Session Management**: Express sessions with PostgreSQL store.
-- **Security Hardening**: Helmet.js, CSRF protection, rate limiting, DDoS protection.
-- **Authorization Model**: Row-level access control for payments, binary trees, and income data.
+- **Security Hardening**: Helmet.js, CSRF protection, rate limiting, DDoS protection, IP blocking, threat detection.
+- **Authorization Model**: Row-level access control for sensitive data.
+- **Authentication**: Email/password with bcrypt hashing and session management.
+- **Role Detection**: Admin/user roles with PB0 as the root admin.
+- **Object Storage**: Replit Object Storage (Google Cloud Storage-backed) for file serving and ACL management.
+- **Multi-Cycle Support**: Each re-entry cycle has its own separate global matrix tree with unique positioning and independent income streams, stored per activation.
+- **Binary Placement**: Supports exact placement, sponsor spillover (deep down), and global spillover (BFS), with a `UNIQUE(binaryParentId, binaryPlacementLeg)` constraint. Referral links are required for signup.
+- **Payment Processing**: 8-payment activation system with dynamic, admin-configurable amounts. Manual INR payments via UPI with UTR/Transaction ID and optional proof upload. All payments require manual admin confirmation. Admin fees and fallback payments route to PB0.
+- **Data Integrity**: Uses SERIALIZABLE transaction isolation, row-level locking, unique constraints, and advisory locks for payment and activation operations.
+- **Backup & Restore**: Complete platform backup and restore capability for all database tables, with versioned backups and configurable auto-backup scheduling.
+- **Payment Reports & Analytics**: Daily/weekly/monthly reports with receiver type filtering and CSV export.
+- **Real-time Notifications**: WebSockets for instant notifications on payment submission, rejection, and confirmation.
 
-### Data Storage
-- **Database**: PostgreSQL (Neon serverless).
-- **ORM**: Drizzle ORM for type-safe operations.
-- **Schema**: Users, activations, activation payments, system configuration, and `activation_matrix_positions` for multi-cycle matrix positioning.
-- **Migrations**: Drizzle Kit with safe migrations (`npm run db:push`).
-- **Validation**: Zod schemas.
-- **Transaction Guarantees**: Atomic creation of activations and payments with SERIALIZABLE isolation and row-level locking to prevent race conditions.
-
-### Object Storage
-- **Provider**: Replit Object Storage (Google Cloud Storage-backed).
-- **Service**: `ObjectStorageService` for presigned URLs, file serving, ACL management.
-
-### Authentication & Authorization
-- **Authentication**: Email/password with bcrypt hashing.
-- **Session Management**: Express sessions with PostgreSQL store.
-- **Role Detection**: Admin/user roles.
-- **User IDs**: Auto-generated sequential IDs (PB10000+).
-- **Admin User**: PB0 (Root Admin) with environment-driven credentials.
-- **Payment Authorization**: Only the designated receiver can confirm or reject payments.
-- **Data Access Authorization**: Users can only view their own payment details; admins can view any user's details.
-
-### Network Marketing Structure
-- **Binary Tree & Global Matrix**: Both trees start from PB10000, excluding admin (PB0).
-- **Root Node Handling**: First non-admin user to activate becomes the root.
-- **Binary Matching**: Uses entire self team for 3:3 pair counting, with initial 1+1 qualification from personal counts.
-- **Admin Role**: PB0 acts as payment receiver and system administrator only.
-- **Matrix Growth**: Global matrix grows infinitely, with users earning from their 5-level downline (62 users maximum) independently per activation cycle.
-- **Multi-Cycle Support**: Each re-entry cycle has its own separate 2x∞ global matrix tree with unique positioning and independent income streams.
-- **Activation-Scoped Matrix Positioning**: Matrix positions are stored per activation.
-
-### Binary Placement Architecture
-- **Separation of Concerns**: Sponsorship (income tracking) separate from binary placement (tree structure).
-- **Unique Position Constraint**: Database enforces `UNIQUE(binaryParentId, binaryPlacementLeg)`.
-- **URL-Based Placement with Spillover**: 3-tier priority system:
-  1. Exact Placement at sponsor's requested leg.
-  2. Sponsor Spillover (DEEP DOWN): Depth-first search in sponsor's downline.
-  3. Global Spillover (BFS): Breadth-first search across entire global tree.
-- **Referral Link Required**: Users must sign up via `?ref=PB10000&leg=left` URLs.
-- **Binary Leg Auto-Assignment**: Automatically assigns to the leg with fewer members if not specified during signup.
-- **Default Sponsor Assignment**: New users without a sponsor ID are automatically assigned PB10000 as sponsor.
-
-### Payment Processing
-- **8-Payment Activation System**: Each user activation requires 8 payments: Direct Sponsor (Slot 0), Binary Match (Slot 1), Top Reward Payment (Slot 2), Matrix Levels 1-5 (Slots 3-7).
-- **Dynamic Configuration**: Payment amounts, binary matching rules, and matching ratio are admin-configurable.
-- **Admin Fee Routing**: All admin fees and fallback payments route exclusively to PB0.
-- **Payment Mode**: Manual INR payments via UPI with UTR/Transaction ID and optional proof upload.
-- **Payment Flow**: User submits UTR/proof, receiver confirms/rejects, user can resubmit.
-- **Payment Status Tracking**: Pending, Submitted, Confirmed, Rejected.
-- **Manual Confirmation Required**: All payments require manual confirmation by PB0 admin.
-- **Profile Completion Enforcement**: Users must complete profile details before requesting activation.
-- **Deferred Income Creation**: Sponsor and matrix income created after full activation; binary match and top reward incomes created immediately.
-- **Automatic Re-entry**: System automatically detects matrix completion (62 users) and marks users eligible for re-entry.
-- **Sound Feedback**: Double-chime plays on payment confirmation; triple-chime on payment rejection.
-
-### Security
-- **Hardening**: Helmet.js with strict CSP, HSTS, XSS protection, clickjacking prevention.
-- **Rate Limiting**: Tiered rate limiting for auth, payment, admin, and general API endpoints.
-- **DDoS Protection**: `express-slow-down`.
-- **IP Blocking**: IP-based blocking system with suspicious activity tracking.
-- **Threat Detection**: Smart pattern detection for SQL injection, XSS, path traversal.
-- **Validation**: Request size limits and payload validation.
-- **Auditing**: Security audit logging for auth attempts, admin actions, and payment operations.
-- **Data Integrity Protection** (2025-11-19):
-  - SERIALIZABLE transaction isolation for all financial operations
-  - Row-level locking (SELECT FOR UPDATE) to prevent race conditions
-  - Unique constraints on binary positions: `UNIQUE(binaryParentId, binaryPlacementLeg)`
-  - Advisory locks with timeout protection for duplicate UTR prevention
-  - Atomic binary placement with slot finding inside transactions
-  - Duplicate income prevention checks in payment workflows
-- **Access Control** (2025-11-21):
-  - Users can only view their own payment details
-  - Admins can view any user's payment details
-  - Payment authorization verified before confirmation/rejection
-  - No sensitive data exposure in error messages
-
-### Backup & Restore System (2025-11-21)
-- **Complete Platform Backup**: One-click download of entire database (all 10 tables)
-- **Full Restore Capability**: Upload any backup to instantly restore complete platform state
-- **Versioned Backups**: v2.0 backup format with metadata, timestamps, and record counts
-- **All Tables Included**:
-  - users, activations, activation_payments, income_transactions
-  - notifications, reentries, activation_matrix_positions, binary_match_queue
-  - user_income_summaries, system_config
-- **Migration Ready**: Backups designed for migration to AWS, Azure, Google Cloud, Docker, or traditional Linux servers
-- **GitHub Integration**: Automatic sync procedures documented for continuous backups
-
-### Payment Reports & Analytics (2025-11-21)
-- **Daily/Weekly/Monthly Reports**: View payment statistics for any time period
-- **Receiver Type Filtering**: Separate reports for Admin (PB0) vs Regular Users
-- **CSV Export**: Download filtered reports with complete payment details
-- **Real-time Statistics**: Payment counts, amounts, and status breakdowns by period
-- **Dynamic Filtering**: Reports update instantly when changing filters
+### System Design Choices
+- **Modular SaaS Architecture**: 8 independent modules (Registration, Activation, Binary, Matrix, Re-entry, Admin, Backup, Common) that can be enabled/disabled at runtime via an admin panel. This enhances scalability, allows independent development, optimizes performance, and enables SaaS tiers.
+- **Network Marketing Structure**: Binary tree and global matrix starting from PB10000 (excluding admin PB0). Global matrix grows infinitely, with users earning from a 5-level downline (62 users maximum) per activation cycle.
+- **Binary Placement Architecture**: Sponsorship (income tracking) is separate from binary placement (tree structure).
+- **Comprehensive Security**: Implemented with strict CSP, HSTS, XSS protection, clickjacking prevention, tiered rate limiting, and DDoS protection.
+- **Audit Logging**: Security audit logging for authentication attempts, admin actions, and payment operations.
 
 ## External Dependencies
 
@@ -149,62 +72,3 @@ Preferred communication style: Simple, everyday language.
 - **Google Fonts**: Inter, JetBrains Mono.
 - **Date-fns**: Date manipulation and formatting.
 - **Google reCAPTCHA v2**: For enhanced security on login and signup pages.
-
-## Recent Updates (2025-11-21)
-
-### Backup & Migration System Complete
-1. **Enhanced Backup Endpoint**: `/api/admin/system/backup`
-   - Exports all 10 database tables with metadata
-   - Timestamped JSON format for version control
-   - Record counts for verification
-
-2. **Full Restore Capability**: `/api/admin/system/restore`
-   - Upload backup files to restore entire platform
-   - Respects foreign key constraints
-   - Shows detailed restoration summary
-
-3. **Payment Reports API**:
-   - `/api/admin/reports/daily` - Daily payment statistics
-   - `/api/admin/reports/weekly` - Weekly payment statistics
-   - `/api/admin/reports/monthly` - Monthly payment statistics
-   - All report endpoints support `?receiverType=admin|user` filtering
-   - `/api/admin/reports/export-csv` - CSV export with receiver type filtering
-
-4. **Admin UI Enhancements**:
-   - Payment Reports card with Daily/Weekly/Monthly tabs
-   - Receiver Type filter dropdown (All/Admin/Users)
-   - Real-time report updates
-   - CSV export with filtered data
-
-5. **Documentation Created**:
-   - `BACKUP_AND_MIGRATION_GUIDE.md` - Complete backup/restore/migration procedures
-   - `GITHUB_SETUP.md` - GitHub repository integration for continuous backups
-   - `PLATFORM_MIGRATION_CHECKLIST.md` - Pre/during/post-migration verification
-
-### Security & Quality
-1. Fixed all TypeScript errors (7 diagnostics)
-2. Enhanced API authorization layer
-3. Improved error messaging
-4. Complete backup/restore transaction safety
-
-## Deployment Status
-✅ **PRODUCTION READY**
-- All security vulnerabilities resolved
-- Complete backup & restore system
-- Migration infrastructure complete
-- Payment reports with filtering
-- GitHub integration ready
-- API authorization properly implemented
-- Real-time notifications active
-- Deployment configuration set for autoscale
-
-## Key Features Summary
-- Binary tree with global matrix growth (5 levels, 62 max per cycle)
-- 8-payment activation system with manual UPI payments
-- Multi-cycle re-entry with automatic detection
-- Comprehensive reporting and analytics
-- Complete backup/restore/migration capabilities
-- Real-time WebSocket notifications
-- Full security hardening and rate limiting
-- Admin dashboard with payment management
-
