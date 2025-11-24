@@ -19,15 +19,23 @@ interface NotificationResponse {
   unreadCount: number;
 }
 
+interface SystemConfig {
+  adminNotificationsEnabled: boolean;
+}
+
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
-  // Fetch notifications with unread count
+  // Fetch system config to check if notifications are enabled
+  const { data: config } = useQuery<SystemConfig>({
+    queryKey: ['/api/system-config'],
+  });
+
+  // Fetch notifications with unread count (only if notifications are enabled)
   const { data, isLoading } = useQuery<NotificationResponse>({
     queryKey: ['/api/notifications'],
-    refetchInterval: 5000, // Poll every 5 seconds for real-time notifications
-    enabled: true,
+    enabled: config?.adminNotificationsEnabled ?? true,
   });
 
   // Mark all notifications as read
@@ -63,6 +71,11 @@ export function NotificationBell() {
 
   const notifications = data?.notifications || [];
   const unreadCount = data?.unreadCount || 0;
+
+  // Don't render bell if notifications are disabled in admin settings
+  if (config && !config.adminNotificationsEnabled) {
+    return null;
+  }
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>

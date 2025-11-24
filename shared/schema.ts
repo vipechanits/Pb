@@ -172,6 +172,10 @@ export const users = pgTable("users", {
 }, (t) => ({
   // Index on binaryParentId for fast subtree queries
   binaryParentIdx: index("binary_parent_idx").on(t.binaryParentId),
+  // CRITICAL: Additional performance indexes for frequently queried fields
+  userIdIdx: index("users_user_id_idx").on(t.userId),
+  sponsorIdIdx: index("users_sponsor_id_idx").on(t.sponsorId),
+  emailIdx: index("users_email_idx").on(t.email),
   // CRITICAL: Unique constraint prevents duplicate binary positions (only ONE user per parent+leg combination)
   uniqueBinaryPosition: unique("unique_binary_position").on(t.binaryParentId, t.binaryPlacementLeg),
 }));
@@ -256,7 +260,11 @@ export const activations = pgTable("activations", {
   status: activationStatusEnum("status").notNull().default('pending'),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   completedAt: timestamp("completed_at"),
-});
+}, (t) => ({
+  // Performance indexes for frequently queried fields
+  payerWalletIdx: index("activations_payer_wallet_idx").on(t.payerWallet),
+  statusIdx: index("activations_status_idx").on(t.status),
+}));
 
 export const insertActivationSchema = createInsertSchema(activations).omit({
   createdAt: true,
@@ -310,7 +318,13 @@ export const activationPayments = pgTable("activation_payments", {
   notes: text("notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (t) => ({
+  // Performance indexes for frequently queried fields
+  payerUserIdIdx: index("activation_payments_payer_user_id_idx").on(t.payerUserId),
+  receiverUserIdIdx: index("activation_payments_receiver_user_id_idx").on(t.receiverUserId),
+  statusIdx: index("activation_payments_status_idx").on(t.status),
+  activationIdIdx: index("activation_payments_activation_id_idx").on(t.activationId),
+}));
 
 export const insertActivationPaymentSchema = createInsertSchema(activationPayments).omit({
   id: true,
@@ -630,7 +644,13 @@ export const notifications = pgTable("notifications", {
   acknowledgedAt: timestamp("acknowledged_at"), // When client acknowledged receipt
   
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (t) => ({
+  // Performance indexes for frequently queried fields
+  userIdIdx: index("notifications_user_id_idx").on(t.userId),
+  isReadIdx: index("notifications_is_read_idx").on(t.isRead),
+  // Composite index for common query: get unread notifications for a user
+  userReadIdx: index("notifications_user_read_idx").on(t.userId, t.isRead),
+}));
 
 export const insertNotificationSchema = createInsertSchema(notifications)
   .omit({

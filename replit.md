@@ -72,3 +72,51 @@ Preferred communication style: Simple, everyday language.
 - **Google Fonts**: Inter, JetBrains Mono.
 - **Date-fns**: Date manipulation and formatting.
 - **Google reCAPTCHA v2**: For enhanced security on login and signup pages.
+
+## Deployment & Cost Optimization
+
+### Replit Services (Paid)
+1. **Autoscale Deployment**
+   - Base fee: $1/month
+   - Compute Units: $3.20 per million units (1 CPU second = 18 units, 1 RAM second = 2 units)
+   - Requests: $1.20 per million requests
+   - Billing: Only when app is actively serving requests (idle = $0)
+
+2. **Object Storage** (Google Cloud Storage-backed)
+   - Currently: 56 files in attached_assets/
+   - Costs: Storage capacity, data transfer, basic/advanced operations
+
+3. **External Services**
+   - Neon PostgreSQL Database (external billing, not through Replit)
+
+### Cost Optimization Strategies
+1. **Polling Removed from Admin Pages** (November 2025)
+   - Completely removed auto-refresh polling from admin pages for maximum cost savings
+   - NotificationBell: No auto-refresh (manual refresh only)
+   - Admin Dashboard: No auto-refresh (manual refresh only)
+   - Admin Analytics: No auto-refresh (manual refresh only)
+   - Sidebar: 30s refresh for user count updates
+
+2. **Database Index Optimization** (November 2025)
+   - Added 11 performance indexes to reduce query time and database active hours
+   - **Users table**: userId, sponsorId, email, binaryParentId
+   - **Activation Payments table**: payerUserId, receiverUserId, status, activationId
+   - **Activations table**: payerWallet, status
+   - **Notifications table**: userId, isRead, composite (userId+isRead)
+   - **Expected Impact**: 30-50% reduction in database compute hours
+   
+2. **Request Optimization**
+   - Leverage TanStack Query caching to minimize redundant API calls
+   - Autoscale deployment only charges for actual requests served
+   - Idle periods incur no compute costs
+
+3. **Database Cost Management**
+   - Using external Neon database (avoids Replit database billing)
+   - Database enters idle state after 5 minutes of inactivity
+   - Reactivates instantly on next query
+
+4. **Best Practices**
+   - Monitor usage via Replit's usage dashboard
+   - Set up budget alerts in account settings
+   - Review compute unit consumption monthly
+   - Consider disabling auto-backup during development to reduce database activity
