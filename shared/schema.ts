@@ -383,6 +383,7 @@ export const systemConfig = pgTable("system_config", {
   binaryRightQualification: integer("binary_right_qualification").notNull().default(1),
   binaryMatchingRatioLeft: integer("binary_matching_ratio_left").notNull().default(3),
   binaryMatchingRatioRight: integer("binary_matching_ratio_right").notNull().default(3),
+  queueReservationHoldHours: integer("queue_reservation_hold_hours").notNull().default(1), // Hours to hold queue entry before auto-release
   
   // Admin payment methods (single values)
   adminName: text("admin_name"), // Admin name for payment QR codes

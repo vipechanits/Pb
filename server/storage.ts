@@ -730,7 +730,7 @@ export class DbStorage implements IStorage {
     }
 
     // Left taken, try going deeper
-    const leftSubtreeSlot = await this.findFirstSlotInSubtree(leftChildren[0].userId, visited, tx, null);
+    const leftSubtreeSlot = await this.findFirstSlotInSubtree(leftChildren[0].userId, visited, tx, undefined);
     if (leftSubtreeSlot) {
       return leftSubtreeSlot;
     }
@@ -743,7 +743,7 @@ export class DbStorage implements IStorage {
     }
 
     // Right taken, try going deeper
-    return await this.findFirstSlotInSubtree(rightChildren[0].userId, visited, tx, null);
+    return await this.findFirstSlotInSubtree(rightChildren[0].userId, visited, tx, undefined);
   }
 
   async getUsersByBinaryParentAndLeg(parentUserId: string, leg: 'left' | 'right', tx?: any): Promise<User[]> {
@@ -1298,7 +1298,7 @@ export class DbStorage implements IStorage {
 
         // If we have a preferred position
         if (preferredPosition !== null) {
-          const childAtPreferred = children.find(c => c.matrixPosition === preferredPosition);
+          const childAtPreferred = children.find((c: any) => c.matrixPosition === preferredPosition);
           
           if (!childAtPreferred) {
             // Preferred position is empty - place here
@@ -1320,7 +1320,7 @@ export class DbStorage implements IStorage {
         }
 
         // No preferred position - try left first (classic DFS: left, then right)
-        const leftChild = children.find(c => c.matrixPosition === 0);
+        const leftChild = children.find((c: any) => c.matrixPosition === 0);
         if (!leftChild) {
           return {
             parentId: parentActivationId,
@@ -1340,7 +1340,7 @@ export class DbStorage implements IStorage {
         if (leftDeepResult) return leftDeepResult;
 
         // Left subtree full, try right
-        const rightChild = children.find(c => c.matrixPosition === 1);
+        const rightChild = children.find((c: any) => c.matrixPosition === 1);
         if (!rightChild) {
           return {
             parentId: parentActivationId,
@@ -3399,48 +3399,6 @@ export class DbStorage implements IStorage {
     return upline;
   }
 
-  // Release abandoned queue reservations (for activations that were never completed/rejected)
-  // This is a safety mechanism to prevent queue deadlock from abandoned activations
-  async releaseAbandonedQueueReservations(hoursOld: number = 72): Promise<number> {
-    return await db.transaction(async (tx) => {
-      const cutoffDate = new Date();
-      cutoffDate.setHours(cutoffDate.getHours() - hoursOld);
-      
-      console.log(`[QUEUE CLEANUP] Searching for queue entries reserved before ${cutoffDate.toISOString()}`);
-      
-      // Find reserved entries that are older than threshold
-      // These are likely from abandoned activations (user never submitted payment, etc)
-      const abandonedEntries = await tx.select()
-        .from(binaryMatchQueue)
-        .where(and(
-          eq(binaryMatchQueue.status, 'reserved'),
-          lt(binaryMatchQueue.enteredAt, cutoffDate) // Older than threshold
-        ));
-      
-      if (abandonedEntries.length === 0) {
-        console.log(`[QUEUE CLEANUP] No abandoned reservations found`);
-        return 0;
-      }
-      
-      console.log(`[QUEUE CLEANUP] Found ${abandonedEntries.length} abandoned queue reservations - releasing...`);
-      
-      // Reset to waiting status
-      const released = await tx.update(binaryMatchQueue)
-        .set({
-          status: 'waiting',
-          paidByActivationId: null,
-        })
-        .where(and(
-          eq(binaryMatchQueue.status, 'reserved'),
-          lt(binaryMatchQueue.enteredAt, cutoffDate)
-        ))
-        .returning();
-      
-      console.log(`[QUEUE CLEANUP] Released ${released.length} abandoned queue entries back to waiting`);
-      return released.length;
-    });
-  }
-
   async getUserIncomeSummary(userId: string): Promise<any> {
     const { userIncomeSummaries } = await import('@shared/schema');
     const result = await db.select().from(userIncomeSummaries).where(eq(userIncomeSummaries.userId, userId)).limit(1);
@@ -4068,13 +4026,20 @@ export class DbStorage implements IStorage {
   }
 
   /**
-   * Release abandoned queue reservations after 24 hours (or specified hours)
+   * Release abandoned queue reservations after configured hours (default 1 hour)
    * When a new user's activation doesn't pay their assigned queue recipient within timeout,
    * reset the queue entry to "waiting" so the next new user can pay them
    */
-  async releaseAbandonedQueueReservations(hoursOld: number = 24): Promise<number> {
+  async releaseAbandonedQueueReservations(hoursOld?: number): Promise<number> {
     try {
-      const cutoffTime = new Date(Date.now() - hoursOld * 60 * 60 * 1000);
+      // Get configured hold time from system config, fallback to provided hoursOld or 1 hour
+      let holdHours = hoursOld;
+      if (holdHours === undefined) {
+        const config = await this.getSystemConfig();
+        holdHours = config.queueReservationHoldHours || 1;
+      }
+      
+      const cutoffTime = new Date(Date.now() - holdHours * 60 * 60 * 1000);
       
       // Find all reserved entries older than cutoff time
       const abandonedReservations = await db
@@ -4082,10 +4047,10 @@ export class DbStorage implements IStorage {
         .from(binaryMatchQueue)
         .where(and(
           eq(binaryMatchQueue.status, 'reserved'),
-          lt(binaryMatchQueue.entered_at, cutoffTime)
+          lt(binaryMatchQueue.enteredAt, cutoffTime)
         ));
       
-      console.log(`[QUEUE-RELEASE] Found ${abandonedReservations.length} abandoned reservations older than ${hoursOld} hours`);
+      console.log(`[QUEUE-RELEASE] Found ${abandonedReservations.length} abandoned reservations older than ${holdHours} hour(s)`);
       
       let releasedCount = 0;
       
@@ -4095,12 +4060,11 @@ export class DbStorage implements IStorage {
           .update(binaryMatchQueue)
           .set({
             status: 'waiting',
-            paid_by_activation_id: null,
-            updated_at: new Date(),
+            paidByActivationId: null,
           })
           .where(eq(binaryMatchQueue.id, reservation.id));
         
-        console.log(`[QUEUE-RELEASE] ✓ Released queue entry ${reservation.id} for user ${reservation.user_id} (was reserved by ${reservation.paid_by_activation_id})`);
+        console.log(`[QUEUE-RELEASE] ✓ Released queue entry ${reservation.id} for user ${reservation.userId} (was reserved by ${reservation.paidByActivationId})`);
         releasedCount++;
       }
       
@@ -4122,7 +4086,7 @@ export class DbStorage implements IStorage {
     const result = await db
       .select()
       .from(binaryMatchQueue)
-      .where(eq(binaryMatchQueue.paid_by_activation_id, activationId))
+      .where(eq(binaryMatchQueue.paidByActivationId, activationId))
       .limit(1);
     
     return result[0];
@@ -4136,8 +4100,7 @@ export class DbStorage implements IStorage {
       .update(binaryMatchQueue)
       .set({
         status: 'paid',
-        paid_at: new Date(),
-        updated_at: new Date(),
+        paidAt: new Date(),
       })
       .where(eq(binaryMatchQueue.id, queueEntryId));
     
