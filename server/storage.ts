@@ -2505,18 +2505,20 @@ export class DbStorage implements IStorage {
         console.log(`[STORAGE] Processing binary match queue entry for user ${confirmedPayment.receiverUserId}`);
         
         // Get the reserved queue entry that was supposed to be paid
+        // NOTE: Status can be 'reserved' (normal case) or 'waiting' (if auto-release ran)
+        // as long as paidByActivationId matches, this is the correct entry
         const reservedQueueEntry = await tx.select()
           .from(binaryMatchQueue)
           .where(and(
             eq(binaryMatchQueue.userId, confirmedPayment.receiverUserId!),
-            eq(binaryMatchQueue.paidByActivationId, confirmedPayment.activationId),
-            eq(binaryMatchQueue.status, 'reserved')
+            eq(binaryMatchQueue.paidByActivationId, confirmedPayment.activationId)
           ))
           .for('update')
           .limit(1);
         
         if (reservedQueueEntry.length === 0) {
-          console.error(`[STORAGE] CRITICAL ERROR: No reserved queue entry found for user ${confirmedPayment.receiverUserId} and activation ${confirmedPayment.activationId}`);
+          console.error(`[STORAGE] CRITICAL ERROR: No queue entry found for user ${confirmedPayment.receiverUserId} with paidByActivationId ${confirmedPayment.activationId}`);
+          console.error(`[STORAGE] This may indicate: 1) Auto-release cleared the entry, 2) Wrong activation ID, 3) Queue entry was manually deleted`);
           throw new Error(`Queue entry not found for binary match payment confirmation`);
         }
         
@@ -4056,15 +4058,17 @@ export class DbStorage implements IStorage {
       
       for (const reservation of abandonedReservations) {
         // Release back to "waiting" status so next new user can pay them
+        // CRITICAL: DO NOT clear paidByActivationId - keep it so original activation can still confirm payment
+        // If we clear it, another payment confirmation could incorrectly claim this entry
         await db
           .update(binaryMatchQueue)
           .set({
             status: 'waiting',
-            paidByActivationId: null,
+            // paidByActivationId is INTENTIONALLY NOT cleared - keeps link to original activation
           })
           .where(eq(binaryMatchQueue.id, reservation.id));
         
-        console.log(`[QUEUE-RELEASE] ✓ Released queue entry ${reservation.id} for user ${reservation.userId} (was reserved by ${reservation.paidByActivationId})`);
+        console.log(`[QUEUE-RELEASE] ✓ Released queue entry ${reservation.id} for user ${reservation.userId} back to waiting (still reserved by ${reservation.paidByActivationId})`);
         releasedCount++;
       }
       
