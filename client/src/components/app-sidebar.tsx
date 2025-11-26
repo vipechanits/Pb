@@ -135,11 +135,6 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       url: '/user/tickets',
       icon: MessageCircle,
     },
-    {
-      title: 'Profile',
-      url: '/user/profile',
-      icon: UserCircle,
-    },
   ];
 
   // Admin Menu Items

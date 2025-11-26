@@ -3,9 +3,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Users, Search, Mail, User, Shield, Filter, X, RefreshCw, ArrowLeft, ArrowRight, CheckCircle, XCircle, ChevronLeft, ChevronRight, Lock, LockOpen } from 'lucide-react';
-import { useState } from 'react';
+import { Users, Search, Mail, User, Shield, Filter, X, RefreshCw, ArrowLeft, ArrowRight, CheckCircle, XCircle, ChevronLeft, ChevronRight, Lock, LockOpen, Trash2, LogIn, Maximize2, Minimize2, ExternalLink, GitBranch } from 'lucide-react';
+import { MatrixTree } from '@/components/matrix-tree';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { useLocation } from 'wouter';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
@@ -14,7 +16,19 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface AdminUser {
@@ -69,6 +83,7 @@ const USERS_PER_PAGE = 50;
 
 export default function AdminUsers() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
   const [activationFilter, setActivationFilter] = useState<string>('all');
   const [roleFilter, setRoleFilter] = useState<string>('all');
@@ -81,6 +96,10 @@ export default function AdminUsers() {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [incomeData, setIncomeData] = useState<IncomeData | null>(null);
+  const [userToDelete, setUserToDelete] = useState<AdminUser | null>(null);
+  const [isExpandedMode, setIsExpandedMode] = useState(false);
+  const [showMatrixTree, setShowMatrixTree] = useState(false);
+  const [matrixTree, setMatrixTree] = useState<any>(null);
   
   // Mutation to toggle user disabled status
   const toggleDisabledMutation = useMutation({
@@ -100,6 +119,53 @@ export default function AdminUsers() {
         variant: 'destructive',
         title: 'Error',
         description: error.message || 'Failed to toggle user status',
+      });
+    },
+  });
+
+  // Mutation to delete inactive user
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await apiRequest('DELETE', `/api/admin/users/${userId}`, {});
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      setUserToDelete(null);
+      toast({
+        title: 'Success',
+        description: data.message,
+      });
+    },
+    onError: (error: any) => {
+      setUserToDelete(null);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to delete user',
+      });
+    },
+  });
+
+  // Mutation to login as user
+  const loginAsUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await apiRequest('POST', `/api/admin/users/${userId}/login-as`, {});
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: 'Success',
+        description: `Logged in as ${data.userId}. Redirecting to dashboard...`,
+      });
+      setSelectedUser(null);
+      setTimeout(() => setLocation('/user/dashboard'), 500);
+    },
+    onError: (error: any) => {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to login as user',
       });
     },
   });
@@ -130,6 +196,29 @@ export default function AdminUsers() {
       return response.json();
     },
   });
+
+  // Fetch matrix tree
+  const { data: treeData } = useQuery({
+    queryKey: ['/api/admin/matrix-tree'],
+    queryFn: async () => {
+      const response = await fetch('/api/admin/matrix-tree', { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch matrix tree');
+      return response.json();
+    },
+  });
+
+  // Check for userId in URL params and auto-open that user's details
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const userIdParam = params.get('userId');
+    
+    if (userIdParam && users && !selectedUser) {
+      const user = users.find(u => u.userId === userIdParam);
+      if (user) {
+        setSelectedUser(user);
+      }
+    }
+  }, [users, selectedUser]);
 
   const clearAllFilters = () => {
     setSearchQuery('');
@@ -381,9 +470,23 @@ export default function AdminUsers() {
               </CardTitle>
               <CardDescription>Showing {startIndex + 1}-{Math.min(endIndex, totalUsers)} of {totalUsers} users</CardDescription>
             </div>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => setShowMatrixTree(!showMatrixTree)}
+              data-testid="button-toggle-matrix-tree"
+            >
+              <GitBranch className="w-4 h-4 mr-2" />
+              {showMatrixTree ? 'Hide Tree' : 'Show Matrix Tree'}
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {showMatrixTree && treeData && (
+            <div className="mb-6 border-b pb-4">
+              <MatrixTree root={treeData} />
+            </div>
+          )}
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -399,7 +502,7 @@ export default function AdminUsers() {
               <div className="space-y-2">
                 {paginatedUsers.map((user) => (
                 <div
-                  key={user.id}
+                  key={user.userId}
                   className="p-4 border rounded-lg hover-elevate"
                   data-testid={`user-card-${user.userId}`}
                 >
@@ -557,6 +660,18 @@ export default function AdminUsers() {
                           )}
                         </Button>
                       )}
+                      {!user.isActivated && user.role !== 'admin' && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => setUserToDelete(user)}
+                          disabled={deleteUserMutation.isPending}
+                          data-testid={`button-delete-${user.userId}`}
+                        >
+                          <Trash2 className="w-4 h-4 mr-1" />
+                          Delete
+                        </Button>
+                      )}
                       <Button 
                         variant="outline" 
                         size="sm" 
@@ -618,11 +733,54 @@ export default function AdminUsers() {
       </Card>
 
       {/* User Detail Dialog */}
-      <Dialog open={!!selectedUser} onOpenChange={(open) => !open && setSelectedUser(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader>
+      <Dialog open={!!selectedUser} onOpenChange={(open) => {
+        if (!open) {
+          setSelectedUser(null);
+          setIsExpandedMode(false);
+        }
+      }}>
+        <DialogContent className={`overflow-hidden flex flex-col ${isExpandedMode ? 'max-w-7xl max-h-screen' : 'max-w-3xl max-h-[90vh]'}`}>
+          <DialogHeader className="flex flex-row items-center justify-between gap-2 pr-8">
             <DialogTitle>{selectedUser?.name || 'User Details'}</DialogTitle>
           </DialogHeader>
+          <div className="absolute top-4 right-4 flex gap-2 w-auto">
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => setIsExpandedMode(!isExpandedMode)}
+              data-testid="button-toggle-expand"
+              title={isExpandedMode ? 'Exit fullscreen' : 'Expand to fullscreen'}
+            >
+              {isExpandedMode ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => {
+                if (selectedUser) {
+                  const url = `${window.location.origin}${window.location.pathname}?userId=${selectedUser.userId}`;
+                  window.open(url, '_blank');
+                }
+              }}
+              disabled={!selectedUser}
+              data-testid="button-open-new-window"
+              title="Open in new window"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </Button>
+            {selectedUser && selectedUser.role !== 'admin' && (
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => selectedUser && loginAsUserMutation.mutate(selectedUser.userId)}
+                disabled={loginAsUserMutation.isPending}
+                data-testid={`button-login-as-${selectedUser?.userId}`}
+              >
+                <LogIn className="w-4 h-4 mr-1" />
+                {loginAsUserMutation.isPending ? 'Logging in...' : 'Login as User'}
+              </Button>
+            )}
+          </div>
           {selectedUser && (
             <ScrollArea className="flex-1 pr-4">
               <div className="space-y-4">
@@ -837,6 +995,38 @@ export default function AdminUsers() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Delete User Confirmation Dialog */}
+      <AlertDialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Inactive User</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to permanently delete user <strong>{userToDelete?.userId}</strong> ({userToDelete?.email})?
+              <br /><br />
+              This will delete:
+              <ul className="list-disc list-inside mt-2 space-y-1">
+                <li>User account and profile</li>
+                <li>All pending activation payments</li>
+                <li>All activations</li>
+                <li>All notifications</li>
+              </ul>
+              <br />
+              <strong className="text-destructive">This action cannot be undone.</strong>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => userToDelete && deleteUserMutation.mutate(userToDelete.userId)}
+              className="bg-destructive hover:bg-destructive/90"
+              data-testid="button-confirm-delete"
+            >
+              {deleteUserMutation.isPending ? 'Deleting...' : 'Delete User'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

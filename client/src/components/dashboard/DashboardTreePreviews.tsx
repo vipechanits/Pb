@@ -40,7 +40,7 @@ export function DashboardTreePreviews({ binaryTree, matrixTree }: DashboardTreeP
     <Card data-testid="card-tree-previews">
       <CardHeader>
         <CardTitle className="text-2xl font-bold">Matrix Tree View</CardTitle>
-        <CardDescription>Current cycle matrix preview (3 levels)</CardDescription>
+        <CardDescription>Current cycle matrix preview (5 levels)</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="flex items-center justify-between mb-4">
@@ -55,7 +55,7 @@ export function DashboardTreePreviews({ binaryTree, matrixTree }: DashboardTreeP
           </Link>
         </div>
         {matrixTree ? (
-          <MiniMatrixTree root={matrixTree} maxDepth={3} />
+          <MiniMatrixTree root={matrixTree} maxDepth={5} />
         ) : (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />

@@ -1,12 +1,93 @@
 import { eq, and, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { incomeTransactions, userIncomeSummaries, type ActivationPayment, type InsertIncomeTransaction } from "@shared/schema";
+import { incomeTransactions, userIncomeSummaries, users, systemConfig, type ActivationPayment, type InsertIncomeTransaction } from "@shared/schema";
 
 export class IncomeService {
   private db: NodePgDatabase<any>;
 
   constructor(db: NodePgDatabase<any>) {
     this.db = db;
+  }
+
+  /**
+   * Calculate binary matching for a user after an activation
+   * Binary matching: 3 left leg activations matched with 3 right leg activations = 1 pair
+   * Each pair generates binary match income
+   */
+  async calculateAndProcessBinaryMatching(userId: string): Promise<void> {
+    try {
+      const user = await this.db.select().from(users).where(eq(users.userId, userId)).then(r => r[0]);
+      if (!user || !user.binaryQualified) {
+        console.log(`[BINARY-MATCH] User ${userId} not eligible for binary matching`);
+        return;
+      }
+
+      // Get config for binary match amount from system config
+      const configResult = await this.db.select().from(systemConfig).limit(1);
+      const config = configResult[0];
+      const binaryMatchAmount = config?.binaryMatchPaymentAmount || '500';
+
+      // Calculate new matchable pairs
+      const leftDiff = (user.leftLegCount || 0) - (user.binaryLastMatchedLeftCount || 0);
+      const rightDiff = (user.rightLegCount || 0) - (user.binaryLastMatchedRightCount || 0);
+
+      // How many complete 3:3 pairs can be formed?
+      const leftGroups = Math.floor((user.binaryUnmatchedLeft + leftDiff) / 3);
+      const rightGroups = Math.floor((user.binaryUnmatchedRight + rightDiff) / 3);
+      const newPairs = Math.min(leftGroups, rightGroups);
+
+      if (newPairs > 0) {
+        console.log(`[BINARY-MATCH] User ${userId}: ${newPairs} new 3:3 pairs matched`);
+
+        // Create income transactions for each pair
+        for (let i = 0; i < newPairs; i++) {
+          await this.createIncomesForPayment({
+            id: `binary-match-${userId}-${Date.now()}-${i}`,
+            activationId: `auto-${userId}-${Date.now()}`,
+            payerUserId: userId,
+            receiverUserId: userId,
+            receiverType: 'user',
+            paymentType: 'binary_match',
+            amountInr: binaryMatchAmount,
+            status: 'confirmed',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as any);
+        }
+
+        // Update user's binary matching tracking
+        const newUnmatchedLeft = (user.binaryUnmatchedLeft + leftDiff) % 3;
+        const newUnmatchedRight = (user.binaryUnmatchedRight + rightDiff) % 3;
+
+        await this.db.update(users).set({
+          binaryMatchedPairs: (user.binaryMatchedPairs || 0) + newPairs,
+          binaryUnmatchedLeft: newUnmatchedLeft,
+          binaryUnmatchedRight: newUnmatchedRight,
+          binaryLastMatchedLeftCount: user.leftLegCount,
+          binaryLastMatchedRightCount: user.rightLegCount,
+          updatedAt: new Date(),
+        }).where(eq(users.userId, userId));
+
+        console.log(`[BINARY-MATCH] Updated ${userId}: matched ${newPairs} pairs, unmatched left=${newUnmatchedLeft}, right=${newUnmatchedRight}`);
+      } else {
+        // Still update unmatched counts even if no complete pairs yet
+        const newUnmatchedLeft = user.binaryUnmatchedLeft + leftDiff;
+        const newUnmatchedRight = user.binaryUnmatchedRight + rightDiff;
+        
+        await this.db.update(users).set({
+          binaryUnmatchedLeft: newUnmatchedLeft,
+          binaryUnmatchedRight: newUnmatchedRight,
+          binaryLastMatchedLeftCount: user.leftLegCount,
+          binaryLastMatchedRightCount: user.rightLegCount,
+          updatedAt: new Date(),
+        }).where(eq(users.userId, userId));
+
+        console.log(`[BINARY-MATCH] User ${userId}: queued for matching - left queue=${newUnmatchedLeft}, right queue=${newUnmatchedRight}`);
+      }
+    } catch (error) {
+      console.error(`[BINARY-MATCH] Error processing binary matching for ${userId}:`, error);
+      // Don't throw - binary matching failure shouldn't break activation flow
+    }
   }
 
   async createIncomesForPayment(payment: ActivationPayment): Promise<void> {

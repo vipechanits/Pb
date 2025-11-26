@@ -10,10 +10,10 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   return bcrypt.compare(password, hash);
 }
 
-// Serialize user for session (exclude sensitive data)
+// Serialize user for session (exclude sensitive data and UUID)
 export function serializeUser(user: User) {
-  const { password, ...userWithoutPassword } = user;
-  return userWithoutPassword;
+  const { password, id, ...safeUser } = user;
+  return safeUser;
 }
 
 // DEPRECATED: Generate next user ID (PB10000, PB10001, etc.)

@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema, users, reentries, activationPayments, activations, activationMatrixPositions, binaryMatchQueue, notifications, incomeTransactions, userIncomeSummaries, passwordResetTokens, forgotPasswordSchema, resetPasswordSchema, updateEmailSchema, updatePasswordSchema, setupSecurityCodeSchema, setupPinSchema, loginWithPinSchema, manualActivationCompletionSchema } from "@shared/schema";
+import { insertActivationSchema, insertActivationPaymentSchema, updateActivationStatusSchema, updateProfileSchema, submitPaymentProofSchema, confirmPaymentSchema, rejectPaymentSchema, users, reentries, activationPayments, activations, activationMatrixPositions, binaryMatchQueue, notifications, incomeTransactions, userIncomeSummaries, passwordResetTokens, tickets, ticketReplies, importanceNotices, forgotPasswordSchema, resetPasswordSchema, updateEmailSchema, updatePasswordSchema, setupSecurityCodeSchema, setupPinSchema, loginWithPinSchema, manualActivationCompletionSchema } from "@shared/schema";
 import { hashPassword, verifyPassword, serializeUser } from "./auth";
 import { generateUserPaymentQR } from "./qrcode-generator";
 import { z } from "zod";
@@ -154,6 +154,34 @@ function getClientIp(req: any): string {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Initialize income service for binary matching calculations
+  const incomeService = new IncomeService(db);
+
+  // Start periodic queue auto-release timer (every 30 minutes)
+  const AUTO_RELEASE_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+  let releaseTimer: NodeJS.Timeout | null = null;
+  
+  const startQueueAutoRelease = () => {
+    if (releaseTimer) clearInterval(releaseTimer);
+    
+    releaseTimer = setInterval(async () => {
+      try {
+        console.log('[QUEUE-AUTO-RELEASE] Running periodic queue cleanup...');
+        const releasedCount = await storage.releaseAbandonedQueueReservations(24); // 24 hour timeout
+        if (releasedCount > 0) {
+          console.log(`[QUEUE-AUTO-RELEASE] ✓ Released ${releasedCount} expired reservations`);
+        }
+      } catch (error) {
+        console.error('[QUEUE-AUTO-RELEASE] Error in auto-release routine:', error);
+      }
+    }, AUTO_RELEASE_INTERVAL_MS);
+    
+    console.log('[QUEUE-AUTO-RELEASE] Queue auto-release timer started (every 30 minutes)');
+  };
+  
+  // Start queue cleanup when routes are registered
+  startQueueAutoRelease();
+
   // CSRF token endpoint - ensures session is saved so cookie is set before first login attempt
   app.get("/api/csrf-token", (req: any, res) => {
     // Touch the session to ensure it gets saved and the cookie is sent
@@ -332,6 +360,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { email, password, recaptchaToken } = req.body;
       
+      console.log("[LOGIN] Attempt with email:", email);
+      
       if (!email || !password) {
         return res.status(400).json({ error: "Email and password are required" });
       }
@@ -351,12 +381,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Get user
       const user = await storage.getUserByEmail(email);
+      console.log("[LOGIN] User found:", user ? user.userId : "NOT FOUND");
       if (!user) {
         return res.status(401).json({ error: "Invalid email or password" });
       }
       
       // Verify password
       const isValid = await verifyPassword(password, user.password);
+      console.log("[LOGIN] Password valid:", isValid, "Hash:", user.password.substring(0, 20));
       if (!isValid) {
         return res.status(401).json({ error: "Invalid email or password" });
       }
@@ -679,8 +711,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Hash new password
         const hashedPassword = await hashPassword(newPassword);
         
-        // Update user password and invalidate all reset tokens
+        // Update user password and mark email as verified
         await storage.updateUserPassword(resetToken.userId, hashedPassword);
+        
+        // Mark email as verified (when password is reset, email is implicitly verified)
+        const user = await storage.getUserByUserId(resetToken.userId);
+        if (user) {
+          await db.update(users)
+            .set({
+              emailVerified: true,
+              emailVerificationToken: null,
+              emailVerificationExpiry: null,
+            })
+            .where(eq(users.id, user.id));
+        }
         
         // Mark token as used
         await storage.markTokenAsUsed(token);
@@ -1407,7 +1451,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/users/:userId/global-matrix", requireAuth, async (req, res) => {
     try {
       const { userId } = req.params;
-      const { activationId } = req.query; // Optional activation ID for cycle-specific view
       const requestingUser = await storage.getUserById(req.session.userId!);
       
       if (requestingUser?.userId !== userId && requestingUser?.role !== 'admin') {
@@ -1419,39 +1462,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "User not found" });
       }
       
-      // Activation-scoped matrix (new): Show matrix for specific activation/cycle
-      if (activationId && typeof activationId === 'string') {
-        console.log(`[ACTIVATION-MATRIX] Fetching matrix for activation ${activationId} (user ${userId})`);
-        
-        // Verify this activation belongs to this user
-        const activation = await storage.getActivation(activationId);
-        if (!activation || activation.payerWallet !== rootUser.id) { // Compare to user UUID, not userId
-          return res.status(403).json({ error: "Forbidden - This activation does not belong to you" });
-        }
-        
-        const tree = await storage.getActivationMatrixSubtree(activationId, 5);
-        console.log(`[ACTIVATION-MATRIX] Tree fetched successfully for activation ${activationId}`);
-        
-        // Serialize tree to break circular references
-        const serializedTree = serializeMatrixTree(tree);
-        res.json(serializedTree);
-      } else {
-        // Legacy user-scoped matrix (fallback for backward compatibility)
-        console.log(`[GLOBAL-MATRIX] Fetching legacy user-scoped matrix for ${userId}`);
-        console.log(`[GLOBAL-MATRIX] Root user data:`, {
-          userId: rootUser.userId,
-          matrixLevel: rootUser.matrixLevel,
-          matrixPath: rootUser.matrixPath,
-          matrixPosition: rootUser.matrixPosition
-        });
-        
-        const tree = await storage.getMatrixSubtree(userId, 5);
-        console.log(`[GLOBAL-MATRIX] Tree fetched successfully for ${userId}`);
-        
-        // Serialize tree to break circular references
-        const serializedTree = serializeMatrixTree(tree);
-        res.json(serializedTree);
-      }
+      // CRITICAL FIX: Always use user-scoped getMatrixSubtree (activation-scoped causes "Unknown User" issues)
+      // The user-scoped query properly displays all users with their PB IDs and names
+      console.log(`[GLOBAL-MATRIX] Fetching user-scoped matrix for ${userId}`);
+      console.log(`[GLOBAL-MATRIX] Root user data:`, {
+        userId: rootUser.userId,
+        matrixLevel: rootUser.matrixLevel,
+        matrixPath: rootUser.matrixPath,
+        matrixPosition: rootUser.matrixPosition
+      });
+      
+      const tree = await storage.getMatrixSubtree(userId, 5);
+      console.log(`[GLOBAL-MATRIX] Tree fetched successfully for ${userId}`);
+      
+      // Serialize tree to break circular references
+      const serializedTree = serializeMatrixTree(tree);
+      res.json(serializedTree);
     } catch (error) {
       console.error("Error fetching global matrix:", error);
       res.status(500).json({ error: "Failed to fetch global matrix" });
@@ -1492,7 +1518,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Update user profile
+  // Update user profile (requires security code verification if user has set it up)
   app.patch("/api/profile", requireAuth, async (req, res) => {
     try {
       const validationResult = updateProfileSchema.safeParse(req.body);
@@ -1500,12 +1526,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
       
-      const user = await storage.updateUserProfile(req.session.userId!, validationResult.data);
+      // Get current user to check if security code is set
+      const user = await storage.getUserById(req.session.userId!);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
       
-      res.json({ user: serializeUser(user) });
+      // If user has security code enabled, verify it before allowing profile update
+      if (user.securityCode) {
+        const { securityCode } = validationResult.data;
+        
+        if (!securityCode) {
+          return res.status(400).json({ error: "Security code is required to update your profile" });
+        }
+        
+        // Verify security code (SECURITY: use constant-time bcrypt comparison)
+        const isValidCode = await verifyPassword(securityCode, user.securityCode);
+        if (!isValidCode) {
+          console.warn(`[UPDATE_PROFILE] Invalid security code attempt for user ${user.userId}`);
+          return res.status(401).json({ error: "Invalid security code" });
+        }
+      }
+      
+      const updatedUser = await storage.updateUserProfile(req.session.userId!, validationResult.data);
+      if (!updatedUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      res.json({ user: serializeUser(updatedUser) });
     } catch (error) {
       console.error("Error updating profile:", error);
       res.status(500).json({ error: "Failed to update profile" });
@@ -1668,6 +1716,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { paymentType } = req.query;
+      console.log(`[ADMIN-PAYMENT] Fetching admin payment details - paymentType: ${paymentType || 'default'}`);
+      console.log(`[ADMIN-PAYMENT] Binary fallback data - holderName: ${adminUser.binaryFallbackHolderName}, mobile: ${adminUser.binaryFallbackMobile}, upiId: ${adminUser.binaryFallbackUpiId}`);
       let upiId: string | null | undefined;
       let mobile: string | null | undefined;
       let bankAccountHolder: string | null | undefined;
@@ -1732,6 +1782,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         paymentQrUrl,
       };
       
+      console.log(`[ADMIN-PAYMENT] Returning data - name: ${adminPaymentInfo.name}, upiId: ${adminPaymentInfo.upiId}, mobile: ${adminPaymentInfo.mobile}`);
       res.json(adminPaymentInfo);
     } catch (error) {
       console.error("Error fetching admin payment details:", error);
@@ -2328,6 +2379,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // - Deferred incomes (sponsor, matrix) created when all 8 payments confirmed
       // See storage.ts lines 1176-1720 for complete implementation
 
+      // If this is a binary_match payment, mark the queue entry as PAID
+      if (payment.paymentType === 'binary_match') {
+        try {
+          const queueEntry = await storage.getQueueEntryByActivationId(payment.activationId);
+          if (queueEntry) {
+            await storage.markQueueEntryAsPaid(queueEntry.id, payment.activationId);
+          }
+        } catch (queueError) {
+          console.error('[CONFIRM-ROUTE] Error marking queue entry as paid:', queueError);
+          // Don't fail confirmation - queue marking is non-critical
+        }
+      }
+
+      // Process binary matching queue if payment is for binary placement or binary match income
+      if (payment.paymentType === 'binary_match' || 
+          (payment.paymentType === 'direct_sponsor' && existingPayment.paymentType === 'binary_match')) {
+        try {
+          // Trigger binary matching calculation for the payer
+          await incomeService.calculateAndProcessBinaryMatching(payment.payerUserId);
+        } catch (binaryError) {
+          console.error('[CONFIRM-ROUTE] Binary matching calculation error:', binaryError);
+          // Don't fail the confirmation - binary matching is async processing
+        }
+      }
+
       // Create real-time notification for payer about payment confirmation
       try {
         const payerUserId = payment.payerUserId;
@@ -2784,6 +2860,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching users:", error);
       res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
+
+  // Admin: Get matrix tree structure with User IDs and names
+  app.get("/api/admin/matrix-tree", requireAdmin, async (req, res) => {
+    try {
+      // Recursive function to build tree
+      async function buildTree(parentId: string | null): Promise<any> {
+        const children = await db.select({
+          userId: users.userId,
+          name: users.name,
+          matrixLevel: users.matrixLevel,
+          matrixPosition: users.matrixPosition,
+          personalLeftCount: users.personalLeftCount,
+          personalRightCount: users.personalRightCount,
+          matrixParentId: users.matrixParentId,
+        })
+          .from(users)
+          .where(eq(users.matrixParentId, parentId || null))
+          .orderBy(users.matrixPosition);
+
+        const treeNodes = await Promise.all(
+          children.map(async (child) => ({
+            userId: child.userId,
+            name: child.name || 'Unknown',
+            level: child.matrixLevel || 0,
+            position: child.matrixPosition === 0 ? 'left' : child.matrixPosition === 1 ? 'right' : null,
+            personalLeft: child.personalLeftCount || 0,
+            personalRight: child.personalRightCount || 0,
+            children: await buildTree(child.userId),
+          }))
+        );
+
+        return treeNodes;
+      }
+
+      // Start from root user PB10000
+      const root = await storage.getUserByUserId('PB10000');
+      if (!root) {
+        return res.status(404).json({ error: "Root user not found" });
+      }
+
+      const treeChildren = await buildTree('PB10000');
+
+      const treeRoot = {
+        userId: root.userId,
+        name: root.name || 'Root',
+        level: root.matrixLevel || 1,
+        position: null,
+        personalLeft: root.personalLeftCount || 0,
+        personalRight: root.personalRightCount || 0,
+        children: treeChildren,
+      };
+
+      res.json(treeRoot);
+    } catch (error) {
+      console.error("Error fetching matrix tree:", error);
+      res.status(500).json({ error: "Failed to fetch matrix tree" });
     }
   });
 
@@ -3974,6 +4108,147 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ADMIN: Login as user (admin impersonation)
+  app.post("/api/admin/users/:userId/login-as", adminRateLimiter, requireAdmin, async (req: any, res: any) => {
+    try {
+      const { userId } = req.params;
+      
+      // Get user by userId
+      const userResult = await db.select()
+        .from(users)
+        .where(eq(users.userId, userId))
+        .limit(1);
+      
+      const user = userResult[0];
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Cannot login as admin users
+      if (user.role === 'admin') {
+        return res.status(403).json({ error: "Cannot login as admin users" });
+      }
+      
+      // Set the session to the target user's ID
+      req.session.userId = user.userId;
+      req.session.isAdmin = false;
+      
+      // Save session
+      req.session.save((err: any) => {
+        if (err) {
+          console.error(`[ADMIN] Failed to save session for login-as: ${err}`);
+          return res.status(500).json({ error: "Failed to create session" });
+        }
+        
+        console.log(`[ADMIN] Admin ${req.session.userId} (was impersonating as ${userId}) impersonating user ${userId}`);
+        
+        res.json({
+          success: true,
+          userId: user.userId,
+          message: `Successfully logged in as user ${user.userId}`
+        });
+      });
+    } catch (error: any) {
+      console.error("[ADMIN] Failed to login as user:", error);
+      res.status(500).json({ error: "Failed to login as user", details: error.message });
+    }
+  });
+
+  // ADMIN: Delete inactive (non-activated) user
+  app.delete("/api/admin/users/:userId", adminRateLimiter, requireAdmin, async (req: any, res: any) => {
+    try {
+      const { userId } = req.params;
+      const adminUser = await storage.getUserById(req.session.userId as string);
+      
+      // Get user by PB ID
+      const userResult = await db.select()
+        .from(users)
+        .where(eq(users.userId, userId))
+        .limit(1);
+      
+      const user = userResult[0];
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Can only delete non-activated users
+      if (user.isActivated) {
+        return res.status(400).json({ error: "Cannot delete activated users. Only inactive (non-activated) users can be deleted." });
+      }
+      
+      // Cannot delete admin users
+      if (user.role === 'admin') {
+        return res.status(400).json({ error: "Cannot delete admin users" });
+      }
+      
+      // Delete user and all related data using raw SQL (separate statements for PostgreSQL)
+      await db.transaction(async (tx) => {
+        // Execute all deletions in correct dependency order
+        
+        // 1. Ticket replies
+        await tx.execute(sql`DELETE FROM ticket_replies WHERE user_id = ${user.userId}`);
+        
+        // 2. Tickets
+        await tx.execute(sql`DELETE FROM tickets WHERE user_id = ${user.userId}`);
+        
+        // 3. Notifications
+        await tx.execute(sql`DELETE FROM notifications WHERE user_id = ${user.userId}`);
+        
+        // 4. Income transactions (as receiver)
+        await tx.execute(sql`DELETE FROM income_transactions WHERE user_id = ${user.userId}`);
+        
+        // 4b. Income transactions (as source)
+        await tx.execute(sql`DELETE FROM income_transactions WHERE source_user_id = ${user.userId}`);
+        
+        // 5. User income summaries
+        await tx.execute(sql`DELETE FROM user_income_summaries WHERE user_id = ${user.userId}`);
+        
+        // 6. Re-entries
+        await tx.execute(sql`DELETE FROM reentries WHERE user_id = ${user.userId}`);
+        
+        // 7. Binary match queue
+        await tx.execute(sql`DELETE FROM binary_match_queue WHERE user_id = ${user.userId}`);
+        
+        // 8. Password reset tokens
+        await tx.execute(sql`DELETE FROM password_reset_tokens WHERE user_id = ${user.userId}`);
+        
+        // 9. Activation payments (payer UUID)
+        await tx.execute(sql`DELETE FROM activation_payments WHERE payer_user_id = ${user.id}`);
+        
+        // 9b. Activation payments (payer PB ID)
+        await tx.execute(sql`DELETE FROM activation_payments WHERE payer_user_id = ${user.userId}`);
+        
+        // 10. Activation payments (receiver)
+        await tx.execute(sql`DELETE FROM activation_payments WHERE receiver_user_id = ${user.userId}`);
+        
+        // 11. Activation matrix positions (via activations)
+        await tx.execute(sql`
+          DELETE FROM activation_matrix_positions 
+          WHERE activation_id IN (
+            SELECT activation_id FROM activations WHERE payer_wallet = ${user.userId}
+          )
+        `);
+        
+        // 12. Activations
+        await tx.execute(sql`DELETE FROM activations WHERE payer_wallet = ${user.userId}`);
+        
+        // 13. Finally, delete the user
+        await tx.execute(sql`DELETE FROM users WHERE user_id = ${user.userId}`);
+      });
+      
+      console.log(`[ADMIN] Admin ${adminUser?.userId} deleted inactive user ${userId} (email: ${user.email})`);
+      
+      res.json({
+        success: true,
+        userId,
+        message: `User ${userId} has been permanently deleted`
+      });
+    } catch (error: any) {
+      console.error("[ADMIN] Failed to delete user:", error);
+      res.status(500).json({ error: "Failed to delete user", details: error.message });
+    }
+  });
+
   // ============================================================================
   // SECURITY MONITORING - Admin only
   // ============================================================================
@@ -4753,6 +5028,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("[ADMIN] Failed to process backup file:", error);
       res.status(500).json({ error: "Failed to process backup file" });
+    }
+  });
+
+  // Admin Importance Notices Routes
+  app.get("/api/admin/notices", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const notices = await db.select().from(importanceNotices).orderBy(desc(importanceNotices.updatedAt));
+      res.json(notices);
+    } catch (error: any) {
+      console.error("[ADMIN] Failed to fetch notices:", error);
+      res.status(500).json({ error: "Failed to fetch notices" });
+    }
+  });
+
+  app.post("/api/admin/notices", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const { title, message, priority, isActive } = req.body;
+      
+      if (!title?.trim() || !message?.trim()) {
+        return res.status(400).json({ error: "Title and message are required" });
+      }
+
+      const notice = await db.insert(importanceNotices).values({
+        title: title.trim(),
+        message: message.trim(),
+        priority: priority || 'medium',
+        isActive: isActive !== false,
+      }).returning();
+
+      console.log(`[ADMIN] Admin ${req.session.userId} created notice: ${notice[0].id}`);
+      res.json(notice[0]);
+    } catch (error: any) {
+      console.error("[ADMIN] Failed to create notice:", error);
+      res.status(500).json({ error: "Failed to create notice" });
+    }
+  });
+
+  app.patch("/api/admin/notices/:id", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { title, message, priority, isActive } = req.body;
+
+      if (!title?.trim() || !message?.trim()) {
+        return res.status(400).json({ error: "Title and message are required" });
+      }
+
+      const notice = await db.update(importanceNotices)
+        .set({
+          title: title.trim(),
+          message: message.trim(),
+          priority: priority || 'medium',
+          isActive: isActive !== false,
+          updatedAt: new Date(),
+        })
+        .where(eq(importanceNotices.id, id))
+        .returning();
+
+      if (notice.length === 0) {
+        return res.status(404).json({ error: "Notice not found" });
+      }
+
+      console.log(`[ADMIN] Admin ${req.session.userId} updated notice: ${id}`);
+      res.json(notice[0]);
+    } catch (error: any) {
+      console.error("[ADMIN] Failed to update notice:", error);
+      res.status(500).json({ error: "Failed to update notice" });
+    }
+  });
+
+  app.delete("/api/admin/notices/:id", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const result = await db.delete(importanceNotices)
+        .where(eq(importanceNotices.id, id))
+        .returning();
+
+      if (result.length === 0) {
+        return res.status(404).json({ error: "Notice not found" });
+      }
+
+      console.log(`[ADMIN] Admin ${req.session.userId} deleted notice: ${id}`);
+      res.json({ success: true, message: "Notice deleted" });
+    } catch (error: any) {
+      console.error("[ADMIN] Failed to delete notice:", error);
+      res.status(500).json({ error: "Failed to delete notice" });
     }
   });
 

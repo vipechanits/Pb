@@ -952,3 +952,23 @@ export const insertBackupHistorySchema = createInsertSchema(backupHistory).omit(
 
 export type InsertBackupHistory = z.infer<typeof insertBackupHistorySchema>;
 export type BackupHistory = typeof backupHistory.$inferSelect;
+
+// Admin Importance Notices
+export const importanceNotices = pgTable("importance_notices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  priority: text("priority").notNull().default('medium'), // 'low' | 'medium' | 'high' | 'critical'
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertImportanceNoticeSchema = createInsertSchema(importanceNotices).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertImportanceNotice = z.infer<typeof insertImportanceNoticeSchema>;
+export type ImportanceNotice = typeof importanceNotices.$inferSelect;

@@ -57,6 +57,8 @@ export interface IStorage {
   
   // Binary match queue methods
   releaseAbandonedQueueReservations(hoursOld?: number): Promise<number>;
+  getQueueEntryByActivationId(activationId: string): Promise<any | undefined>;
+  markQueueEntryAsPaid(queueEntryId: string, paidByActivationId: string): Promise<void>;
   
   // Global matrix methods (legacy - user-scoped)
   findAndAssignMatrixSlot(userId: string): Promise<User | undefined>;
@@ -700,46 +702,48 @@ export class DbStorage implements IStorage {
   }
 
   // Helper: Find first available slot within a user's downline (subtree)
-  // DEPTH-FIRST SEARCH: Prioritizes requested leg first, then tries opposite leg
+  // DEPTH-FIRST SEARCH: When requestedLeg is specified, ONLY traverse that leg (no fallback to opposite)
   private async findFirstSlotInSubtree(rootUserId: string, visited = new Set<string>(), tx?: any, requestedLeg?: 'left' | 'right'): Promise<{ parentId: string; leg: 'left' | 'right' } | null> {
     // Prevent infinite loops
     if (visited.has(rootUserId)) return null;
     visited.add(rootUserId);
 
-    // Determine leg priority: If requestedLeg specified, try it first; otherwise default to left
-    const primaryLeg = requestedLeg || 'left';
-    const secondaryLeg = primaryLeg === 'left' ? 'right' : 'left';
+    // When requestedLeg is specified, ONLY search that leg (no fallback to opposite)
+    if (requestedLeg) {
+      const requestedChildren = await this.getUsersByBinaryParentAndLeg(rootUserId, requestedLeg, tx);
+      
+      if (requestedChildren.length === 0) {
+        // Requested leg empty - place here!
+        console.log(`[BINARY-SPILLOVER] Found empty ${requestedLeg} slot at ${rootUserId} (DEEP ${requestedLeg})`);
+        return { parentId: rootUserId, leg: requestedLeg };
+      }
 
-    // Check PRIMARY leg slot first (with transaction for locking if provided)
-    const primaryChildren = await this.getUsersByBinaryParentAndLeg(rootUserId, primaryLeg, tx);
-    if (primaryChildren.length === 0) {
-      // Primary leg empty - place here!
-      console.log(`[BINARY-SPILLOVER] Found empty ${primaryLeg} slot at ${rootUserId} (requested: ${requestedLeg || 'none'})`);
-      return { parentId: rootUserId, leg: primaryLeg };
+      // Requested leg taken - GO DEEP DOWN into that child (STRICTLY follow requested leg)
+      return await this.findFirstSlotInSubtree(requestedChildren[0].userId, visited, tx, requestedLeg);
     }
 
-    // Primary leg taken - GO DEEP DOWN into primary child's subtree (maintain requestedLeg preference)
-    const primarySubtreeSlot = await this.findFirstSlotInSubtree(primaryChildren[0].userId, visited, tx, requestedLeg);
-    if (primarySubtreeSlot) {
-      return primarySubtreeSlot; // Found slot deep in primary subtree
+    // No requestedLeg: Default to left, then right (classic BFS/DFS)
+    const leftChildren = await this.getUsersByBinaryParentAndLeg(rootUserId, 'left', tx);
+    if (leftChildren.length === 0) {
+      console.log(`[BINARY-SPILLOVER] Found empty left slot at ${rootUserId} (no preference)`);
+      return { parentId: rootUserId, leg: 'left' };
     }
 
-    // Primary subtree full - check SECONDARY leg slot (with transaction for locking if provided)
-    const secondaryChildren = await this.getUsersByBinaryParentAndLeg(rootUserId, secondaryLeg, tx);
-    if (secondaryChildren.length === 0) {
-      // Secondary leg empty - place here!
-      console.log(`[BINARY-SPILLOVER] Primary ${primaryLeg} full, using ${secondaryLeg} at ${rootUserId} (requested: ${requestedLeg || 'none'})`);
-      return { parentId: rootUserId, leg: secondaryLeg };
+    // Left taken, try going deeper
+    const leftSubtreeSlot = await this.findFirstSlotInSubtree(leftChildren[0].userId, visited, tx, null);
+    if (leftSubtreeSlot) {
+      return leftSubtreeSlot;
     }
 
-    // Secondary leg taken - GO DEEP DOWN into secondary child's subtree (maintain requestedLeg preference)
-    const secondarySubtreeSlot = await this.findFirstSlotInSubtree(secondaryChildren[0].userId, visited, tx, requestedLeg);
-    if (secondarySubtreeSlot) {
-      return secondarySubtreeSlot; // Found slot deep in secondary subtree
+    // Left subtree full, try right
+    const rightChildren = await this.getUsersByBinaryParentAndLeg(rootUserId, 'right', tx);
+    if (rightChildren.length === 0) {
+      console.log(`[BINARY-SPILLOVER] Left full, using right at ${rootUserId} (no preference)`);
+      return { parentId: rootUserId, leg: 'right' };
     }
 
-    // Both subtrees completely full
-    return null;
+    // Right taken, try going deeper
+    return await this.findFirstSlotInSubtree(rightChildren[0].userId, visited, tx, null);
   }
 
   async getUsersByBinaryParentAndLeg(parentUserId: string, leg: 'left' | 'right', tx?: any): Promise<User[]> {
@@ -1196,7 +1200,7 @@ export class DbStorage implements IStorage {
           AND u.matrix_level <= ${maxLevel}
           AND mt.depth < ${maxDepth}
       )
-      SELECT * FROM matrix_tree;
+      SELECT user_id, name, email, is_activated, matrix_level, matrix_position, matrix_path, matrix_parent_id, depth FROM matrix_tree;
     `);
 
     if (rows.rows.length === 0) {
@@ -1240,7 +1244,7 @@ export class DbStorage implements IStorage {
   async findAndAssignActivationMatrixSlot(activationId: string, tx?: any): Promise<void> {
     const executeInTx = async (txContext: any) => {
       // Import the new schema
-      const { activationMatrixPositions } = await import('@shared/schema');
+      const { activationMatrixPositions, activations } = await import('@shared/schema');
       
       // Check if this activation already has a matrix position
       const existingPosition = await txContext
@@ -1254,92 +1258,146 @@ export class DbStorage implements IStorage {
         return;
       }
 
-      // Find the next available slot using breadth-first search
-      // Start from level 1 and search for first available position
-      let currentLevel = 1;
-      const maxSearchLevels = 100; // Safety limit
-      
-      while (currentLevel <= maxSearchLevels) {
-        // Get all positions at this level
-        const levelPositions = await txContext
-          .select()
-          .from(activationMatrixPositions)
-          .where(eq(activationMatrixPositions.matrixLevel, currentLevel))
-          .orderBy(asc(activationMatrixPositions.createdAt));
+      // Get activation details and corresponding user to check binary leg placement
+      const activationData = await txContext
+        .select()
+        .from(activations)
+        .where(eq(activations.id, activationId))
+        .limit(1);
 
-        // If this is level 1 and empty, this is the root
-        if (currentLevel === 1 && levelPositions.length === 0) {
-          await txContext.insert(activationMatrixPositions).values({
-            activationId: activationId,
-            matrixParentActivationId: null,
-            matrixPosition: null,
-            matrixLevel: 1,
-            matrixPath: activationId, // Root path is just the activation ID
-          });
-          console.log(`[ACTIVATION-MATRIX] Assigned ${activationId} as matrix root (level 1)`);
-          return;
-        }
-
-        // Check each position at this level for available children
-        for (const position of levelPositions) {
-          // Check left child (position 0)
-          const leftChild = await txContext
-            .select()
-            .from(activationMatrixPositions)
-            .where(
-              and(
-                eq(activationMatrixPositions.matrixParentActivationId, position.activationId),
-                eq(activationMatrixPositions.matrixPosition, 0)
-              )
-            )
-            .limit(1);
-
-          if (leftChild.length === 0) {
-            // Left slot available!
-            const newPath = `${position.matrixPath}.L`;
-            await txContext.insert(activationMatrixPositions).values({
-              activationId: activationId,
-              matrixParentActivationId: position.activationId,
-              matrixPosition: 0,
-              matrixLevel: currentLevel + 1,
-              matrixPath: newPath,
-            });
-            console.log(`[ACTIVATION-MATRIX] Assigned ${activationId} to left of ${position.activationId} at level ${currentLevel + 1}`);
-            return;
-          }
-
-          // Check right child (position 1)
-          const rightChild = await txContext
-            .select()
-            .from(activationMatrixPositions)
-            .where(
-              and(
-                eq(activationMatrixPositions.matrixParentActivationId, position.activationId),
-                eq(activationMatrixPositions.matrixPosition, 1)
-              )
-            )
-            .limit(1);
-
-          if (rightChild.length === 0) {
-            // Right slot available!
-            const newPath = `${position.matrixPath}.R`;
-            await txContext.insert(activationMatrixPositions).values({
-              activationId: activationId,
-              matrixParentActivationId: position.activationId,
-              matrixPosition: 1,
-              matrixLevel: currentLevel + 1,
-              matrixPath: newPath,
-            });
-            console.log(`[ACTIVATION-MATRIX] Assigned ${activationId} to right of ${position.activationId} at level ${currentLevel + 1}`);
-            return;
-          }
-        }
-
-        // No slots at this level, move to next
-        currentLevel++;
+      if (activationData.length === 0) {
+        throw new Error(`Activation ${activationId} not found`);
       }
 
-      throw new Error('Matrix placement failed - reached maximum search depth');
+      const activation = activationData[0];
+      
+      // Get the user record to find their sponsor's requested leg
+      const { users } = await import('@shared/schema');
+      const userData = await txContext
+        .select()
+        .from(users)
+        .where(eq(users.id, activation.payerWallet))
+        .limit(1);
+
+      const binaryLeg = userData.length > 0 ? (userData[0].sponsorRequestedLeg || userData[0].binaryLeg) : null;
+
+      // DFS helper: recursively traverse down preferred leg to find DEEPEST available slot
+      const findDeepestSlot = async (
+        parentActivationId: string,
+        parentMatrixLevel: number,
+        parentPath: string,
+        preferredPosition: number | null // 0 for left, 1 for right, null to try left then right
+      ): Promise<{ parentId: string; position: number; level: number; path: string } | null> => {
+        if (parentMatrixLevel > 100) return null; // Safety limit
+
+        // Get children of this parent
+        const children = await txContext
+          .select()
+          .from(activationMatrixPositions)
+          .where(eq(activationMatrixPositions.matrixParentActivationId, parentActivationId));
+
+        // If we have a preferred position
+        if (preferredPosition !== null) {
+          const childAtPreferred = children.find(c => c.matrixPosition === preferredPosition);
+          
+          if (!childAtPreferred) {
+            // Preferred position is empty - place here
+            return {
+              parentId: parentActivationId,
+              position: preferredPosition,
+              level: parentMatrixLevel + 1,
+              path: `${parentPath}.${preferredPosition === 0 ? 'L' : 'R'}`
+            };
+          }
+          
+          // Preferred position taken - recurse deeper into it (DFS deep traversal)
+          return await findDeepestSlot(
+            childAtPreferred.activationId,
+            childAtPreferred.matrixLevel,
+            childAtPreferred.matrixPath,
+            preferredPosition
+          );
+        }
+
+        // No preferred position - try left first (classic DFS: left, then right)
+        const leftChild = children.find(c => c.matrixPosition === 0);
+        if (!leftChild) {
+          return {
+            parentId: parentActivationId,
+            position: 0,
+            level: parentMatrixLevel + 1,
+            path: `${parentPath}.L`
+          };
+        }
+
+        // Left exists, try going deeper on left side
+        const leftDeepResult = await findDeepestSlot(
+          leftChild.activationId,
+          leftChild.matrixLevel,
+          leftChild.matrixPath,
+          null
+        );
+        if (leftDeepResult) return leftDeepResult;
+
+        // Left subtree full, try right
+        const rightChild = children.find(c => c.matrixPosition === 1);
+        if (!rightChild) {
+          return {
+            parentId: parentActivationId,
+            position: 1,
+            level: parentMatrixLevel + 1,
+            path: `${parentPath}.R`
+          };
+        }
+
+        // Right exists, try going deeper on right side
+        return await findDeepestSlot(
+          rightChild.activationId,
+          rightChild.matrixLevel,
+          rightChild.matrixPath,
+          null
+        );
+      };
+
+      // Check if matrix is empty (root position)
+      const rootPosition = await txContext
+        .select()
+        .from(activationMatrixPositions)
+        .where(eq(activationMatrixPositions.matrixLevel, 1))
+        .limit(1);
+
+      if (rootPosition.length === 0) {
+        // This is the root activation
+        await txContext.insert(activationMatrixPositions).values({
+          activationId: activationId,
+          matrixParentActivationId: null,
+          matrixPosition: null,
+          matrixLevel: 1,
+          matrixPath: activationId,
+        });
+        console.log(`[ACTIVATION-MATRIX] Assigned ${activationId} as matrix root (level 1, DFS)`);
+        return;
+      }
+
+      // Use DFS to find deepest slot in preferred leg
+      const preferredPosition = binaryLeg === 'left' ? 0 : (binaryLeg === 'right' ? 1 : null);
+      const root = rootPosition[0];
+      const slot = await findDeepestSlot(root.activationId, root.matrixLevel, root.matrixPath, preferredPosition);
+
+      if (slot) {
+        await txContext.insert(activationMatrixPositions).values({
+          activationId: activationId,
+          matrixParentActivationId: slot.parentId,
+          matrixPosition: slot.position,
+          matrixLevel: slot.level,
+          matrixPath: slot.path,
+        });
+        const legName = slot.position === 0 ? 'left' : 'right';
+        console.log(`[ACTIVATION-MATRIX] Assigned ${activationId} to ${legName} of ${slot.parentId} at level ${slot.level} (DFS deep placement)`);
+        return;
+      }
+
+      throw new Error('Matrix placement failed - could not find available slot');
     };
 
     if (tx) {
@@ -1387,10 +1445,10 @@ export class DbStorage implements IStorage {
         SELECT 
           amp.activation_id,
           a.payer_wallet,
-          u.user_id,
-          u.name,
+          COALESCE(u.user_id, 'Unknown') as user_id,
+          COALESCE(u.name, 'No name') as name,
           u.email,
-          u.is_activated,
+          COALESCE(u.is_activated, false) as is_activated,
           amp.matrix_level,
           amp.matrix_position,
           amp.matrix_path,
@@ -1406,10 +1464,10 @@ export class DbStorage implements IStorage {
         SELECT 
           amp.activation_id,
           a.payer_wallet,
-          u.user_id,
-          u.name,
+          COALESCE(u.user_id, 'Unknown') as user_id,
+          COALESCE(u.name, 'No name') as name,
           u.email,
-          u.is_activated,
+          COALESCE(u.is_activated, false) as is_activated,
           amp.matrix_level,
           amp.matrix_position,
           amp.matrix_path,
@@ -1433,9 +1491,15 @@ export class DbStorage implements IStorage {
     const nodeMap = new Map<string, any>();
     
     typedRows.forEach((row) => {
+      // CRITICAL: Use user_id if available (PB#### format), never fall back to payer_wallet (UUID)
+      const displayUserId = (row.user_id && row.user_id !== 'Unknown') ? row.user_id : 'Unlinked User';
+      const displayName = (row.name && row.name !== 'No name') ? row.name : 'No name';
+      
+      console.log(`[MATRIX-TREE] Node - UserID: ${row.user_id}, Name: ${row.name}, PayerWallet: ${row.payer_wallet}`);
+      
       nodeMap.set(row.activation_id, {
-        userId: row.user_id || row.payer_wallet, // Use PB#### if available, else UUID
-        name: row.name,
+        userId: displayUserId,
+        name: displayName,
         email: row.email || 'Unknown',
         isActivated: row.is_activated,
         matrixLevel: row.matrix_level,
@@ -2436,30 +2500,131 @@ export class DbStorage implements IStorage {
       }
 
       // If this is a binary_match payment to a real user (not PB0 fallback), mark queue entry as paid
-      // PB0 fallback payments don't have queue entries to mark (queue was empty)
+      // with auto-reassignment if the originally reserved user hasn't activated yet
       if (confirmedPayment.paymentType === 'binary_match' && confirmedPayment.receiverUserId !== 'PB0') {
-        console.log(`[STORAGE] Marking binary match queue entry as paid for user ${confirmedPayment.receiverUserId}`);
+        console.log(`[STORAGE] Processing binary match queue entry for user ${confirmedPayment.receiverUserId}`);
         
-        // Update queue entry from reserved → paid
-        // Match by activation ID to ensure we update the correct reserved entry
-        const queueUpdateResult = await tx.update(binaryMatchQueue)
-          .set({
-            status: 'paid',
-            paidAt: new Date(),
-          })
+        // Get the reserved queue entry that was supposed to be paid
+        const reservedQueueEntry = await tx.select()
+          .from(binaryMatchQueue)
           .where(and(
             eq(binaryMatchQueue.userId, confirmedPayment.receiverUserId!),
             eq(binaryMatchQueue.paidByActivationId, confirmedPayment.activationId),
-            eq(binaryMatchQueue.status, 'reserved') // MUST be reserved (not waiting or already paid)
+            eq(binaryMatchQueue.status, 'reserved')
           ))
-          .returning();
+          .for('update')
+          .limit(1);
         
-        if (queueUpdateResult.length > 0) {
-          console.log(`[STORAGE] Queue entry marked as paid - user ${confirmedPayment.receiverUserId} received ₹${confirmedPayment.amountInr}`);
-        } else {
-          // This is a critical error - means the queue entry was not properly reserved
+        if (reservedQueueEntry.length === 0) {
           console.error(`[STORAGE] CRITICAL ERROR: No reserved queue entry found for user ${confirmedPayment.receiverUserId} and activation ${confirmedPayment.activationId}`);
           throw new Error(`Queue entry not found for binary match payment confirmation`);
+        }
+        
+        const reservedEntry = reservedQueueEntry[0];
+        
+        // CRITICAL: Check if the PAYER (not receiver) is activated
+        // If payer hasn't completed their activation, reassign payment to next activated queued user
+        const payer = await tx.select()
+          .from(users)
+          .where(eq(users.userId, confirmedPayment.payerUserId))
+          .limit(1);
+        
+        if (payer.length === 0) {
+          console.error(`[STORAGE] CRITICAL ERROR: Payer user ${confirmedPayment.payerUserId} not found`);
+          throw new Error(`Payer user not found`);
+        }
+        
+        const isPayerActivated = payer[0].isActivated === true;
+        
+        if (!isPayerActivated) {
+          console.log(`[STORAGE] Payer ${confirmedPayment.payerUserId} is NOT activated - checking for next activated queued user to reassign payment...`);
+          
+          // Find next queued user who IS activated
+          const nextActivatedQueued = await tx.select()
+            .from(binaryMatchQueue)
+            .leftJoin(users, eq(binaryMatchQueue.userId, users.userId))
+            .where(and(
+              eq(binaryMatchQueue.status, 'waiting'),
+              sql`${users}.is_activated = true`
+            ))
+            .orderBy(asc(binaryMatchQueue.queuePosition))
+            .limit(1);
+          
+          if (nextActivatedQueued.length > 0) {
+            const nextUser = nextActivatedQueued[0]['binary_match_queue'];
+            const nextUserId = nextUser.userId;
+            
+            console.log(`[STORAGE] Found next activated queued user: ${nextUserId} at position ${nextUser.queuePosition}`);
+            console.log(`[STORAGE] REASSIGNING: Payment from ${nextUserId} instead of ${confirmedPayment.receiverUserId}`);
+            console.log(`[STORAGE] RESETTING: ${confirmedPayment.receiverUserId} back to 'waiting' status to cycle through queue again`);
+            
+            // STEP 1: Reset originally reserved user back to 'waiting' (cycle to back of queue)
+            await tx.update(binaryMatchQueue)
+              .set({
+                status: 'waiting',
+                paidByActivationId: null,
+                paidAt: null,
+              })
+              .where(eq(binaryMatchQueue.id, reservedEntry.id));
+            
+            // STEP 2: Mark the next activated user as paid
+            await tx.update(binaryMatchQueue)
+              .set({
+                status: 'paid',
+                paidByActivationId: confirmedPayment.activationId,
+                paidAt: new Date(),
+              })
+              .where(eq(binaryMatchQueue.id, nextUser.id));
+            
+            // STEP 3: Update the payment record to reflect the new receiver
+            console.log(`[STORAGE] Updating payment record to reflect reassigned receiver: ${nextUserId}`);
+            await tx.update(activationPayments)
+              .set({
+                receiverUserId: nextUserId,
+                updatedAt: new Date(),
+              })
+              .where(eq(activationPayments.id, id));
+            
+            console.log(`[STORAGE] Binary queue reassignment complete: ${confirmedPayment.receiverUserId} → ${nextUserId}`);
+          } else {
+            // No next activated user found - reassign to PB0 fallback
+            console.log(`[STORAGE] No next activated queued user found - falling back to PB0 (admin)`);
+            
+            // STEP 1: Reset originally reserved user back to 'waiting'
+            await tx.update(binaryMatchQueue)
+              .set({
+                status: 'waiting',
+                paidByActivationId: null,
+                paidAt: null,
+              })
+              .where(eq(binaryMatchQueue.id, reservedEntry.id));
+            
+            // STEP 2: Update payment to PB0
+            await tx.update(activationPayments)
+              .set({
+                receiverUserId: 'PB0',
+                receiverType: 'admin',
+                updatedAt: new Date(),
+              })
+              .where(eq(activationPayments.id, id));
+            
+            console.log(`[STORAGE] Payment reassigned to PB0 (admin fallback)`);
+          }
+        } else {
+          // Reserved user IS activated - proceed normally
+          console.log(`[STORAGE] Reserved user ${confirmedPayment.receiverUserId} is activated - marking as paid normally`);
+          
+          const queueUpdateResult = await tx.update(binaryMatchQueue)
+            .set({
+              status: 'paid',
+              paidAt: new Date(),
+            })
+            .where(eq(binaryMatchQueue.id, reservedEntry.id))
+            .returning();
+          
+          if (queueUpdateResult.length > 0) {
+            console.log(`[STORAGE] Queue entry marked as paid - user ${confirmedPayment.receiverUserId} received ₹${confirmedPayment.amountInr}`);
+          }
         }
       } else if (confirmedPayment.paymentType === 'binary_match' && confirmedPayment.receiverUserId === 'PB0') {
         // Binary match payment to PB0 (queue was empty) - no queue entry to mark
@@ -2796,6 +2961,46 @@ export class DbStorage implements IStorage {
           
           const placedPosition = matrixPosition[0];
           console.log(`[ACTIVATION-MATRIX] ✓ Activation ${activationId} placed in matrix at ${placedPosition.matrixPath} (Level ${placedPosition.matrixLevel})`);
+          
+          // CRITICAL FIX: Set matrixParentId on user record based on activation-scoped matrix placement
+          // This links the user to their direct upline in the matrix tree
+          let matrixParentIdToSet: string | null = null;
+          let matrixParentLevelToSet: number | null = null;
+          
+          if (placedPosition.matrixParentActivationId) {
+            // Get the parent activation to find the parent user
+            const parentActivation = await tx.select()
+              .from(activations)
+              .where(eq(activations.id, placedPosition.matrixParentActivationId))
+              .limit(1);
+            
+            if (parentActivation.length > 0) {
+              // Get the user ID from the parent activation's payer
+              const parentUser = await tx.select()
+                .from(users)
+                .where(eq(users.id, parentActivation[0].payerWallet || ''))
+                .limit(1);
+              
+              if (parentUser.length > 0) {
+                matrixParentIdToSet = parentUser[0].userId;
+                matrixParentLevelToSet = placedPosition.matrixLevel ? placedPosition.matrixLevel - 1 : 0;
+                console.log(`[ACTIVATION-MATRIX] Set matrix parent: ${activatedUser.userId} → ${matrixParentIdToSet} (parent level ${matrixParentLevelToSet})`);
+              }
+            }
+          } else {
+            // This is the matrix root
+            console.log(`[ACTIVATION-MATRIX] User ${activatedUser.userId} is matrix root (no parent)`);
+          }
+          
+          // Update user with matrix parent and path info
+          await tx.update(users)
+            .set({
+              matrixParentId: matrixParentIdToSet,
+              matrixPath: placedPosition.matrixPath,
+              matrixLevel: placedPosition.matrixLevel,
+              updatedAt: now
+            })
+            .where(eq(users.userId, payerUserIdOrDbId));
           
           // Get activation matrix ancestors (up to 5 levels) for payment routing
           const matrixAncestorActivations = await this.getActivationMatrixAncestors(activationId, 5, tx);
@@ -3860,6 +4065,83 @@ export class DbStorage implements IStorage {
       .where(eq(notifications.id, notificationId));
     
     console.log(`[STORAGE] Marked notification ${notificationId} as acknowledged`);
+  }
+
+  /**
+   * Release abandoned queue reservations after 24 hours (or specified hours)
+   * When a new user's activation doesn't pay their assigned queue recipient within timeout,
+   * reset the queue entry to "waiting" so the next new user can pay them
+   */
+  async releaseAbandonedQueueReservations(hoursOld: number = 24): Promise<number> {
+    try {
+      const cutoffTime = new Date(Date.now() - hoursOld * 60 * 60 * 1000);
+      
+      // Find all reserved entries older than cutoff time
+      const abandonedReservations = await db
+        .select()
+        .from(binaryMatchQueue)
+        .where(and(
+          eq(binaryMatchQueue.status, 'reserved'),
+          lt(binaryMatchQueue.entered_at, cutoffTime)
+        ));
+      
+      console.log(`[QUEUE-RELEASE] Found ${abandonedReservations.length} abandoned reservations older than ${hoursOld} hours`);
+      
+      let releasedCount = 0;
+      
+      for (const reservation of abandonedReservations) {
+        // Release back to "waiting" status so next new user can pay them
+        await db
+          .update(binaryMatchQueue)
+          .set({
+            status: 'waiting',
+            paid_by_activation_id: null,
+            updated_at: new Date(),
+          })
+          .where(eq(binaryMatchQueue.id, reservation.id));
+        
+        console.log(`[QUEUE-RELEASE] ✓ Released queue entry ${reservation.id} for user ${reservation.user_id} (was reserved by ${reservation.paid_by_activation_id})`);
+        releasedCount++;
+      }
+      
+      if (releasedCount > 0) {
+        console.log(`[QUEUE-RELEASE] Successfully released ${releasedCount} abandoned reservations`);
+      }
+      
+      return releasedCount;
+    } catch (error) {
+      console.error('[QUEUE-RELEASE] Error releasing abandoned reservations:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Get queue entry by the activation ID that reserved it
+   */
+  async getQueueEntryByActivationId(activationId: string): Promise<any | undefined> {
+    const result = await db
+      .select()
+      .from(binaryMatchQueue)
+      .where(eq(binaryMatchQueue.paid_by_activation_id, activationId))
+      .limit(1);
+    
+    return result[0];
+  }
+
+  /**
+   * Mark queue entry as paid and update payment timestamp
+   */
+  async markQueueEntryAsPaid(queueEntryId: string, paidByActivationId: string): Promise<void> {
+    await db
+      .update(binaryMatchQueue)
+      .set({
+        status: 'paid',
+        paid_at: new Date(),
+        updated_at: new Date(),
+      })
+      .where(eq(binaryMatchQueue.id, queueEntryId));
+    
+    console.log(`[QUEUE] ✓ Marked queue entry ${queueEntryId} as PAID by ${paidByActivationId}`);
   }
 }
 

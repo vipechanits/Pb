@@ -14,9 +14,9 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { CheckCircle, QrCode, AlertTriangle, Mail, Lock, Shield, Hash, Copy, Check } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { ReferralLinks } from '@/components/referral-links';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { apiRequest } from '@/lib/queryClient';
+import { SecurityCodeSetupModal } from '@/components/SecurityCodeSetupModal';
 
 export default function Profile() {
   const { user, refreshUser } = useAuth();
@@ -25,6 +25,7 @@ export default function Profile() {
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [showQR, setShowQR] = useState(false);
   const [showProfileDialog, setShowProfileDialog] = useState(false);
+  const [showSecurityCodeModal, setShowSecurityCodeModal] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // Show profile completion dialog on first visit
@@ -42,6 +43,7 @@ export default function Profile() {
     }
   }, [user]);
 
+
   const form = useForm<UpdateProfile>({
     resolver: zodResolver(updateProfileSchema),
     defaultValues: {
@@ -51,6 +53,7 @@ export default function Profile() {
       bankAccountHolder: user?.bankAccountHolder || '',
       bankAccountNumber: user?.bankAccountNumber || '',
       ifscCode: user?.ifscCode || '',
+      securityCode: '',
     },
   });
 
@@ -64,6 +67,7 @@ export default function Profile() {
         bankAccountHolder: user.bankAccountHolder || '',
         bankAccountNumber: user.bankAccountNumber || '',
         ifscCode: user.ifscCode || '',
+        securityCode: '',
       });
     }
   }, [user, form]);
@@ -121,8 +125,16 @@ export default function Profile() {
     }
   };
 
+  const handleSecurityCodeModalClose = (open: boolean) => {
+    setShowSecurityCodeModal(open);
+    if (!open) {
+      localStorage.setItem('security-code-modal-seen', Date.now().toString());
+    }
+  };
+
   return (
     <div className="container max-w-4xl mx-auto p-6 space-y-6">
+
       {/* Profile Completion Alert Dialog */}
       <AlertDialog open={showProfileDialog} onOpenChange={handleDialogClose}>
         <AlertDialogContent data-testid="dialog-profile-completion">
@@ -207,9 +219,8 @@ export default function Profile() {
       )}
 
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className={user?.role === 'admin' ? "grid w-full grid-cols-4" : "grid w-full grid-cols-3"}>
+        <TabsList className={user?.role === 'admin' ? "grid w-full grid-cols-3" : "grid w-full grid-cols-2"}>
           <TabsTrigger value="profile" data-testid="tab-profile">Profile Details</TabsTrigger>
-          <TabsTrigger value="referrals" data-testid="tab-referrals">Referral Links</TabsTrigger>
           <TabsTrigger value="security" data-testid="tab-security">Security</TabsTrigger>
           {user?.role === 'admin' && (
             <TabsTrigger value="fallback-payments" data-testid="tab-fallback-payments">Fallback Payments</TabsTrigger>
@@ -220,6 +231,15 @@ export default function Profile() {
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          {user?.isActivated && (
+            <Alert className="bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800">
+              <Lock className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-800 dark:text-blue-200">
+                <strong>Important:</strong> To update your profile, you may need to verify your security code. Your UPI ID is especially important for receiving payments.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle>Personal Information</CardTitle>
@@ -368,6 +388,46 @@ export default function Profile() {
             </CardContent>
           </Card>
 
+          {user?.securityCode && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  Security Verification
+                </CardTitle>
+                <CardDescription>Enter your 6-digit security code to confirm profile updates</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <FormField
+                  control={form.control}
+                  name="securityCode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Security Code</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="000000"
+                          maxLength={6}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                            field.onChange(value);
+                          }}
+                          disabled={loading}
+                          data-testid="input-profile-security-code"
+                        />
+                      </FormControl>
+                      <FormDescription>Your 6-digit security code to verify the update</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="bg-muted/30">
             <CardContent className="pt-6">
               <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
@@ -505,10 +565,6 @@ export default function Profile() {
           </CardContent>
         </Card>
       )}
-        </TabsContent>
-
-        <TabsContent value="referrals" className="mt-6">
-          <ReferralLinks />
         </TabsContent>
 
         <TabsContent value="security" className="space-y-6 mt-6">

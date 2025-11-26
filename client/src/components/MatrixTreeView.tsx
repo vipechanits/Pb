@@ -31,19 +31,23 @@ function MatrixNodeComponent({ node, depth = 0 }: { node: MatrixNode | null; dep
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <Card className={`w-32 ${node.isActivated ? 'border-purple-500/50 bg-purple-50/10 dark:bg-purple-950/20' : 'border-muted'}`} data-testid={`matrix-node-${node.userId}`}>
-        <CardContent className="p-3 space-y-1">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-mono font-semibold">{node.userId}</p>
+      <Card className={`w-36 ${node.isActivated ? 'border-purple-500/50 bg-purple-50/10 dark:bg-purple-950/20' : 'border-muted'}`} data-testid={`matrix-node-${node.userId}`}>
+        <CardContent className="p-3 space-y-2">
+          <div className="flex items-start justify-between gap-1">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-mono font-bold text-purple-700 dark:text-purple-400 truncate" title={node.userId}>
+                {node.userId.startsWith('Unlinked') ? 'Loading...' : node.userId}
+              </p>
+              <p className="text-xs font-medium truncate text-foreground" title={node.name || 'No name'}>
+                {node.name && node.name !== 'No name' ? node.name : 'No name'}
+              </p>
+            </div>
             {node.isActivated ? (
-              <CheckCircle className="w-3 h-3 text-purple-500" />
+              <CheckCircle className="w-4 h-4 text-purple-500 flex-shrink-0" />
             ) : (
-              <XCircle className="w-3 h-3 text-muted-foreground" />
+              <XCircle className="w-4 h-4 text-muted-foreground flex-shrink-0" />
             )}
           </div>
-          <p className="text-xs truncate">
-            {node.name || 'No name'}
-          </p>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span title="Matrix Level">L{node.matrixLevel ?? '-'}</span>
             <span title="Position">P{node.matrixPosition ?? '-'}</span>
