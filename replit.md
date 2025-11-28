@@ -9,6 +9,37 @@ Full-stack MLM platform featuring:
 
 ## Recent Updates (November 28, 2025 - Latest)
 
+### ✅ PB10049 MATRIX LINK RESTORED (November 28, 2025)
+**Issue**: After activation, PB10049 disappeared from global matrix (had NULL parent_id)
+**Root Cause**: matrix_parent_id was NULL and matrix_path was incorrect ("PB10049.R")
+**Fix**: Linked PB10049 to PB10016 as right child (position 1) at Level 5
+**Updated Data**: 
+- matrix_parent_id: PB10016
+- matrix_path: PB10000.R.L.L.R
+- matrix_level: 5, matrix_position: 1
+**Result**: ✅ PB10049 now properly visible in global matrix tree
+
+### ✅ GETTING STARTED SECTION REDESIGNED (November 28, 2025)
+**Fixed**: Background colors and text contrast in onboarding flow
+- Header: Blue gradient → pure white background with gray border
+- Cards: Slate gradient → pure white background  
+- Step items: Semi-transparent → pure white with gray borders
+- All text: Now uses `dashboard-text` class (black) for consistency
+**File Modified**: client/src/pages/user-dashboard.tsx (lines 390-439)
+
+### ✅ PB10049 BINARY INCOME BUG FIXED (November 28, 2025)
+**Issue**: PB10049 had binary_match payment receiver incorrectly set to PB10003
+**Fix**: Reassigned payment receiver from PB10003 → PB0 (admin fallback)
+**Payment ID**: 838f86a1-d104-4a87-abf1-a5a216622100
+**Result**: ✅ Prevents incorrect income allocation when payment is confirmed
+
+### ✅ TEXT CONTRAST FIXES COMPLETED (November 28, 2025)
+**Fixed**: All colored section text contrast issues throughout app
+- Profile page: Blue alert box text → black
+- Binary tree page: Green/amber status indicators → black
+- All sections: Pure white background with readable black text
+**Files Modified**: client/src/pages/profile.tsx, client/src/pages/user-binary-tree.tsx
+
 ### ✅ QUEUE AUTO-REASSIGNMENT IMPLEMENTED (November 28, 2025)
 **Feature**: 24-hour auto-reassignment for abandoned payers
 

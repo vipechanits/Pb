@@ -10,8 +10,8 @@
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
   
-  /* Background & Foreground - Warm slate tones */
-  --background: 210 20% 98%;
+  /* Background & Foreground - Pure white background */
+  --background: 0 0% 100%;
   --foreground: 222 47% 11%;
   --border: 214 20% 88%;
   
@@ -20,8 +20,8 @@
   --card-foreground: 222 47% 11%;
   --card-border: 214 20% 92%;
   
-  /* Sidebar - Light background matching main interface */
-  --sidebar: 210 20% 98%;
+  /* Sidebar - Pure white background */
+  --sidebar: 0 0% 100%;
   --sidebar-foreground: 222 47% 11%;
   --sidebar-border: 214 20% 88%;
   --sidebar-primary: 158 64% 52%;
@@ -62,6 +62,10 @@
   --warning-foreground: 222 47% 11%;
   --info: 199 89% 48%;
   --info-foreground: 0 0% 100%;
+  
+  /* Dashboard specific colors */
+  --dashboard-text: 0 0% 0%;
+  --dashboard-variable: 199 89% 48%;
   
   /* Input & Ring */
   --input: 214 20% 82%;
@@ -130,6 +134,16 @@
  * need to be distinguished from eachother visually.
  */
 @layer utilities {
+  
+  /* Dashboard styling - Black text and blue variables */
+  .dashboard-text {
+    @apply text-black;
+  }
+  
+  .dashboard-variable {
+    color: hsl(var(--dashboard-variable));
+    font-weight: 600;
+  }
 
   /* Hide ugly search cancel button in Chrome until we can style it properly */
   input[type="search"]::-webkit-search-cancel-button {

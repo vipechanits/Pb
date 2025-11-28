@@ -61,8 +61,8 @@ export function DashboardReferralLinks({
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-lg">Your Referral Links</CardTitle>
-            <CardDescription>Share these links to build your binary team and start earning</CardDescription>
+            <CardTitle className="text-lg dashboard-text">Your Referral Links</CardTitle>
+            <CardDescription className="dashboard-text">Share these links to build your binary team and start earning</CardDescription>
           </div>
           <Badge variant="default" className="gap-1">
             <CheckCircle className="w-3 h-3" />
@@ -74,12 +74,12 @@ export function DashboardReferralLinks({
         <div className="grid gap-4 md:grid-cols-2">
           {/* Left Leg Link */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2 text-sm font-medium">
+            <div className="flex items-center gap-2 text-sm font-medium dashboard-text">
               <ArrowLeft className="w-4 h-4 text-blue-500" />
               Left Leg
             </div>
             <div className="flex gap-2">
-              <Input value={leftLegLink} readOnly className="text-xs" />
+              <Input value={leftLegLink} readOnly className="text-xs dashboard-variable" />
               <Button
                 variant="outline"
                 size="icon"
@@ -153,12 +153,12 @@ export function DashboardReferralLinks({
 
           {/* Right Leg Link */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2 text-sm font-medium">
+            <div className="flex items-center gap-2 text-sm font-medium dashboard-text">
               <ArrowRight className="w-4 h-4 text-green-500" />
               Right Leg
             </div>
             <div className="flex gap-2">
-              <Input value={rightLegLink} readOnly className="text-xs" />
+              <Input value={rightLegLink} readOnly className="text-xs dashboard-variable" />
               <Button
                 variant="outline"
                 size="icon"

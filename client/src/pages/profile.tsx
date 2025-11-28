@@ -234,7 +234,7 @@ export default function Profile() {
           {user?.isActivated && (
             <Alert className="bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800">
               <Lock className="h-4 w-4 text-blue-600" />
-              <AlertDescription className="text-blue-800 dark:text-blue-200">
+              <AlertDescription className="text-black dark:text-black">
                 <strong>Important:</strong> To update your profile, you may need to verify your security code. Your UPI ID is especially important for receiving payments.
               </AlertDescription>
             </Alert>

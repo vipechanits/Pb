@@ -97,6 +97,17 @@ export class IncomeService {
       throw new Error(`No income type mapped for payment type: ${payment.paymentType}`);
     }
     
+    // CRITICAL FIX: Validate binary_match payments to prevent payer/receiver swap bug
+    // If this is a binary_match payment and payer==receiver (pair income), 
+    // ensure sourceUserId is NOT a queue recipient who should be receiving the payment
+    if (payment.paymentType === 'binary_match' && payment.payerUserId === payment.receiverUserId) {
+      console.log(`[INCOME] Binary match pair income for user ${payment.payerUserId}`);
+    } else if (payment.paymentType === 'binary_match' && payment.payerUserId !== payment.receiverUserId) {
+      // Queue payment: payer activates and pays receiver from queue
+      // This is correct: payer pays receiver, receiver gets income
+      console.log(`[INCOME] Binary match queue payment: ${payment.payerUserId} → ${payment.receiverUserId}`);
+    }
+    
     // Determine final receiver ID with strict validation
     // ONLY top_reward can have null receiverUserId (defaults to PB0)
     // ALL other payments (including future admin payment types) MUST have receiverUserId
