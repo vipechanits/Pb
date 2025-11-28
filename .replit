@@ -9,11 +9,15 @@ packages = ["splat", "u-root-cmds"]
 [deployment]
 deploymentTarget = "autoscale"
 build = ["npm", "run", "build"]
-run = ["npm", "run", "start"]
+run = ["npm", "start"]
 
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 24678
+externalPort = 8080
 
 [[ports]]
 localPort = 37553

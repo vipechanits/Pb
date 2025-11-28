@@ -35,11 +35,14 @@ import {
   UserPlus,
   DollarSign,
   MessageCircle,
+  Sparkles,
+  ChevronRight,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth-context';
 import { useQuery } from '@tanstack/react-query';
 import logoUrl from '@assets/payback247-logo_1763267164811.png';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
 interface AppSidebarProps {
   isAdmin?: boolean;
@@ -202,19 +205,35 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
 
   const pendingCount = pendingData?.count || 0;
 
+  const userInitials = user?.name ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : 'U';
+  
   return (
     <Sidebar>
-      <SidebarHeader className="p-4 border-b border-sidebar-border">
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <img src={logoUrl} alt="PAYBACK247" className="w-32 h-32 my-3" />
+      <SidebarHeader className="p-4 border-b border-sidebar-border/50">
+        <div className="space-y-4">
+          <div className="flex items-center justify-center">
+            <img src={logoUrl} alt="PAYBACK247" className="w-28 h-auto object-contain" />
           </div>
           {user && (
-            <div className="pt-2 border-t border-sidebar-border">
-              <div className="text-xs text-muted-foreground">Logged in as</div>
-              <div className="font-mono text-sm font-semibold" data-testid="text-user-id">
-                {user.userId || 'N/A'}
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-sidebar-accent/50">
+              <Avatar className="h-10 w-10 border-2 border-primary/30">
+                <AvatarFallback className="bg-primary/20 text-primary font-semibold text-sm">
+                  {userInitials}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate text-sidebar-foreground" data-testid="text-user-name">
+                  {user.name || 'User'}
+                </p>
+                <p className="font-mono text-xs font-semibold text-primary" data-testid="text-user-id">
+                  {user.userId || 'N/A'}
+                </p>
               </div>
+              {user.isActivated && (
+                <div className="flex-shrink-0">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -437,15 +456,22 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
         )}
       </SidebarContent>
       
-      <SidebarFooter className="p-4 border-t border-sidebar-border">
+      <SidebarFooter className="p-4 border-t border-sidebar-border/50">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton onClick={handleLogout} data-testid="button-logout">
+            <SidebarMenuButton 
+              onClick={handleLogout} 
+              data-testid="button-logout"
+              className="text-destructive/80 hover:text-destructive hover:bg-destructive/10"
+            >
               <LogOut className="w-4 h-4" />
-              <span>Logout</span>
+              <span>Sign Out</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        <div className="mt-3 pt-3 border-t border-sidebar-border/30 text-center">
+          <p className="text-xs text-sidebar-foreground/40">PAYBACK247 v2.0</p>
+        </div>
       </SidebarFooter>
     </Sidebar>
   );

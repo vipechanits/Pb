@@ -4,15 +4,18 @@ import {
   Wallet, 
   RefreshCw, 
   UserPlus,
-  DollarSign
+  DollarSign,
+  ArrowRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface QuickAction {
   icon: React.ElementType;
   label: string;
+  description: string;
   path: string;
-  gradient: string;
+  iconBg: string;
+  iconColor: string;
   testId: string;
 }
 
@@ -20,39 +23,46 @@ const quickActions: QuickAction[] = [
   {
     icon: Wallet,
     label: 'Activate',
+    description: 'Complete payment',
     path: '/user/activation',
-    gradient: 'from-purple-500 to-pink-500',
+    iconBg: 'bg-primary/10',
+    iconColor: 'text-primary',
     testId: 'quick-action-activate'
   },
   {
     icon: UserPlus,
     label: 'Invite',
+    description: 'Grow your team',
     path: '/user/direct-sponsoring',
-    gradient: 'from-blue-500 to-cyan-500',
+    iconBg: 'bg-info/10',
+    iconColor: 'text-info',
     testId: 'quick-action-invite'
   },
   {
     icon: DollarSign,
     label: 'Income',
+    description: 'View earnings',
     path: '/user/transaction-history',
-    gradient: 'from-green-500 to-emerald-500',
+    iconBg: 'bg-success/10',
+    iconColor: 'text-success',
     testId: 'quick-action-income'
   },
   {
     icon: RefreshCw,
     label: 'Re-entry',
+    description: 'Start new cycle',
     path: '/user/reentry',
-    gradient: 'from-amber-500 to-yellow-500',
+    iconBg: 'bg-warning/10',
+    iconColor: 'text-warning',
     testId: 'quick-action-reentry'
   },
 ];
 
 export function QuickActions() {
   return (
-    <Card>
+    <Card className="border-0 shadow-md">
       <CardContent className="p-4 sm:p-6">
-        <h3 className="text-lg font-semibold mb-4">Quick Actions</h3>
-        <div className="flex gap-2 sm:gap-4 justify-between">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {quickActions.map((action) => {
             const Icon = action.icon;
             return (
@@ -60,18 +70,19 @@ export function QuickActions() {
                 key={action.path} 
                 href={action.path}
                 data-testid={action.testId}
-                className="group flex flex-col items-center gap-1.5 sm:gap-2 p-2 sm:p-3 rounded-lg hover-elevate active-elevate-2 transition-all flex-1"
+                className="group flex flex-col items-center gap-2 p-4 rounded-xl bg-muted/30 hover:bg-muted/50 transition-all duration-200 border border-transparent hover:border-border"
               >
                 <div className={cn(
-                  "w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-gradient-to-br",
-                  action.gradient,
-                  "group-hover:scale-110 transition-transform"
+                  "w-12 h-12 rounded-xl flex items-center justify-center transition-transform group-hover:scale-105",
+                  action.iconBg
                 )}>
-                  <Icon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                  <Icon className={cn("w-6 h-6", action.iconColor)} />
                 </div>
-                <span className="text-xs font-medium text-center leading-tight">
-                  {action.label}
-                </span>
+                <div className="text-center">
+                  <p className="text-sm font-semibold">{action.label}</p>
+                  <p className="text-xs text-muted-foreground hidden sm:block">{action.description}</p>
+                </div>
+                <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
               </Link>
             );
           })}

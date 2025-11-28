@@ -46,7 +46,7 @@ export default function MatrixGrid({ positions, maxLevel = 5 }: MatrixGridProps)
                           pos.isCurrentUser
                             ? 'border-primary bg-primary/10'
                             : pos.filled
-                            ? 'border-border bg-card'
+                            ? 'bg-card'
                             : 'border-dashed border-muted bg-muted/50'
                         }`}
                         data-testid={`matrix-position-${pos.index}`}

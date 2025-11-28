@@ -5,7 +5,6 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/app-sidebar';
-import ThemeToggle from '@/components/ThemeToggle';
 import { NotificationBell } from '@/components/NotificationBell';
 import { UserProfileDropdown } from '@/components/UserProfileDropdown';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
@@ -96,7 +95,6 @@ function DashboardLayout({ children, isAdmin = false }: { children: React.ReactN
               </Link>
               <NotificationBell />
               <UserProfileDropdown />
-              <ThemeToggle />
             </div>
           </header>
           <main className="flex-1 overflow-auto">

@@ -7,7 +7,8 @@ import {
   Target,
   CheckCircle,
   Clock,
-  ArrowUpRight
+  ArrowUpRight,
+  Zap
 } from 'lucide-react';
 import { Link } from 'wouter';
 
@@ -21,45 +22,47 @@ export function ProgressWidget({ currentCycle = 1, isActivated, matrixComplete }
   const progress = matrixComplete ? 100 : isActivated ? 50 : 0;
   
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 pb-4">
-        <CardTitle className="text-lg flex items-center gap-2">
-          <Target className="w-5 h-5" />
+    <Card className="overflow-hidden border-0 shadow-md">
+      <CardHeader className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent pb-4">
+        <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <div className="p-1.5 rounded-md bg-primary/10">
+            <Target className="w-4 h-4 text-primary" />
+          </div>
           Your Progress
         </CardTitle>
       </CardHeader>
-      <CardContent className="pt-6 space-y-4">
+      <CardContent className="pt-4 space-y-4">
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Cycle #{currentCycle}</span>
-            <span className="font-semibold">{progress}%</span>
+            <Badge variant="secondary" className="font-mono text-xs">{progress}%</Badge>
           </div>
-          <Progress value={progress} className="h-2" />
+          <Progress value={progress} className="h-2.5" />
         </div>
         
-        <div className="grid grid-cols-2 gap-4 pt-2">
-          <div className="space-y-1">
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <div className="grid grid-cols-2 gap-3 pt-2">
+          <div className="p-3 rounded-lg bg-muted/50 space-y-1">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               {isActivated ? (
-                <CheckCircle className="w-3 h-3 text-green-500" />
+                <CheckCircle className="w-3.5 h-3.5 text-success" />
               ) : (
-                <Clock className="w-3 h-3" />
+                <Clock className="w-3.5 h-3.5 text-warning" />
               )}
-              <span>Activated</span>
+              <span>Status</span>
             </div>
-            <p className="font-semibold">{isActivated ? 'Yes' : 'Pending'}</p>
+            <p className="font-semibold text-sm">{isActivated ? 'Active' : 'Pending'}</p>
           </div>
           
-          <div className="space-y-1">
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <div className="p-3 rounded-lg bg-muted/50 space-y-1">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               {matrixComplete ? (
-                <CheckCircle className="w-3 h-3 text-green-500" />
+                <CheckCircle className="w-3.5 h-3.5 text-success" />
               ) : (
-                <Clock className="w-3 h-3" />
+                <Zap className="w-3.5 h-3.5 text-info" />
               )}
               <span>Matrix</span>
             </div>
-            <p className="font-semibold">{matrixComplete ? 'Complete' : 'In Progress'}</p>
+            <p className="font-semibold text-sm">{matrixComplete ? 'Complete' : 'Building'}</p>
           </div>
         </div>
       </CardContent>
@@ -75,33 +78,41 @@ interface TeamStatsProps {
 
 export function TeamStats({ totalReferrals, leftLeg, rightLeg }: TeamStatsProps) {
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 pb-4">
-        <CardTitle className="text-lg flex items-center gap-2">
-          <Users className="w-5 h-5" />
+    <Card className="overflow-hidden border-0 shadow-md">
+      <CardHeader className="bg-gradient-to-br from-info/10 via-info/5 to-transparent pb-4">
+        <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <div className="p-1.5 rounded-md bg-info/10">
+            <Users className="w-4 h-4 text-info" />
+          </div>
           Team Overview
         </CardTitle>
       </CardHeader>
-      <CardContent className="pt-6">
+      <CardContent className="pt-4">
         <div className="space-y-4">
           <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
             <span className="text-sm font-medium">Direct Referrals</span>
-            <Badge variant="secondary" className="text-lg font-bold">
+            <Badge className="bg-primary/10 text-primary font-mono text-base font-bold border-0">
               {totalReferrals}
             </Badge>
           </div>
           
           <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
-              <div className="text-xs text-muted-foreground mb-1">Left Leg</div>
-              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+            <div className="p-3 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/10">
+              <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-primary"></div>
+                Left Leg
+              </div>
+              <div className="text-2xl font-bold font-mono text-foreground">
                 {leftLeg}
               </div>
             </div>
             
-            <div className="p-3 rounded-lg bg-pink-500/10 border border-pink-500/20">
-              <div className="text-xs text-muted-foreground mb-1">Right Leg</div>
-              <div className="text-2xl font-bold text-pink-600 dark:text-pink-400">
+            <div className="p-3 rounded-lg bg-gradient-to-br from-accent/10 to-accent/5 border border-accent/10">
+              <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-accent"></div>
+                Right Leg
+              </div>
+              <div className="text-2xl font-bold font-mono text-foreground">
                 {rightLeg}
               </div>
             </div>
@@ -126,41 +137,48 @@ export function EarningsOverview({
   matrixIncome 
 }: EarningsOverviewProps) {
   const incomeStreams = [
-    { label: 'Sponsor', amount: sponsorIncome, color: 'text-blue-600 dark:text-blue-400' },
-    { label: 'Binary', amount: binaryIncome, color: 'text-purple-600 dark:text-purple-400' },
-    { label: 'Matrix', amount: matrixIncome, color: 'text-pink-600 dark:text-pink-400' },
+    { label: 'Sponsor', amount: sponsorIncome, icon: '1' },
+    { label: 'Binary', amount: binaryIncome, icon: '2' },
+    { label: 'Matrix', amount: matrixIncome, icon: '3' },
   ];
   
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 pb-4">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <TrendingUp className="w-5 h-5" />
+    <Card className="overflow-hidden border-0 shadow-md">
+      <CardHeader className="bg-gradient-to-br from-success/10 via-success/5 to-transparent pb-4">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <div className="p-1.5 rounded-md bg-success/10">
+              <TrendingUp className="w-4 h-4 text-success" />
+            </div>
             Earnings
           </CardTitle>
           <Link 
             href="/user/transaction-history"
-            className="text-xs flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+            className="text-xs flex items-center gap-1 text-muted-foreground hover:text-primary transition-colors"
           >
             View All
             <ArrowUpRight className="w-3 h-3" />
           </Link>
         </div>
       </CardHeader>
-      <CardContent className="pt-6 space-y-4">
-        <div className="p-4 rounded-lg bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20">
-          <div className="text-sm text-muted-foreground mb-1">Total Earnings</div>
-          <div className="text-3xl font-bold text-green-600 dark:text-green-400">
+      <CardContent className="pt-4 space-y-4">
+        <div className="p-4 rounded-lg bg-gradient-to-br from-success/10 to-success/5 border border-success/20">
+          <div className="text-xs text-muted-foreground mb-1 uppercase tracking-wide">Total Earnings</div>
+          <div className="text-3xl font-bold font-mono text-success">
             ₹{totalEarnings.toLocaleString('en-IN')}
           </div>
         </div>
         
         <div className="space-y-2">
           {incomeStreams.map((stream) => (
-            <div key={stream.label} className="flex items-center justify-between p-2 rounded bg-muted/30">
-              <span className="text-sm text-muted-foreground">{stream.label}</span>
-              <span className={`text-sm font-semibold ${stream.color}`}>
+            <div key={stream.label} className="flex items-center justify-between p-2.5 rounded-lg bg-muted/30">
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">
+                  {stream.icon}
+                </span>
+                <span className="text-sm text-muted-foreground">{stream.label}</span>
+              </div>
+              <span className="text-sm font-semibold font-mono">
                 ₹{stream.amount.toLocaleString('en-IN')}
               </span>
             </div>

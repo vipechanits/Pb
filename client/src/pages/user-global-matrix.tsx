@@ -47,43 +47,61 @@ function MatrixNodeComponent({ node, position, depth }: MatrixNodeProps) {
   const hasRightChild = node.rightChild !== null;
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <Card className={`w-32 ${node.isActivated ? 'border-purple-500/50' : 'border-muted'}`} data-testid={`matrix-node-${node.userId}`}>
-        <CardContent className="p-3 space-y-1">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-mono font-semibold">{node.userId}</p>
+    <div className="flex flex-col items-center flex-shrink-0">
+      <Card className={`w-36 flex-shrink-0 border-0 shadow-md ${node.isActivated ? 'bg-gradient-to-br from-primary/5 to-primary/10 ring-1 ring-primary/30' : 'bg-muted/50'}`} data-testid={`matrix-node-${node.userId}`}>
+        <CardContent className="p-3 space-y-1.5">
+          <div className="flex items-center justify-between gap-1">
+            <p className="text-xs font-mono font-bold text-primary">{node.userId}</p>
             {node.isActivated ? (
-              <CheckCircle className="w-3 h-3 text-purple-500" data-testid={`icon-activated-${node.userId}`} />
+              <CheckCircle className="w-3.5 h-3.5 text-success" data-testid={`icon-activated-${node.userId}`} />
             ) : (
-              <XCircle className="w-3 h-3 text-muted-foreground" data-testid={`icon-not-activated-${node.userId}`} />
+              <XCircle className="w-3.5 h-3.5 text-muted-foreground" data-testid={`icon-not-activated-${node.userId}`} />
             )}
           </div>
-          <p className="text-xs truncate" data-testid={`name-${node.userId}`}>
+          <p className="text-xs truncate text-foreground/80" data-testid={`name-${node.userId}`}>
             {node.name || 'No name'}
           </p>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span title="Matrix Level">L{node.matrixLevel ?? '-'}</span>
-            <span title="Position">P{node.matrixPosition ?? '-'}</span>
+          <div className="flex items-center gap-2 text-xs">
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-mono">L{node.matrixLevel ?? '-'}</Badge>
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-mono">P{node.matrixPosition ?? '-'}</Badge>
           </div>
         </CardContent>
       </Card>
       
       {depth < 5 && (hasLeftChild || hasRightChild) && (
-        <div className="flex gap-8 mt-6">
-          {hasLeftChild && (
-            <div className="flex flex-col items-center">
-              <div className="h-6 border-l-2 border-muted" />
-              <Badge variant="outline" className="mb-2 text-xs border-purple-500 text-purple-500">Left</Badge>
-              <MatrixNodeComponent node={node.leftChild} position="left" depth={depth + 1} />
-            </div>
-          )}
-          {hasRightChild && (
-            <div className="flex flex-col items-center">
-              <div className="h-6 border-l-2 border-muted" />
-              <Badge variant="outline" className="mb-2 text-xs border-pink-500 text-pink-500">Right</Badge>
-              <MatrixNodeComponent node={node.rightChild} position="right" depth={depth + 1} />
-            </div>
-          )}
+        <div className="mt-4 flex flex-col items-center flex-shrink-0">
+          {/* Vertical line from parent to horizontal connector */}
+          <div className="h-6 w-0.5 bg-primary/30" />
+          
+          {/* Horizontal connector line with branches */}
+          <div className="flex items-start gap-6 flex-shrink-0">
+            {/* Left branch with connector */}
+            {hasLeftChild && (
+              <div className="flex flex-col items-center flex-shrink-0">
+                <div className="relative">
+                  <div className="absolute left-1/2 -translate-x-1/2 w-0.5 h-3 bg-primary/40" />
+                </div>
+                <Badge className="my-2 text-xs bg-primary/10 text-primary border-primary/30 flex-shrink-0">Left</Badge>
+                <MatrixNodeComponent node={node.leftChild} position="left" depth={depth + 1} />
+              </div>
+            )}
+            
+            {/* Horizontal connector between left and right */}
+            {hasLeftChild && hasRightChild && (
+              <div className="w-10 h-0.5 bg-primary/30 self-start mt-3 flex-shrink-0" />
+            )}
+            
+            {/* Right branch with connector */}
+            {hasRightChild && (
+              <div className="flex flex-col items-center flex-shrink-0">
+                <div className="relative">
+                  <div className="absolute left-1/2 -translate-x-1/2 w-0.5 h-3 bg-accent/60" />
+                </div>
+                <Badge className="my-2 text-xs bg-accent/10 text-accent border-accent/30 flex-shrink-0">Right</Badge>
+                <MatrixNodeComponent node={node.rightChild} position="right" depth={depth + 1} />
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

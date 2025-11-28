@@ -110,7 +110,7 @@ export default function BinaryMatchQueueHistory() {
                     </div>
                   )}
 
-                  {entry.payerUserId && entry.payerName && (
+                  {entry.status === "paid" && entry.payerUserId && entry.payerName && (
                     <div className="sm:col-span-2">
                       <p className="text-sm text-muted-foreground mb-1">Paid By</p>
                       <div className="flex items-center gap-2">
@@ -122,7 +122,22 @@ export default function BinaryMatchQueueHistory() {
                     </div>
                   )}
 
-                  {entry.status === "waiting" && (
+                  {entry.status === "waiting" && entry.payerUserId && entry.payerName && (
+                    <div className="sm:col-span-2">
+                      <p className="text-sm text-muted-foreground mb-1">Reserved By</p>
+                      <div className="flex items-center gap-2">
+                        <User className="w-4 h-4 text-muted-foreground" />
+                        <span className="font-medium" data-testid={`text-reserved-by-${entry.id}`}>
+                          {entry.payerName} ({entry.payerUserId})
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Payment pending confirmation from this user's activation...
+                      </p>
+                    </div>
+                  )}
+
+                  {entry.status === "waiting" && !entry.payerUserId && (
                     <div className="sm:col-span-2">
                       <p className="text-sm text-muted-foreground">
                         Waiting for the next activation to process your payment...

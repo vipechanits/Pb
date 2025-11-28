@@ -7,7 +7,7 @@ import { hashPassword, verifyPassword, serializeUser } from "./auth";
 import { generateUserPaymentQR } from "./qrcode-generator";
 import { z } from "zod";
 import { db } from "./db";
-import { eq, desc, sql, count, or, and } from "drizzle-orm";
+import { eq, desc, sql, count, or, and, ne, asc } from "drizzle-orm";
 import crypto from "crypto";
 import { sendVerificationEmail, sendPasswordResetEmail, sendPasswordChangedEmail } from "./lib/email";
 import { IncomeService } from "./income-service";
@@ -3672,7 +3672,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "User not found or not activated" });
       }
 
-      // Get all queue entries for this user
+      // Get ALL queue entries (including paid) to show complete history and payment status
       const queueHistory = await db
         .select({
           id: binaryMatchQueue.id,
@@ -3709,7 +3709,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "User not found or not activated" });
       }
 
-      // Get queue entries to show when user qualified and entered queue
+      // Get ALL queue entries (including paid) to calculate dashboard totals (paidPairs, totalEarned)
       const pairHistory = await db
         .select({
           id: binaryMatchQueue.id,

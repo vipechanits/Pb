@@ -1210,6 +1210,18 @@ export class DbStorage implements IStorage {
     const typedRows = rows.rows as unknown as MatrixTreeRow[];
     const nodeMap = new Map<string, any>();
     typedRows.forEach((row) => {
+      // CRITICAL FIX: Reconstruct matrixPath using user IDs instead of activation UUIDs
+      // Extract user PB IDs from the path (L/R indicators)
+      let reconstructedPath = row.user_id;
+      if (row.matrix_path && row.matrix_path !== row.user_id) {
+        // Path format should be: PB10000.L.R.L (user IDs with L/R indicators)
+        // Extract just the direction parts (L and R) from the original path
+        const pathMatch = row.matrix_path.match(/\.(L|R)/g);
+        if (pathMatch) {
+          reconstructedPath = row.user_id + pathMatch.join('');
+        }
+      }
+      
       nodeMap.set(row.user_id, {
         userId: row.user_id,
         name: row.name,
@@ -1217,7 +1229,7 @@ export class DbStorage implements IStorage {
         isActivated: row.is_activated,
         matrixLevel: row.matrix_level,
         matrixPosition: row.matrix_position,
-        matrixPath: row.matrix_path,
+        matrixPath: reconstructedPath, // Use reconstructed path with user ID instead of activation UUID
         leftChild: null,
         rightChild: null,
       });
@@ -1760,13 +1772,14 @@ export class DbStorage implements IStorage {
         } else if (paymentType === 'binary_match') {
           // Binary match pays FIRST person in queue (fallback to PB0 if empty)
           // Use FOR UPDATE lock and exclude already-reserved entries to prevent race conditions
+          // Order by createdAt (not queuePosition) for proper FIFO ordering
           const firstInQueue = await tx.select()
             .from(binaryMatchQueue)
             .where(and(
               eq(binaryMatchQueue.status, 'waiting'),
               isNull(binaryMatchQueue.paidByActivationId) // MUST be unreserved
             ))
-            .orderBy(asc(binaryMatchQueue.queuePosition))
+            .orderBy(asc(binaryMatchQueue.createdAt))
             .limit(1)
             .for('update');
           
@@ -2615,17 +2628,30 @@ export class DbStorage implements IStorage {
         } else {
           // Reserved user IS activated - proceed normally
           console.log(`[STORAGE] Reserved user ${confirmedPayment.receiverUserId} is activated - marking as paid normally`);
+          console.log(`[STORAGE] Attempting to update queue entry ${reservedEntry.id} to status='paid'`);
           
-          const queueUpdateResult = await tx.update(binaryMatchQueue)
-            .set({
-              status: 'paid',
-              paidAt: new Date(),
-            })
-            .where(eq(binaryMatchQueue.id, reservedEntry.id))
-            .returning();
-          
-          if (queueUpdateResult.length > 0) {
-            console.log(`[STORAGE] Queue entry marked as paid - user ${confirmedPayment.receiverUserId} received ₹${confirmedPayment.amountInr}`);
+          try {
+            const queueUpdateResult = await tx.update(binaryMatchQueue)
+              .set({
+                status: 'paid',
+                paidAt: new Date(),
+              })
+              .where(eq(binaryMatchQueue.id, reservedEntry.id))
+              .returning();
+            
+            console.log(`[STORAGE] Queue update returned: ${queueUpdateResult.length} rows`);
+            
+            if (queueUpdateResult.length > 0) {
+              const updatedEntry = queueUpdateResult[0];
+              console.log(`[STORAGE] ✓ Queue entry SUCCESSFULLY marked as paid`);
+              console.log(`[STORAGE]   Entry ID: ${updatedEntry.id}, Status: ${updatedEntry.status}, Paid At: ${updatedEntry.paidAt}`);
+              console.log(`[STORAGE]   User ${confirmedPayment.receiverUserId} received ₹${confirmedPayment.amountInr}`);
+            } else {
+              console.error(`[STORAGE] ERROR: Queue update returned 0 rows - entry may not exist or update failed`);
+            }
+          } catch (updateError) {
+            console.error(`[STORAGE] CRITICAL ERROR updating queue entry:`, updateError);
+            throw updateError;
           }
         }
       } else if (confirmedPayment.paymentType === 'binary_match' && confirmedPayment.receiverUserId === 'PB0') {
@@ -2967,7 +2993,8 @@ export class DbStorage implements IStorage {
           // CRITICAL FIX: Set matrixParentId on user record based on activation-scoped matrix placement
           // This links the user to their direct upline in the matrix tree
           let matrixParentIdToSet: string | null = null;
-          let matrixParentLevelToSet: number | null = null;
+          let matrixParentUserPath: string | null = null;
+          let userMatrixPath: string;
           
           if (placedPosition.matrixParentActivationId) {
             // Get the parent activation to find the parent user
@@ -2985,21 +3012,34 @@ export class DbStorage implements IStorage {
               
               if (parentUser.length > 0) {
                 matrixParentIdToSet = parentUser[0].userId;
-                matrixParentLevelToSet = placedPosition.matrixLevel ? placedPosition.matrixLevel - 1 : 0;
-                console.log(`[ACTIVATION-MATRIX] Set matrix parent: ${activatedUser.userId} → ${matrixParentIdToSet} (parent level ${matrixParentLevelToSet})`);
+                matrixParentUserPath = parentUser[0].matrixPath;
+                console.log(`[ACTIVATION-MATRIX] Set matrix parent: ${activatedUser.userId} → ${matrixParentIdToSet}`);
               }
             }
+            
+            // Build the correct USER-based matrixPath (not activation-based!)
+            // Position: 0 = Left (L), 1 = Right (R)
+            const positionChar = placedPosition.matrixPosition === 0 ? 'L' : 'R';
+            if (matrixParentUserPath) {
+              userMatrixPath = `${matrixParentUserPath}.${positionChar}`;
+            } else {
+              // Fallback: if parent path not found, use user's own ID with position
+              userMatrixPath = `${activatedUser.userId}.${positionChar}`;
+            }
+            console.log(`[ACTIVATION-MATRIX] Built user matrix path: ${userMatrixPath} (parent path: ${matrixParentUserPath})`);
           } else {
-            // This is the matrix root
-            console.log(`[ACTIVATION-MATRIX] User ${activatedUser.userId} is matrix root (no parent)`);
+            // This is the matrix root - path is just the user's ID
+            userMatrixPath = activatedUser.userId;
+            console.log(`[ACTIVATION-MATRIX] User ${activatedUser.userId} is matrix root (path: ${userMatrixPath})`);
           }
           
-          // Update user with matrix parent and path info
+          // Update user with matrix parent and CORRECT user-based path
           await tx.update(users)
             .set({
               matrixParentId: matrixParentIdToSet,
-              matrixPath: placedPosition.matrixPath,
+              matrixPath: userMatrixPath,
               matrixLevel: placedPosition.matrixLevel,
+              matrixPosition: placedPosition.matrixPosition,
               updatedAt: now
             })
             .where(eq(users.userId, payerUserIdOrDbId));
@@ -4028,17 +4068,17 @@ export class DbStorage implements IStorage {
   }
 
   /**
-   * Release abandoned queue reservations after configured hours (default 1 hour)
-   * When a new user's activation doesn't pay their assigned queue recipient within timeout,
-   * reset the queue entry to "waiting" so the next new user can pay them
+   * Release abandoned queue reservations after configured hours (default 24 hours)
+   * When a payer's activation doesn't pay their assigned queue recipient within timeout,
+   * clear the entry and REASSIGN THE PAYER TO A NEW BINARY RECIPIENT to continue
    */
   async releaseAbandonedQueueReservations(hoursOld?: number): Promise<number> {
     try {
-      // Get configured hold time from system config, fallback to provided hoursOld or 1 hour
+      // Get configured hold time from system config, fallback to provided hoursOld or 24 hours
       let holdHours = hoursOld;
       if (holdHours === undefined) {
         const config = await this.getSystemConfig();
-        holdHours = config.queueReservationHoldHours || 1;
+        holdHours = config.queueReservationHoldHours || 24;
       }
       
       const cutoffTime = new Date(Date.now() - holdHours * 60 * 60 * 1000);
@@ -4057,23 +4097,49 @@ export class DbStorage implements IStorage {
       let releasedCount = 0;
       
       for (const reservation of abandonedReservations) {
-        // Release back to "waiting" status so next new user can pay them
-        // CRITICAL: DO NOT clear paidByActivationId - keep it so original activation can still confirm payment
-        // If we clear it, another payment confirmation could incorrectly claim this entry
+        const originalPayerActivationId = reservation.paidByActivationId;
+        
+        // Step 1: Release current queue entry back to "waiting" for others to pay
         await db
           .update(binaryMatchQueue)
           .set({
             status: 'waiting',
-            // paidByActivationId is INTENTIONALLY NOT cleared - keeps link to original activation
+            paidByActivationId: null,
           })
           .where(eq(binaryMatchQueue.id, reservation.id));
         
-        console.log(`[QUEUE-RELEASE] ✓ Released queue entry ${reservation.id} for user ${reservation.userId} back to waiting (still reserved by ${reservation.paidByActivationId})`);
+        console.log(`[QUEUE-RELEASE] ✓ Released queue entry ${reservation.id} for user ${reservation.userId} back to waiting`);
+        
+        // Step 2: ASSIGN PAYER TO NEW BINARY RECIPIENT
+        // Find next waiting queue entry to reassign this payer to
+        const nextRecipient = await db
+          .select()
+          .from(binaryMatchQueue)
+          .where(eq(binaryMatchQueue.status, 'waiting'))
+          .orderBy(asc(binaryMatchQueue.enteredAt))
+          .limit(1);
+        
+        if (nextRecipient.length > 0 && originalPayerActivationId) {
+          // Assign original payer to this new queue recipient
+          await db
+            .update(binaryMatchQueue)
+            .set({
+              status: 'reserved',
+              paidByActivationId: originalPayerActivationId,
+              enteredAt: new Date(), // Reset timer for new 24-hour window
+            })
+            .where(eq(binaryMatchQueue.id, nextRecipient[0].id));
+          
+          console.log(`[QUEUE-RELEASE] ✓ REASSIGNED payer ${originalPayerActivationId} to NEW recipient (queue entry ${nextRecipient[0].id})`);
+        } else {
+          console.log(`[QUEUE-RELEASE] ⚠️  No new recipients available to reassign payer ${originalPayerActivationId}`);
+        }
+        
         releasedCount++;
       }
       
       if (releasedCount > 0) {
-        console.log(`[QUEUE-RELEASE] Successfully released ${releasedCount} abandoned reservations`);
+        console.log(`[QUEUE-RELEASE] Successfully released ${releasedCount} abandoned reservations and reassigned ${releasedCount} payers`);
       }
       
       return releasedCount;
