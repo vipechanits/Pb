@@ -35,6 +35,7 @@ import TransactionHistoryPage from '@/pages/user/transaction-history';
 import BinaryMatchQueueHistory from '@/pages/user/binary-match-queue-history';
 import BinaryPairMatchingHistory from '@/pages/user/binary-pair-matching-history';
 import MatrixIncomeHistory from '@/pages/user/matrix-income-history';
+import TopRewardPage from '@/pages/user/top-reward';
 import TicketsPage from '@/pages/user/tickets';
 import ReentryPage from '@/pages/reentry';
 import AdditionalReentryPage from '@/pages/additional-reentry';
@@ -271,6 +272,16 @@ function Router() {
           <ProtectedRoute>
             <DashboardLayout>
               <MatrixIncomeHistory />
+            </DashboardLayout>
+          </ProtectedRoute>
+        )}
+      </Route>
+      
+      <Route path="/user/top-reward">
+        {() => (
+          <ProtectedRoute>
+            <DashboardLayout>
+              <TopRewardPage />
             </DashboardLayout>
           </ProtectedRoute>
         )}

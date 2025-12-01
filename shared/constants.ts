@@ -7,7 +7,7 @@
 export const PAYMENT_AMOUNTS = {
   SPONSOR: 1000,           // Slot 0: Direct sponsor
   BINARY_MATCH: 1000,      // Slot 1: Binary matching
-  TOP_REWARD: 500,         // Slot 2: Admin top reward
+  TOP_REWARD: 500,         // Slot 2: Admin Top Reward
   MATRIX_L1: 500,          // Slot 3: Matrix Level 1
   MATRIX_L2: 500,          // Slot 4: Matrix Level 2
   MATRIX_L3: 500,          // Slot 5: Matrix Level 3
@@ -31,7 +31,7 @@ export const TOTAL_ACTIVATION_COST =
 export const PAYMENT_LABELS = {
   direct_sponsor: 'Direct Sponsor',
   binary_match: 'Binary Match',
-  top_reward: 'Top Reward Payment',
+  top_reward: 'Top Reward',
   matrix_level_1: 'Matrix Level 1',
   matrix_level_2: 'Matrix Level 2',
   matrix_level_3: 'Matrix Level 3',
@@ -56,7 +56,7 @@ export const PAYMENT_TYPE_AMOUNTS: Record<string, number> = {
 export const SLOT_TO_PAYMENT_TYPE = [
   'direct_sponsor',    // Slot 0: Direct sponsor
   'binary_match',      // Slot 1: FIRST person in binary match queue (fallback to admin if empty)
-  'top_reward',        // Slot 2: Admin top reward
+  'top_reward',        // Slot 2: Admin Top Reward
   'matrix_level_1',    // Slot 3: Matrix Level 1
   'matrix_level_2',    // Slot 4: Matrix Level 2
   'matrix_level_3',    // Slot 5: Matrix Level 3
@@ -106,7 +106,7 @@ export const BINARY_RULES = {
 // Payment confirmation workflow
 export const CONFIRMATION_WORKFLOW = {
   TOP_REWARD: {
-    CONFIRMATIONS: ['admin'],  // Admin only confirms top reward
+    CONFIRMATIONS: ['admin'],  // Admin only confirms Top Reward
   },
   OTHER_PAYMENTS: {
     CONFIRMATIONS: ['receiver'],  // Receiver only confirms payments 1-7

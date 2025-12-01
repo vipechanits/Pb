@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,8 +30,12 @@ export default function LoginPage() {
   const [resendingEmail, setResendingEmail] = useState(false);
   const [resendSuccess, setResendSuccess] = useState('');
   const [captchaCode, setCaptchaCode] = useState('');
+  const [customCaptchaValid, setCustomCaptchaValid] = useState(false);
   const recaptchaRef = useRef<HTMLDivElement>(null);
   const { isLoaded, isEnabled, renderRecaptcha, executeRecaptcha } = useRecaptcha();
+  const { data: systemConfig } = useQuery({
+    queryKey: ['/api/system-config'],
+  }) as any;
 
   // Render reCAPTCHA when loaded
   useEffect(() => {
@@ -43,6 +48,12 @@ export default function LoginPage() {
     e.preventDefault();
     setRequiresVerification(false);
     setResendSuccess('');
+
+    // Validate custom CAPTCHA if enabled
+    if (systemConfig?.customCaptchaEnabled && !customCaptchaValid) {
+      setPasswordError('Please complete the security verification');
+      return;
+    }
 
     try {
       if (loginMode === 'pin') {
@@ -280,8 +291,8 @@ export default function LoginPage() {
 
               {/* Custom CAPTCHA */}
               <CustomCaptcha 
-                onCaptchaChange={setCaptchaCode} 
-                isValid={captchaCode !== ''} 
+                onCaptchaChange={setCustomCaptchaValid} 
+                onCodeChange={setCaptchaCode}
                 data-testid="custom-captcha-login"
               />
 

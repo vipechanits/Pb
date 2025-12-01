@@ -9,10 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { apiRequest } from "@/lib/queryClient";
-import { Loader2, Mail, ArrowLeft } from "lucide-react";
+import { Loader2, Mail, ArrowLeft, User } from "lucide-react";
 
 const forgotPasswordSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  userId: z.string()
+    .min(1, "User ID is required")
+    .regex(/^PB\d+$/i, "User ID must be in format PBXXXXXX (e.g., PB10001)"),
 });
 
 type ForgotPasswordForm = z.infer<typeof forgotPasswordSchema>;
@@ -25,7 +27,7 @@ export default function ForgotPasswordPage() {
   const form = useForm<ForgotPasswordForm>({
     resolver: zodResolver(forgotPasswordSchema),
     defaultValues: {
-      email: "",
+      userId: "",
     },
   });
 
@@ -59,7 +61,7 @@ export default function ForgotPasswordPage() {
             <CardTitle className="text-2xl">Forgot Password</CardTitle>
           </div>
           <CardDescription>
-            Enter your email address and we'll help you reset your password
+            Enter your User ID and we'll send a password reset link to your registered email
           </CardDescription>
         </CardHeader>
 
@@ -68,7 +70,7 @@ export default function ForgotPasswordPage() {
             <Alert className="mb-4" data-testid="alert-success">
               <Mail className="h-4 w-4" />
               <AlertDescription>
-                If an account with that email exists, a password reset link has been sent.
+                If an account with that User ID exists, a password reset link has been sent to your registered email.
                 Please check your email to continue.
               </AlertDescription>
             </Alert>
@@ -83,18 +85,18 @@ export default function ForgotPasswordPage() {
 
                 <FormField
                   control={form.control}
-                  name="email"
+                  name="userId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email Address</FormLabel>
+                      <FormLabel>User ID</FormLabel>
                       <FormControl>
                         <Input
                           {...field}
-                          type="email"
-                          placeholder="your@email.com"
-                          autoComplete="email"
+                          type="text"
+                          placeholder="PB10001"
+                          autoComplete="username"
                           disabled={isLoading}
-                          data-testid="input-email"
+                          data-testid="input-user-id"
                         />
                       </FormControl>
                       <FormMessage />
@@ -115,7 +117,7 @@ export default function ForgotPasswordPage() {
                     </>
                   ) : (
                     <>
-                      <Mail className="mr-2 h-4 w-4" />
+                      <User className="mr-2 h-4 w-4" />
                       Send Reset Link
                     </>
                   )}

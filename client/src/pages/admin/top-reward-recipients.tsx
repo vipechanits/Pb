@@ -52,7 +52,7 @@ export default function TopRewardRecipientsPage() {
       }
     } catch (error) {
       console.error('Failed to fetch recipients:', error);
-      toast({ variant: 'destructive', title: 'Error', description: 'Failed to load TOP REWARD recipients' });
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to load Top Reward recipients' });
     } finally {
       setLoading(false);
     }

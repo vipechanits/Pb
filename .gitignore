@@ -4,3 +4,9 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+
+# Database backups and sensitive data
+*backup*.json
+*.sql
+*.dump
+*.bak

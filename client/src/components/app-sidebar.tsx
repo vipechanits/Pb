@@ -111,6 +111,11 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       icon: DollarSign,
     },
     {
+      title: 'Top Reward',
+      url: '/user/top-reward',
+      icon: Trophy,
+    },
+    {
       title: 'Binary Match Queue',
       url: '/user/binary-match-queue-history',
       icon: Clock,
@@ -166,7 +171,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       icon: FileText,
     },
     {
-      title: 'TOP REWARD Recipients',
+      title: 'Top Reward Recipients',
       url: '/admin/top-reward',
       icon: Trophy,
     },

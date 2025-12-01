@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,8 +26,12 @@ export default function SignupPage() {
   const [signupSuccess, setSignupSuccess] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [captchaCode, setCaptchaCode] = useState('');
+  const [customCaptchaValid, setCustomCaptchaValid] = useState(false);
   const recaptchaRef = useRef<HTMLDivElement>(null);
   const { isLoaded, isEnabled, renderRecaptcha, executeRecaptcha } = useRecaptcha();
+  const { data: systemConfig } = useQuery({
+    queryKey: ['/api/system-config'],
+  }) as any;
 
   // Render reCAPTCHA when loaded
   useEffect(() => {
@@ -65,6 +70,12 @@ export default function SignupPage() {
 
     if (!acceptedTerms) {
       setError('You must accept the Terms & Conditions to create an account');
+      return;
+    }
+
+    // Validate custom CAPTCHA if enabled
+    if (systemConfig?.customCaptchaEnabled && !customCaptchaValid) {
+      setError('Please complete the security verification');
       return;
     }
 
@@ -254,8 +265,8 @@ export default function SignupPage() {
 
             {/* Custom CAPTCHA */}
             <CustomCaptcha 
-              onCaptchaChange={setCaptchaCode} 
-              isValid={captchaCode !== ''} 
+              onCaptchaChange={setCustomCaptchaValid} 
+              onCodeChange={setCaptchaCode}
               data-testid="custom-captcha-signup"
             />
 

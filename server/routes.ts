@@ -330,8 +330,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Provide specific error messages for known issues
       if (error.code === '23505') { // Unique constraint violation
         console.error("UNIQUE CONSTRAINT VIOLATION:", error.constraint);
+        // Note: Email is NOT unique - User ID (PBXXXXXX) is the unique identifier
+        // This error typically means a User ID collision (very rare)
         return res.status(400).json({ 
-          error: "This email is already registered or account creation conflict occurred" 
+          error: "Account creation conflict occurred. Please try again." 
         });
       }
       
@@ -577,12 +579,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Password Reset Routes
   
-  // Forgot password - Generate reset token
+  // Forgot password - Generate reset token (uses User ID instead of email)
   app.post("/api/auth/forgot-password", 
     applyRateLimit({
-      keyFn: (req) => req.body.email?.toLowerCase().trim() || 'unknown',
+      keyFn: (req) => req.body.userId?.toUpperCase().trim() || 'unknown',
       limit: 20,
-      windowMs: 60 * 60 * 1000, // 20 requests per hour per email
+      windowMs: 60 * 60 * 1000, // 20 requests per hour per User ID
       name: 'Forgot Password'
     }),
     async (req, res) => {
@@ -593,16 +595,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ error: validation.error.errors[0].message });
         }
         
-        const { email } = validation.data;
-        const normalizedEmail = email.toLowerCase().trim();
+        const { userId } = validation.data;
+        const normalizedUserId = userId.toUpperCase().trim();
         
-        // Always return generic success message (prevent email enumeration)
-        const genericMessage = "If an account with that email exists, a password reset token has been generated.";
+        // Always return generic success message (prevent user enumeration)
+        const genericMessage = "If an account with that User ID exists, a password reset link has been sent to the registered email.";
         
-        // Check if user exists
-        const user = await storage.getUserByEmail(normalizedEmail);
+        // Check if user exists by User ID
+        const user = await storage.getUserByUserId(normalizedUserId);
         if (!user) {
-          console.warn(`[FORGOT_PASSWORD] Attempt for non-existent email: ${normalizedEmail}`);
+          console.warn(`[FORGOT_PASSWORD] Attempt for non-existent User ID: ${normalizedUserId}`);
           return res.json({ message: genericMessage });
         }
         
@@ -613,21 +615,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
         await storage.createPasswordResetToken(
           user.userId!, // userId
-          normalizedEmail, // email
+          user.email, // email from user record
           rawToken, // token (will be hashed in storage layer)
           expiresAt // expiresAt
         );
         
-        // Send password reset email (async, don't wait)
+        // Send password reset email to user's registered email (async, don't wait)
         const baseUrl = process.env.APP_URL || 'https://payback247.com';
         
-        sendPasswordResetEmail(normalizedEmail, rawToken, baseUrl).catch((err) => {
+        sendPasswordResetEmail(user.email, rawToken, baseUrl).catch((err) => {
           console.error('[FORGOT_PASSWORD] Failed to send password reset email:', err);
         });
         
-        console.log(`[FORGOT_PASSWORD] Password reset email sent to ${normalizedEmail}`);
+        console.log(`[FORGOT_PASSWORD] Password reset email sent to ${user.email} for User ID ${normalizedUserId}`);
         
-        // Return generic success message only (prevent email enumeration + token exposure)
+        // Return generic success message only (prevent user enumeration + token exposure)
         res.json({ 
           message: genericMessage
         });
@@ -826,11 +828,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(401).json({ error: "Invalid security code" });
         }
         
-        // Check if email already exists
-        const existingUser = await storage.getUserByEmail(normalizedEmail);
-        if (existingUser && existingUser.id !== req.session.userId) {
-          return res.status(400).json({ error: "Email address is already in use" });
-        }
+        // Note: Email uniqueness is NOT enforced - User ID (PBXXXXXX) is the unique identifier
+        // Multiple accounts can share the same email (up to 50 accounts per email allowed)
         
         // Update email
         await db.update(users)

@@ -333,7 +333,7 @@ export default function UserDashboard() {
               </Card>
               <Card className="border-0 bg-gradient-to-br from-orange-50/50 to-amber-50/50 dark:from-orange-950/40 dark:to-amber-950/40 shadow-md hover-elevate transition-all duration-300">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium dashboard-text">TOP REWARD Income</CardTitle>
+                  <CardTitle className="text-sm font-medium dashboard-text">Top Reward Income</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-bold dashboard-text">₹{topRewardIncome.toLocaleString('en-IN')}</div>

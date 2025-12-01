@@ -60,7 +60,7 @@ export function DashboardIncomeCards({
       borderColor: 'border-purple-200 dark:border-purple-800',
     },
     {
-      title: 'TOP REWARD Income',
+      title: 'Top Reward Income',
       value: `₹${topRewardIncome.toLocaleString('en-IN')}`,
       description: 'Special reward income',
       icon: Trophy,

@@ -141,7 +141,7 @@ export function EarningsOverview({
   const incomeStreams = [
     { label: 'Sponsor', amount: sponsorIncome, icon: '1' },
     { label: 'Binary', amount: binaryIncome, icon: '2' },
-    { label: 'TOP REWARD', amount: topRewardIncome, icon: '3' },
+    { label: 'Top Reward', amount: topRewardIncome, icon: '3' },
     { label: 'Matrix', amount: matrixIncome, icon: '4' },
   ];
   

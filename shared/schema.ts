@@ -195,6 +195,7 @@ export const insertUserSchema = createInsertSchema(users).omit({
 
 // Update profile schema
 export const updateProfileSchema = z.object({
+  email: z.string().email("Invalid email address").optional(),
   name: z.string().min(1, "Name is required"),
   mobile: z.string().length(10, "Mobile number must be exactly 10 digits").regex(/^[0-9]{10}$/, "Mobile number must contain only digits"),
   upiId: z.string().optional(),
@@ -755,7 +756,10 @@ export interface BinaryTreeNode {
 
 // Password reset request schemas
 export const forgotPasswordSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  userId: z.string()
+    .min(1, "User ID is required")
+    .regex(/^PB\d+$/i, "User ID must be in format PBXXXXXX (e.g., PB10001)")
+    .transform(val => val.toUpperCase().trim()),
 });
 
 export const resetPasswordSchema = z.object({

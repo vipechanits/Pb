@@ -384,7 +384,9 @@ export class DbStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    const result = await db.select().from(users).where(
+      sql`LOWER(${users.email}) = LOWER(${email})`
+    ).limit(1);
     return result[0];
   }
 
@@ -499,8 +501,26 @@ export class DbStorage implements IStorage {
   }
 
   async updateUserProfile(id: string, profile: UpdateProfile): Promise<User | undefined> {
+    // Get current user to track old email for bulk update
+    const currentUser = await this.getUserById(id);
+    if (!currentUser) return undefined;
+    
     // Normalize profile data: trim strings and convert empty strings to null
     const normalizedProfile: any = {};
+    
+    // Handle email update with bulk update for all users with same old email
+    if (profile.email !== undefined) {
+      const newEmail = profile.email?.trim() || null;
+      normalizedProfile.email = newEmail;
+      
+      // If email is changing and there's a new email value
+      if (newEmail && newEmail !== currentUser.email) {
+        // After this transaction completes, update all other users with old email to new email
+        // Store for post-transaction handling
+        (normalizedProfile as any)._oldEmail = currentUser.email;
+        (normalizedProfile as any)._newEmail = newEmail;
+      }
+    }
     
     if (profile.name !== undefined) {
       normalizedProfile.name = profile.name?.trim() || null;
@@ -596,11 +616,13 @@ export class DbStorage implements IStorage {
     }
     
     // Use transaction to ensure atomic update and flag recalculation
-    return await db.transaction(async (tx) => {
+    const { _oldEmail, _newEmail, ...profileToUpdate } = normalizedProfile;
+    
+    const result = await db.transaction(async (tx) => {
       // Update profile with normalized data
       const result = await tx.update(users)
         .set({
-          ...normalizedProfile,
+          ...profileToUpdate,
           updatedAt: new Date(),
         })
         .where(eq(users.id, id))
@@ -608,6 +630,19 @@ export class DbStorage implements IStorage {
       
       const updatedUser = result[0];
       if (!updatedUser) return undefined;
+      
+      // BULK EMAIL UPDATE: If email changed, update all other users with old email to new email
+      if (_oldEmail && _newEmail) {
+        await tx.update(users)
+          .set({
+            email: _newEmail,
+            updatedAt: new Date(),
+          })
+          .where(and(
+            eq(users.email, _oldEmail),
+            ne(users.id, id) // Exclude the user we just updated
+          ));
+      }
       
       // Evaluate profile completion using shared helper
       const isComplete = this.evaluateProfileCompletion(updatedUser);
@@ -637,6 +672,8 @@ export class DbStorage implements IStorage {
       
       return updatedUser;
     });
+    
+    return result;
   }
 
   async getLastUser(): Promise<User | undefined> {

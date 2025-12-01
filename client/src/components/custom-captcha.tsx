@@ -15,11 +15,11 @@ type SystemConfig = {
 };
 
 interface CustomCaptchaProps {
-  onCaptchaChange: (code: string) => void;
-  isValid: boolean;
+  onCaptchaChange: (validated: boolean) => void;
+  onCodeChange?: (code: string) => void;
 }
 
-export function CustomCaptcha({ onCaptchaChange, isValid }: CustomCaptchaProps) {
+export function CustomCaptcha({ onCaptchaChange, onCodeChange }: CustomCaptchaProps) {
   const [captchaCode, setCaptchaCode] = useState('');
   const [userInput, setUserInput] = useState('');
   const [displayCode, setDisplayCode] = useState('');
@@ -63,12 +63,16 @@ export function CustomCaptcha({ onCaptchaChange, isValid }: CustomCaptchaProps) 
     }
   }, [config?.customCaptchaEnabled, config?.customCaptchaCodeLength, config?.customCaptchaCodeType, config]);
 
-  // Handle user input
+  // Handle user input and validation
   useEffect(() => {
     if (config?.customCaptchaEnabled) {
-      onCaptchaChange(userInput);
+      const isValid = userInput.length > 0 && userInput === captchaCode;
+      onCaptchaChange(isValid);
+      if (onCodeChange) {
+        onCodeChange(userInput);
+      }
     }
-  }, [userInput, onCaptchaChange, config?.customCaptchaEnabled]);
+  }, [userInput, captchaCode, onCaptchaChange, onCodeChange, config?.customCaptchaEnabled]);
 
   if (!config || !config.customCaptchaEnabled) {
     return null;
@@ -126,12 +130,20 @@ export function CustomCaptcha({ onCaptchaChange, isValid }: CustomCaptchaProps) 
         />
       </div>
 
-      {/* Validation Error */}
-      {userInput && !isValid && (
+      {/* Validation Status */}
+      {userInput && userInput !== captchaCode && (
         <Alert variant="destructive" data-testid="alert-captcha-error">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
             Verification code does not match. Please try again.
+          </AlertDescription>
+        </Alert>
+      )}
+      {userInput && userInput === captchaCode && (
+        <Alert data-testid="alert-captcha-success">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Verification code is correct.
           </AlertDescription>
         </Alert>
       )}
