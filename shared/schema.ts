@@ -29,12 +29,13 @@ export const binaryLegEnum = pgEnum("binary_leg", ["left", "right"]);
 export const incomeTypeEnum = pgEnum("income_type", [
   "direct_sponsor",
   "binary_match",
+  "top_reward",
   "matrix_level_1",
   "matrix_level_2",
   "matrix_level_3",
   "matrix_level_4",
   "matrix_level_5",
-  "system_fee", // For top reward and other admin system payments
+  "system_fee", // For other admin system payments
 ]);
 
 export const incomeStatusEnum = pgEnum("income_status", ["pending", "confirmed", "failed", "reversed"]);
@@ -65,7 +66,7 @@ export const notificationEntityTypeEnum = pgEnum("notification_entity_type", [
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: text("email").notNull().unique(),
+  email: text("email").notNull(), // Allow up to 50 users per email
   password: text("password").notNull(),
   role: userRoleEnum("role").notNull().default('user'),
   
@@ -473,6 +474,7 @@ export const userIncomeSummaries = pgTable("user_income_summaries", {
   totalEarnings: decimal("total_earnings", { precision: 15, scale: 2 }).notNull().default('0'),
   directSponsorIncome: decimal("direct_sponsor_income", { precision: 15, scale: 2 }).notNull().default('0'),
   binaryMatchIncome: decimal("binary_match_income", { precision: 15, scale: 2 }).notNull().default('0'),
+  topRewardIncome: decimal("top_reward_income", { precision: 15, scale: 2 }).notNull().default('0'),
   matrixLevel1Income: decimal("matrix_level_1_income", { precision: 15, scale: 2 }).notNull().default('0'),
   matrixLevel2Income: decimal("matrix_level_2_income", { precision: 15, scale: 2 }).notNull().default('0'),
   matrixLevel3Income: decimal("matrix_level_3_income", { precision: 15, scale: 2 }).notNull().default('0'),
@@ -973,3 +975,33 @@ export const insertImportanceNoticeSchema = createInsertSchema(importanceNotices
 
 export type InsertImportanceNotice = z.infer<typeof insertImportanceNoticeSchema>;
 export type ImportanceNotice = typeof importanceNotices.$inferSelect;
+
+// TOP REWARD Recipients Queue - Admin-managed list of users who receive Top Reward payments
+export const topRewardRecipients = pgTable("top_reward_recipients", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id", { length: 20 }).notNull(), // PB#### format or "PB0" for admin
+  userName: text("user_name"), // Display name for quick reference
+  frequencyLimit: integer("frequency_limit"), // Number of times can receive (null = unlimited)
+  timesReceived: integer("times_received").notNull().default(0), // Counter of payments received
+  isActive: boolean("is_active").notNull().default(true), // Whether currently active in queue
+  isUnlimited: boolean("is_unlimited").notNull().default(false), // True = unlimited receives
+  priority: integer("priority").notNull().default(100), // Lower number = higher priority (for ordering)
+  addedBy: varchar("added_by", { length: 20 }).notNull(), // Admin who added this entry
+  notes: text("notes"), // Optional admin notes
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  userIdIdx: index("top_reward_recipients_user_id_idx").on(table.userId),
+  isActiveIdx: index("top_reward_recipients_is_active_idx").on(table.isActive),
+  priorityIdx: index("top_reward_recipients_priority_idx").on(table.priority),
+}));
+
+export const insertTopRewardRecipientSchema = createInsertSchema(topRewardRecipients).omit({
+  id: true,
+  timesReceived: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertTopRewardRecipient = z.infer<typeof insertTopRewardRecipientSchema>;
+export type TopRewardRecipient = typeof topRewardRecipients.$inferSelect;

@@ -30,6 +30,7 @@ interface EnrichedPayment extends ActivationPayment {
   receiverName?: string | null;
   receiverEmail?: string | null;
   receiverMobile?: string | null;
+  receiverSponsorMobile?: string | null;
   receiverUpiId?: string | null;
   receiverBankAccountHolder?: string | null;
   receiverBankAccount?: string | null;
@@ -645,14 +646,21 @@ export default function UserActivationPage() {
                                 {/* Receiver Mobile Number */}
                                 {payment.receiverType === 'admin' && adminPaymentDetails?.mobile && (
                                   <div>
-                                    <span className="text-muted-foreground">Mobile:</span>
+                                    <span className="text-muted-foreground">Receiver Mobile:</span>
                                     <p className="font-medium">{adminPaymentDetails.mobile}</p>
                                   </div>
                                 )}
                                 {payment.receiverType !== 'admin' && payment.receiverMobile && (
                                   <div>
-                                    <span className="text-muted-foreground">Mobile:</span>
+                                    <span className="text-muted-foreground">Receiver Mobile:</span>
                                     <p className="font-medium">{payment.receiverMobile}</p>
+                                  </div>
+                                )}
+                                {/* Sponsor Mobile Number (of Payment Receiver) */}
+                                {payment.receiverType !== 'admin' && payment.receiverSponsorMobile && (
+                                  <div>
+                                    <span className="text-muted-foreground">Sponsor Mobile:</span>
+                                    <p className="font-medium">{payment.receiverSponsorMobile}</p>
                                   </div>
                                 )}
                                 <div>
@@ -893,14 +901,21 @@ export default function UserActivationPage() {
                                 {/* Receiver Mobile Number */}
                                 {payment.receiverType === 'admin' && adminPaymentDetails?.mobile && (
                                   <div>
-                                    <span className="text-muted-foreground">Mobile:</span>
+                                    <span className="text-muted-foreground">Receiver Mobile:</span>
                                     <p className="font-medium">{adminPaymentDetails.mobile}</p>
                                   </div>
                                 )}
                                 {payment.receiverType !== 'admin' && payment.receiverMobile && (
                                   <div>
-                                    <span className="text-muted-foreground">Mobile:</span>
+                                    <span className="text-muted-foreground">Receiver Mobile:</span>
                                     <p className="font-medium">{payment.receiverMobile}</p>
+                                  </div>
+                                )}
+                                {/* Sponsor Mobile Number (of Payment Receiver) */}
+                                {payment.receiverType !== 'admin' && payment.receiverSponsorMobile && (
+                                  <div>
+                                    <span className="text-muted-foreground">Sponsor Mobile:</span>
+                                    <p className="font-medium">{payment.receiverSponsorMobile}</p>
                                   </div>
                                 )}
                                 <div>

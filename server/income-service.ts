@@ -149,8 +149,8 @@ export class IncomeService {
 
       if (result.length > 0) {
         // Only update user summary for non-system-fee income types
-        // System fees (top_reward) go to admin but don't count as MLM earnings
-        // Admin (PB0) also doesn't need summary updates
+        // Admin (PB0) doesn't need summary updates
+        // TOP REWARD income is tracked for non-admin recipients
         const isAdmin = finalReceiverId === 'PB0';
         if (incomeType !== 'system_fee' && !isAdmin) {
           await this.updateUserIncomeSummary(finalReceiverId, incomeType, amount);
@@ -173,6 +173,7 @@ export class IncomeService {
     const fieldMap: Record<InsertIncomeTransaction['incomeType'], keyof typeof userIncomeSummaries> = {
       direct_sponsor: 'directSponsorIncome',
       binary_match: 'binaryMatchIncome',
+      top_reward: 'topRewardIncome',
       matrix_level_1: 'matrixLevel1Income',
       matrix_level_2: 'matrixLevel2Income',
       matrix_level_3: 'matrixLevel3Income',
@@ -193,6 +194,7 @@ export class IncomeService {
       totalEarnings: amount,
       directSponsorIncome: incomeType === 'direct_sponsor' ? amount : '0',
       binaryMatchIncome: incomeType === 'binary_match' ? amount : '0',
+      topRewardIncome: incomeType === 'top_reward' ? amount : '0',
       matrixLevel1Income: incomeType === 'matrix_level_1' ? amount : '0',
       matrixLevel2Income: incomeType === 'matrix_level_2' ? amount : '0',
       matrixLevel3Income: incomeType === 'matrix_level_3' ? amount : '0',
@@ -219,9 +221,7 @@ export class IncomeService {
       case 'binary_match':
         return 'binary_match';
       case 'top_reward':
-        // Top reward is tracked as system_fee income type for data integrity
-        // Counted in Bug #2 validation but excluded from user MLM summaries
-        return 'system_fee';
+        return 'top_reward';
       case 'matrix_level_1':
         return 'matrix_level_1';
       case 'matrix_level_2':

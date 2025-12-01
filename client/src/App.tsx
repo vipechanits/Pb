@@ -50,6 +50,7 @@ import DatabaseBackupPage from '@/pages/admin/database';
 import AdminSecurity from '@/pages/admin/security';
 import AdminBackups from '@/pages/admin-backups';
 import AdminNotices from '@/pages/admin/admin-notices';
+import TopRewardRecipientsPage from '@/pages/admin/top-reward-recipients';
 import { useEffect, useState } from 'react';
 
 // Register service worker for PWA capabilities
@@ -410,6 +411,16 @@ function Router() {
           <ProtectedRoute requireAdmin={true}>
             <DashboardLayout isAdmin={true}>
               <AdminNotices />
+            </DashboardLayout>
+          </ProtectedRoute>
+        )}
+      </Route>
+
+      <Route path="/admin/top-reward">
+        {() => (
+          <ProtectedRoute requireAdmin={true}>
+            <DashboardLayout isAdmin={true}>
+              <TopRewardRecipientsPage />
             </DashboardLayout>
           </ProtectedRoute>
         )}

@@ -165,6 +165,11 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       url: '/admin/payments-report',
       icon: FileText,
     },
+    {
+      title: 'TOP REWARD Recipients',
+      url: '/admin/top-reward',
+      icon: Trophy,
+    },
   ];
 
   const adminManagementItems = [

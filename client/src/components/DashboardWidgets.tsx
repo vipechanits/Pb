@@ -128,18 +128,21 @@ interface EarningsOverviewProps {
   sponsorIncome: number;
   binaryIncome: number;
   matrixIncome: number;
+  topRewardIncome?: number;
 }
 
 export function EarningsOverview({ 
   totalEarnings, 
   sponsorIncome, 
   binaryIncome, 
-  matrixIncome 
+  matrixIncome,
+  topRewardIncome = 0
 }: EarningsOverviewProps) {
   const incomeStreams = [
     { label: 'Sponsor', amount: sponsorIncome, icon: '1' },
     { label: 'Binary', amount: binaryIncome, icon: '2' },
-    { label: 'Matrix', amount: matrixIncome, icon: '3' },
+    { label: 'TOP REWARD', amount: topRewardIncome, icon: '3' },
+    { label: 'Matrix', amount: matrixIncome, icon: '4' },
   ];
   
   return (

@@ -6,8 +6,8 @@ import { apiRequest, resetCsrfToken, fetchCsrfToken } from './queryClient';
 interface AuthContextType {
   user: Omit<User, 'password'> | null;
   loading: boolean;
-  login: (email: string, password: string, recaptchaToken?: string) => Promise<Omit<User, 'password'>>;
-  loginWithPin: (email: string, pin: string) => Promise<Omit<User, 'password'>>;
+  login: (userId: string, password: string, recaptchaToken?: string) => Promise<Omit<User, 'password'>>;
+  loginWithPin: (userId: string, pin: string) => Promise<Omit<User, 'password'>>;
   logout: () => Promise<void>;
   signup: (email: string, password: string, sponsorId?: string, binaryLeg?: string) => Promise<Omit<User, 'password'>>;
   refreshUser: () => Promise<void>;
@@ -41,10 +41,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     fetchCurrentUser();
   }, []);
 
-  const login = async (email: string, password: string, recaptchaToken?: string) => {
+  const login = async (userId: string, password: string, recaptchaToken?: string) => {
     try {
       // Step 1: Submit login credentials
-      const response = await apiRequest('POST', '/api/auth/login', { email, password, recaptchaToken });
+      const response = await apiRequest('POST', '/api/auth/login', { userId, password, recaptchaToken });
       const data = await response.json();
       
       // Step 2: Fetch fresh CSRF token to ensure it's established
@@ -78,10 +78,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const loginWithPin = async (email: string, pin: string) => {
+  const loginWithPin = async (userId: string, pin: string) => {
     try {
       // Step 1: Submit PIN login credentials
-      const response = await apiRequest('POST', '/api/auth/login-with-pin', { email, pin });
+      const response = await apiRequest('POST', '/api/auth/login-with-pin', { userId, pin });
       const data = await response.json();
       
       // Step 2: Fetch fresh CSRF token to ensure it's established

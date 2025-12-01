@@ -296,6 +296,120 @@ export async function sendPasswordResetEmail(
 }
 
 /**
+ * Send registration details email after email verification
+ * Contains User ID, name, email, mobile, and sponsor info
+ */
+export async function sendRegistrationDetailsEmail(
+  email: string,
+  details: {
+    userId: string;
+    name: string;
+    mobile: string;
+    sponsorId: string | null;
+    registeredAt: Date;
+  }
+): Promise<void> {
+  const formattedDate = details.registeredAt.toLocaleDateString('en-IN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  await sendEmail({
+    to: email,
+    subject: `Welcome to PAYBACK247 - Your Registration Details (${details.userId})`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Registration Details</title>
+      </head>
+      <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+        <div style="max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <!-- Header -->
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">PAYBACK247</h1>
+            <p style="color: #ffffff; margin: 10px 0 0 0; font-size: 16px;">Welcome! Your Account is Ready</p>
+          </div>
+          
+          <!-- Body -->
+          <div style="padding: 40px 30px;">
+            <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+              Dear ${details.name},
+            </p>
+            
+            <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+              Congratulations! Your email has been verified and your PAYBACK247 account is now active.
+              Please save the following registration details for your records:
+            </p>
+            
+            <!-- User ID Highlight Box -->
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; padding: 25px; text-align: center; margin: 30px 0;">
+              <p style="color: rgba(255,255,255,0.9); font-size: 14px; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 1px;">Your Unique User ID</p>
+              <p style="color: #ffffff; font-size: 36px; font-weight: bold; margin: 0; letter-spacing: 3px;">${details.userId}</p>
+              <p style="color: rgba(255,255,255,0.8); font-size: 12px; margin: 10px 0 0 0;">Use this ID to log in to your account</p>
+            </div>
+            
+            <!-- Details Table -->
+            <div style="background-color: #f9f9f9; border-radius: 8px; padding: 20px; margin: 30px 0;">
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td style="padding: 12px 0; border-bottom: 1px solid #eeeeee; color: #666666; font-size: 14px; width: 40%;">Full Name</td>
+                  <td style="padding: 12px 0; border-bottom: 1px solid #eeeeee; color: #333333; font-size: 14px; font-weight: bold;">${details.name}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 0; border-bottom: 1px solid #eeeeee; color: #666666; font-size: 14px;">Email</td>
+                  <td style="padding: 12px 0; border-bottom: 1px solid #eeeeee; color: #333333; font-size: 14px; font-weight: bold;">${email}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 0; border-bottom: 1px solid #eeeeee; color: #666666; font-size: 14px;">Mobile</td>
+                  <td style="padding: 12px 0; border-bottom: 1px solid #eeeeee; color: #333333; font-size: 14px; font-weight: bold;">${details.mobile || 'Not provided'}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 0; border-bottom: 1px solid #eeeeee; color: #666666; font-size: 14px;">Sponsor ID</td>
+                  <td style="padding: 12px 0; border-bottom: 1px solid #eeeeee; color: #333333; font-size: 14px; font-weight: bold;">${details.sponsorId || 'PB10000 (Default)'}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 0; color: #666666; font-size: 14px;">Registered On</td>
+                  <td style="padding: 12px 0; color: #333333; font-size: 14px; font-weight: bold;">${formattedDate}</td>
+                </tr>
+              </table>
+            </div>
+            
+            <!-- Important Notice -->
+            <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px 20px; margin: 30px 0; border-radius: 0 8px 8px 0;">
+              <p style="color: #856404; font-size: 14px; margin: 0; font-weight: bold;">Important:</p>
+              <p style="color: #856404; font-size: 13px; margin: 8px 0 0 0; line-height: 1.5;">
+                Please save this email safely. Your User ID (${details.userId}) is required to log in to your account.
+                Do not share your login credentials with anyone.
+              </p>
+            </div>
+            
+            <div style="margin-top: 40px; padding-top: 30px; border-top: 1px solid #eeeeee;">
+              <p style="color: #999999; font-size: 12px; line-height: 1.6; margin: 0;">
+                If you have any questions, please contact our support team. We're here to help you succeed!
+              </p>
+            </div>
+          </div>
+          
+          <!-- Footer -->
+          <div style="background-color: #f9f9f9; padding: 20px 30px; text-align: center; border-top: 1px solid #eeeeee;">
+            <p style="color: #999999; font-size: 12px; margin: 0;">
+              © 2025 PAYBACK247. All rights reserved.
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+  });
+}
+
+/**
  * Send password changed confirmation email
  */
 export async function sendPasswordChangedEmail(

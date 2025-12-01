@@ -15,7 +15,7 @@ import { CustomCaptcha } from '@/components/custom-captcha';
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const { login, loginWithPin } = useAuth();
-  const [email, setEmail] = useState('');
+  const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
   const [pin, setPin] = useState('');
   const [loginMode, setLoginMode] = useState<'password' | 'pin'>('password');
@@ -51,7 +51,7 @@ export default function LoginPage() {
         setPinLoading(true);
         
         // PIN login using loginWithPin helper (matches password login pattern)
-        const user = await loginWithPin(email, pin);
+        const user = await loginWithPin(userId, pin);
         
         // Redirect based on role
         if (user.role === 'admin') {
@@ -76,7 +76,7 @@ export default function LoginPage() {
           }
         }
 
-        const user = await login(email, password, recaptchaToken);
+        const user = await login(userId, password, recaptchaToken);
         // Redirect based on role returned from login
         if (user.role === 'admin') {
           setLocation('/admin/dashboard');
@@ -221,15 +221,15 @@ export default function LoginPage() {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="userId">User ID</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="your@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  id="userId"
+                  type="text"
+                  placeholder="e.g., PB10001"
+                  value={userId}
+                  onChange={(e) => setUserId(e.target.value.toUpperCase())}
                   required
-                  data-testid="input-email"
+                  data-testid="input-userId"
                 />
               </div>
 

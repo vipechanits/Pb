@@ -9,7 +9,8 @@ packages = ["splat", "u-root-cmds"]
 [deployment]
 deploymentTarget = "autoscale"
 build = ["npm", "run", "build"]
-run = ["npm", "start"]
+run = ["npm", "run", "start"]
+publicDir = "dist/public"
 
 [[ports]]
 localPort = 5000
@@ -90,10 +91,10 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Start application"
+args = "Dev Server"
 
 [[workflows.workflow]]
-name = "Start application"
+name = "Dev Server"
 author = "agent"
 
 [[workflows.workflow.tasks]]

@@ -26,6 +26,7 @@ interface IncomeSummary {
   totalEarnings: string;
   directSponsorIncome: string;
   binaryMatchIncome: string;
+  topRewardIncome: string;
   matrixLevel1Income: string;
   matrixLevel2Income: string;
   matrixLevel3Income: string;
@@ -165,6 +166,7 @@ export default function UserDashboard() {
   const totalEarnings = incomeSummary?.totalEarnings ? parseFloat(incomeSummary.totalEarnings) || 0 : 0;
   const sponsorIncome = incomeSummary?.directSponsorIncome ? parseFloat(incomeSummary.directSponsorIncome) || 0 : 0;
   const binaryIncome = incomeSummary?.binaryMatchIncome ? parseFloat(incomeSummary.binaryMatchIncome) || 0 : 0;
+  const topRewardIncome = incomeSummary?.topRewardIncome ? parseFloat(incomeSummary.topRewardIncome) || 0 : 0;
   const matrixIncome = incomeSummary 
     ? (parseFloat(incomeSummary.matrixLevel1Income || '0') || 0) +
       (parseFloat(incomeSummary.matrixLevel2Income || '0') || 0) +
@@ -298,6 +300,7 @@ export default function UserDashboard() {
                   sponsorIncome={sponsorIncome}
                   binaryIncome={binaryIncome}
                   matrixIncome={matrixIncome}
+                  topRewardIncome={topRewardIncome}
                 />
               </div>
             </div>
@@ -326,6 +329,14 @@ export default function UserDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-bold dashboard-text">₹{parseFloat(incomeSummary.binaryMatchIncome || '0').toLocaleString('en-IN')}</div>
+                </CardContent>
+              </Card>
+              <Card className="border-0 bg-gradient-to-br from-orange-50/50 to-amber-50/50 dark:from-orange-950/40 dark:to-amber-950/40 shadow-md hover-elevate transition-all duration-300">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium dashboard-text">TOP REWARD Income</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold dashboard-text">₹{topRewardIncome.toLocaleString('en-IN')}</div>
                 </CardContent>
               </Card>
               <Card className="border-0 bg-gradient-to-br from-purple-50/50 to-pink-50/50 dark:from-purple-950/40 dark:to-pink-950/40 shadow-md hover-elevate transition-all duration-300">

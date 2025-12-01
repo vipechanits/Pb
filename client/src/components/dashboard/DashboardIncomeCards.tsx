@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Link } from 'wouter';
-import { DollarSign, UserPlus, GitMerge, Layers, type LucideIcon } from 'lucide-react';
+import { DollarSign, UserPlus, GitMerge, Layers, Trophy, type LucideIcon } from 'lucide-react';
 
 interface IncomeCard {
   title: string;
@@ -17,6 +17,7 @@ interface DashboardIncomeCardsProps {
   totalEarnings: number;
   sponsorIncome: number;
   binaryIncome: number;
+  topRewardIncome: number;
   matrixIncome: number;
 }
 
@@ -24,6 +25,7 @@ export function DashboardIncomeCards({
   totalEarnings, 
   sponsorIncome, 
   binaryIncome, 
+  topRewardIncome,
   matrixIncome 
 }: DashboardIncomeCardsProps) {
   const incomeCards: IncomeCard[] = [
@@ -56,6 +58,16 @@ export function DashboardIncomeCards({
       color: 'text-purple-600',
       bgColor: 'bg-purple-50 dark:bg-purple-950/20',
       borderColor: 'border-purple-200 dark:border-purple-800',
+    },
+    {
+      title: 'TOP REWARD Income',
+      value: `₹${topRewardIncome.toLocaleString('en-IN')}`,
+      description: 'Special reward income',
+      icon: Trophy,
+      link: '/user/income/top-reward',
+      color: 'text-orange-600',
+      bgColor: 'bg-orange-50 dark:bg-orange-950/20',
+      borderColor: 'border-orange-200 dark:border-orange-800',
     },
     {
       title: 'Matrix Income',

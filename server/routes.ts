@@ -9,7 +9,7 @@ import { z } from "zod";
 import { db } from "./db";
 import { eq, desc, sql, count, or, and, ne, asc } from "drizzle-orm";
 import crypto from "crypto";
-import { sendVerificationEmail, sendPasswordResetEmail, sendPasswordChangedEmail } from "./lib/email";
+import { sendVerificationEmail, sendPasswordResetEmail, sendPasswordChangedEmail, sendRegistrationDetailsEmail } from "./lib/email";
 import { IncomeService } from "./income-service";
 import { verifyRecaptcha } from "./security-helpers";
 import { notificationRepository } from "./notification-repository";
@@ -223,10 +223,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Mobile number must be exactly 10 digits" });
       }
       
-      // Check mobile number usage limit (max 3 users per mobile)
+      // Check mobile number usage limit (max 50 users per mobile)
       const usersWithMobile = await storage.getUsersByMobile(mobile);
-      if (usersWithMobile.length >= 3) {
-        return res.status(400).json({ error: "This mobile number is already used by 3 users. Maximum limit reached." });
+      if (usersWithMobile.length >= 50) {
+        return res.status(400).json({ error: "This mobile number has reached the maximum number of registrations (50). Please use a different mobile number." });
       }
 
       // Verify reCAPTCHA if enabled
@@ -247,10 +247,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Binary leg must be 'left' or 'right'" });
       }
       
-      // Check if user already exists
-      const existingUser = await storage.getUserByEmail(email);
-      if (existingUser) {
-        return res.status(400).json({ error: "Email already registered" });
+      // Check if email has reached max registrations (50 users per email)
+      const usersWithEmail = await storage.getUsersByEmail(email);
+      if (usersWithEmail.length >= 50) {
+        return res.status(400).json({ error: "This email has reached the maximum number of registrations (50). Please use a different email." });
       }
       
       // Hash password
@@ -358,12 +358,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }),
     async (req, res) => {
     try {
-      const { email, password, recaptchaToken } = req.body;
+      const { userId, password, recaptchaToken } = req.body;
       
-      console.log("[LOGIN] Attempt with email:", email);
+      console.log("[LOGIN] Attempt with User ID:", userId);
       
-      if (!email || !password) {
-        return res.status(400).json({ error: "Email and password are required" });
+      if (!userId || !password) {
+        return res.status(400).json({ error: "User ID and password are required" });
       }
 
       // Verify reCAPTCHA if enabled
@@ -379,18 +379,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Get user
-      const user = await storage.getUserByEmail(email);
+      // Get user by User ID (PB####)
+      const user = await storage.getUserByUserId(userId.toUpperCase());
       console.log("[LOGIN] User found:", user ? user.userId : "NOT FOUND");
       if (!user) {
-        return res.status(401).json({ error: "Invalid email or password" });
+        return res.status(401).json({ error: "Invalid User ID or password" });
       }
       
       // Verify password
       const isValid = await verifyPassword(password, user.password);
       console.log("[LOGIN] Password valid:", isValid, "Hash:", user.password.substring(0, 20));
       if (!isValid) {
-        return res.status(401).json({ error: "Invalid email or password" });
+        return res.status(401).json({ error: "Invalid User ID or password" });
       }
       
       // Check email verification (skip for admin)
@@ -474,6 +474,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.markEmailAsVerified(user.id);
       
       console.log(`[EMAIL_VERIFY] User ${user.userId} (${user.email}) verified their email`);
+      
+      // Send registration details email with User ID
+      try {
+        const registeredAt = user.createdAt ? new Date(user.createdAt) : new Date();
+        await sendRegistrationDetailsEmail(user.email, {
+          userId: user.userId,
+          name: user.name || 'Member',
+          mobile: user.mobile || '',
+          sponsorId: user.sponsorId,
+          registeredAt,
+        });
+        console.log(`[EMAIL_VERIFY] Registration details email sent to ${user.email}`);
+      } catch (emailError) {
+        // Don't fail verification if email fails to send
+        console.error(`[EMAIL_VERIFY] Failed to send registration details email:`, emailError);
+      }
       
       // Auto-login user after verification
       req.session.userId = user.id;
@@ -5114,6 +5130,147 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("[ADMIN] Failed to delete notice:", error);
       res.status(500).json({ error: "Failed to delete notice" });
+    }
+  });
+
+  // ================== TOP REWARD RECIPIENTS MANAGEMENT ==================
+
+  // Get all TOP REWARD recipients (admin only)
+  app.get("/api/admin/top-reward-recipients", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const recipients = await storage.getTopRewardRecipients();
+      res.json(recipients);
+    } catch (error: any) {
+      console.error("[ADMIN] Failed to get top reward recipients:", error);
+      res.status(500).json({ error: "Failed to get top reward recipients" });
+    }
+  });
+
+  // Get active TOP REWARD recipients (for public/user display)
+  app.get("/api/top-reward-recipients/active", requireAuth, async (req, res) => {
+    try {
+      const recipients = await storage.getActiveTopRewardRecipients();
+      res.json(recipients);
+    } catch (error: any) {
+      console.error("[API] Failed to get active top reward recipients:", error);
+      res.status(500).json({ error: "Failed to get active top reward recipients" });
+    }
+  });
+
+  // Add a TOP REWARD recipient (admin only)
+  app.post("/api/admin/top-reward-recipients", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const { userId, userName, frequencyLimit, isUnlimited, priority, notes } = req.body;
+
+      // Validate userId format
+      if (!userId || typeof userId !== 'string') {
+        return res.status(400).json({ error: "User ID is required" });
+      }
+
+      // Check if PB0 or valid PB#### format
+      const isPB0 = userId === 'PB0';
+      if (!isPB0 && !/^PB\d{4,}$/.test(userId)) {
+        return res.status(400).json({ error: "Invalid User ID format. Use PB0 for admin or PB#### for users" });
+      }
+
+      // Verify user exists (unless PB0)
+      if (!isPB0) {
+        const user = await storage.getUserByUserId(userId);
+        if (!user) {
+          return res.status(404).json({ error: `User ${userId} not found` });
+        }
+      }
+
+      // Validate frequency settings
+      if (!isUnlimited && (!frequencyLimit || frequencyLimit < 1)) {
+        return res.status(400).json({ error: "Frequency limit must be at least 1, or set unlimited" });
+      }
+
+      const admin = await storage.getUserById(req.session.userId as string);
+      if (!admin) {
+        return res.status(401).json({ error: "Admin not found" });
+      }
+
+      const recipient = await storage.addTopRewardRecipient({
+        userId,
+        userName: userName || (isPB0 ? 'Admin (PB0)' : undefined),
+        frequencyLimit: isUnlimited ? null : frequencyLimit,
+        isUnlimited: isUnlimited || false,
+        priority: priority || 100,
+        isActive: true,
+        addedBy: admin.userId || 'PB0',
+        notes,
+      });
+
+      console.log(`[ADMIN] Admin ${admin.userId} added TOP REWARD recipient: ${userId} (${isUnlimited ? 'UNLIMITED' : frequencyLimit + 'x'})`);
+      res.json(recipient);
+    } catch (error: any) {
+      console.error("[ADMIN] Failed to add top reward recipient:", error);
+      res.status(500).json({ error: "Failed to add top reward recipient" });
+    }
+  });
+
+  // Update a TOP REWARD recipient (admin only)
+  app.patch("/api/admin/top-reward-recipients/:id", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { frequencyLimit, isUnlimited, priority, isActive, notes, timesReceived } = req.body;
+
+      const updates: any = {};
+      if (frequencyLimit !== undefined) updates.frequencyLimit = isUnlimited ? null : frequencyLimit;
+      if (isUnlimited !== undefined) updates.isUnlimited = isUnlimited;
+      if (priority !== undefined) updates.priority = priority;
+      if (isActive !== undefined) updates.isActive = isActive;
+      if (notes !== undefined) updates.notes = notes;
+      if (timesReceived !== undefined) updates.timesReceived = timesReceived;
+
+      const recipient = await storage.updateTopRewardRecipient(id, updates);
+
+      if (!recipient) {
+        return res.status(404).json({ error: "Recipient not found" });
+      }
+
+      console.log(`[ADMIN] Updated TOP REWARD recipient: ${recipient.userId}`);
+      res.json(recipient);
+    } catch (error: any) {
+      console.error("[ADMIN] Failed to update top reward recipient:", error);
+      res.status(500).json({ error: "Failed to update top reward recipient" });
+    }
+  });
+
+  // Delete a TOP REWARD recipient (admin only)
+  app.delete("/api/admin/top-reward-recipients/:id", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.removeTopRewardRecipient(id);
+
+      console.log(`[ADMIN] Deleted TOP REWARD recipient: ${id}`);
+      res.json({ success: true, message: "Recipient removed" });
+    } catch (error: any) {
+      console.error("[ADMIN] Failed to delete top reward recipient:", error);
+      res.status(500).json({ error: "Failed to delete top reward recipient" });
+    }
+  });
+
+  // Reset a TOP REWARD recipient's counter (admin only)
+  app.post("/api/admin/top-reward-recipients/:id/reset", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const recipient = await storage.updateTopRewardRecipient(id, {
+        timesReceived: 0,
+        isActive: true,
+      });
+
+      if (!recipient) {
+        return res.status(404).json({ error: "Recipient not found" });
+      }
+
+      console.log(`[ADMIN] Reset TOP REWARD recipient counter: ${recipient.userId}`);
+      res.json(recipient);
+    } catch (error: any) {
+      console.error("[ADMIN] Failed to reset top reward recipient:", error);
+      res.status(500).json({ error: "Failed to reset top reward recipient" });
     }
   });
 
