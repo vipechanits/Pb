@@ -73,17 +73,51 @@ export default function UserActivationPage() {
 
   // Fetch user's activation payments
   // Use userId (PB####) if available, otherwise use database UUID for pre-activation users
+  // Auto-refresh every 30 seconds to get latest payment assignments
   const payerIdentifier = user?.userId ?? user?.id;
   const { data: payments, isLoading, refetch } = useQuery<EnrichedPayment[]>({
     queryKey: ['/api/activation-payments/payer', payerIdentifier],
     enabled: !!user && !!payerIdentifier,
+    refetchInterval: 30000, // Check every 30 seconds
   });
 
-  // Fetch admin payment details
+  // Fetch admin payment details for different payment types
+  // Each payment type uses PB0's dedicated fallback fields
   const { data: adminPaymentDetails } = useQuery<AdminPaymentDetails>({
     queryKey: ['/api/admin/payment-details'],
     enabled: !!user,
   });
+  
+  // Top Reward fallback uses PB0's Top Reward specific fields
+  // Auto-refresh every 30 seconds to get latest recipient
+  const { data: adminTopRewardDetails } = useQuery<AdminPaymentDetails>({
+    queryKey: ['/api/admin/payment-details', 'top_reward'],
+    queryFn: () => fetch('/api/admin/payment-details?paymentType=top_reward', { credentials: 'include' }).then(res => res.json()),
+    enabled: !!user,
+    refetchInterval: 30000, // Check every 30 seconds
+  });
+  
+  // Binary Match fallback uses PB0's Binary Fallback specific fields
+  const { data: adminBinaryDetails } = useQuery<AdminPaymentDetails>({
+    queryKey: ['/api/admin/payment-details', 'binary_match'],
+    queryFn: () => fetch('/api/admin/payment-details?paymentType=binary_match', { credentials: 'include' }).then(res => res.json()),
+    enabled: !!user,
+  });
+  
+  // Matrix fallback uses PB0's Matrix Fallback specific fields
+  const { data: adminMatrixDetails } = useQuery<AdminPaymentDetails>({
+    queryKey: ['/api/admin/payment-details', 'matrix'],
+    queryFn: () => fetch('/api/admin/payment-details?paymentType=matrix_level_1', { credentials: 'include' }).then(res => res.json()),
+    enabled: !!user,
+  });
+  
+  // Helper function to get correct admin payment details based on payment type
+  const getAdminDetailsForPaymentType = (paymentType: string): AdminPaymentDetails | undefined => {
+    if (paymentType === 'top_reward') return adminTopRewardDetails;
+    if (paymentType === 'binary_match') return adminBinaryDetails;
+    if (paymentType.startsWith('matrix_level_')) return adminMatrixDetails;
+    return adminPaymentDetails; // Default (direct_sponsor fallback)
+  };
 
   // Fetch sponsor details if user has a sponsor
   const { data: sponsorData } = useQuery<{ userId: string; name: string | null }>({
@@ -643,11 +677,11 @@ export default function UserActivationPage() {
                                   <span className="text-muted-foreground">Payment To:</span>
                                   <p className="font-medium">{payment.receiverType === 'admin' ? 'PB0' : payment.receiverUserId}</p>
                                 </div>
-                                {/* Receiver Mobile Number */}
-                                {payment.receiverType === 'admin' && adminPaymentDetails?.mobile && (
+                                {/* Receiver Mobile Number - Use payment-type-specific admin details */}
+                                {payment.receiverType === 'admin' && getAdminDetailsForPaymentType(payment.paymentType)?.mobile && (
                                   <div>
                                     <span className="text-muted-foreground">Receiver Mobile:</span>
-                                    <p className="font-medium">{adminPaymentDetails.mobile}</p>
+                                    <p className="font-medium">{getAdminDetailsForPaymentType(payment.paymentType)?.mobile}</p>
                                   </div>
                                 )}
                                 {payment.receiverType !== 'admin' && payment.receiverMobile && (
@@ -667,11 +701,11 @@ export default function UserActivationPage() {
                                   <span className="text-muted-foreground">Amount:</span>
                                   <p className="font-medium">₹{payment.amountInr}</p>
                                 </div>
-                                {/* Receiver UPI ID */}
-                                {payment.receiverType === 'admin' && adminPaymentDetails?.upiId && (
+                                {/* Receiver UPI ID - Use payment-type-specific admin details */}
+                                {payment.receiverType === 'admin' && getAdminDetailsForPaymentType(payment.paymentType)?.upiId && (
                                   <div>
                                     <span className="text-muted-foreground">UPI ID:</span>
-                                    <p className="font-mono text-xs font-medium">{adminPaymentDetails.upiId}</p>
+                                    <p className="font-mono text-xs font-medium">{getAdminDetailsForPaymentType(payment.paymentType)?.upiId}</p>
                                   </div>
                                 )}
                                 {payment.receiverType !== 'admin' && payment.receiverUpiId && (
@@ -680,21 +714,24 @@ export default function UserActivationPage() {
                                     <p className="font-mono text-xs font-medium">{payment.receiverUpiId}</p>
                                   </div>
                                 )}
-                                {/* Receiver Bank Account */}
-                                {payment.receiverType === 'admin' && adminPaymentDetails?.bankAccount && (
-                                  <div>
-                                    <span className="text-muted-foreground">Bank Account:</span>
-                                    <p className="font-mono text-xs font-medium">
-                                      {adminPaymentDetails.bankAccount}
-                                      {adminPaymentDetails.ifscCode && ` (IFSC: ${adminPaymentDetails.ifscCode})`}
-                                    </p>
-                                    {adminPaymentDetails.bankAccountHolder && (
-                                      <p className="text-xs text-muted-foreground mt-1">
-                                        A/c Holder: {adminPaymentDetails.bankAccountHolder}
+                                {/* Receiver Bank Account - Use payment-type-specific admin details */}
+                                {(() => {
+                                  const adminDetails = getAdminDetailsForPaymentType(payment.paymentType);
+                                  return payment.receiverType === 'admin' && (adminDetails?.bankAccountNumber || adminDetails?.bankAccount) && (
+                                    <div>
+                                      <span className="text-muted-foreground">Bank Account:</span>
+                                      <p className="font-mono text-xs font-medium">
+                                        {adminDetails?.bankAccountNumber || adminDetails?.bankAccount}
+                                        {adminDetails?.ifscCode && ` (IFSC: ${adminDetails.ifscCode})`}
                                       </p>
-                                    )}
-                                  </div>
-                                )}
+                                      {adminDetails?.bankAccountHolder && (
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                          A/c Holder: {adminDetails.bankAccountHolder}
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                                 {payment.receiverType !== 'admin' && payment.receiverBankAccount && (
                                   <div>
                                     <span className="text-muted-foreground">Bank Account:</span>
@@ -898,11 +935,11 @@ export default function UserActivationPage() {
                                   <span className="text-muted-foreground">Payment To:</span>
                                   <p className="font-medium">{payment.receiverType === 'admin' ? 'PB0' : payment.receiverUserId || 'Assigning...'}</p>
                                 </div>
-                                {/* Receiver Mobile Number */}
-                                {payment.receiverType === 'admin' && adminPaymentDetails?.mobile && (
+                                {/* Receiver Mobile Number - Use payment-type-specific admin details */}
+                                {payment.receiverType === 'admin' && getAdminDetailsForPaymentType(payment.paymentType)?.mobile && (
                                   <div>
                                     <span className="text-muted-foreground">Receiver Mobile:</span>
-                                    <p className="font-medium">{adminPaymentDetails.mobile}</p>
+                                    <p className="font-medium">{getAdminDetailsForPaymentType(payment.paymentType)?.mobile}</p>
                                   </div>
                                 )}
                                 {payment.receiverType !== 'admin' && payment.receiverMobile && (
@@ -922,11 +959,11 @@ export default function UserActivationPage() {
                                   <span className="text-muted-foreground">Amount:</span>
                                   <p className="font-medium">₹{payment.amountInr}</p>
                                 </div>
-                                {/* Receiver UPI ID */}
-                                {payment.receiverType === 'admin' && adminPaymentDetails?.upiId && (
+                                {/* Receiver UPI ID - Use payment-type-specific admin details */}
+                                {payment.receiverType === 'admin' && getAdminDetailsForPaymentType(payment.paymentType)?.upiId && (
                                   <div>
                                     <span className="text-muted-foreground">UPI ID:</span>
-                                    <p className="font-mono text-xs font-medium">{adminPaymentDetails.upiId}</p>
+                                    <p className="font-mono text-xs font-medium">{getAdminDetailsForPaymentType(payment.paymentType)?.upiId}</p>
                                   </div>
                                 )}
                                 {payment.receiverType !== 'admin' && payment.receiverUpiId && (
@@ -935,21 +972,24 @@ export default function UserActivationPage() {
                                     <p className="font-mono text-xs font-medium">{payment.receiverUpiId}</p>
                                   </div>
                                 )}
-                                {/* Receiver Bank Account */}
-                                {payment.receiverType === 'admin' && adminPaymentDetails?.bankAccount && (
-                                  <div>
-                                    <span className="text-muted-foreground">Bank Account:</span>
-                                    <p className="font-mono text-xs font-medium">
-                                      {adminPaymentDetails.bankAccount}
-                                      {adminPaymentDetails.ifscCode && ` (IFSC: ${adminPaymentDetails.ifscCode})`}
-                                    </p>
-                                    {adminPaymentDetails.bankAccountHolder && (
-                                      <p className="text-xs text-muted-foreground mt-1">
-                                        A/c Holder: {adminPaymentDetails.bankAccountHolder}
+                                {/* Receiver Bank Account - Use payment-type-specific admin details */}
+                                {(() => {
+                                  const adminDetails = getAdminDetailsForPaymentType(payment.paymentType);
+                                  return payment.receiverType === 'admin' && (adminDetails?.bankAccountNumber || adminDetails?.bankAccount) && (
+                                    <div>
+                                      <span className="text-muted-foreground">Bank Account:</span>
+                                      <p className="font-mono text-xs font-medium">
+                                        {adminDetails?.bankAccountNumber || adminDetails?.bankAccount}
+                                        {adminDetails?.ifscCode && ` (IFSC: ${adminDetails.ifscCode})`}
                                       </p>
-                                    )}
-                                  </div>
-                                )}
+                                      {adminDetails?.bankAccountHolder && (
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                          A/c Holder: {adminDetails.bankAccountHolder}
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                                 {payment.receiverType !== 'admin' && payment.receiverBankAccount && (
                                   <div>
                                     <span className="text-muted-foreground">Bank Account:</span>

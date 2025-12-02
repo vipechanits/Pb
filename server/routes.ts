@@ -212,11 +212,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }),
     async (req, res) => {
     try {
+      console.log("[SIGNUP] Request body:", Object.keys(req.body));
       const { name, mobile, email, password, sponsorId, binaryLeg, recaptchaToken } = req.body;
       
       if (!email || !password || !name || !mobile) {
         return res.status(400).json({ error: "Name, mobile, email and password are required" });
       }
+      
+      console.log("[SIGNUP] Basic validation passed");
       
       // Validate mobile number format
       if (!/^[0-9]{10}$/.test(mobile)) {
@@ -230,7 +233,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Verify reCAPTCHA if enabled
+      console.log("[SIGNUP] Fetching system config");
       const config = await storage.getSystemConfig();
+      console.log("[SIGNUP] System config fetched, recaptchaEnabled:", config?.recaptchaEnabled);
       if (config.recaptchaEnabled && config.recaptchaSecretKey) {
         if (!recaptchaToken) {
           return res.status(400).json({ error: "reCAPTCHA verification is required" });
@@ -262,7 +267,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let finalBinaryLeg = binaryLeg;
       
       // Validate sponsor exists
-      const sponsor = await storage.getUserByUserId(finalSponsorId);
+      let sponsor = await storage.getUserByUserId(finalSponsorId);
+      if (!sponsor && finalSponsorId === 'PB10000') {
+        // Auto-create PB10000 if it doesn't exist (first registration edge case)
+        console.log('[SIGNUP] PB10000 not found, creating it as first regular user');
+        sponsor = await storage.createUser({
+          userId: 'PB10000',
+          name: 'System First User',
+          email: 'pb10000@system.local',
+          mobile: '0000000000',
+          password: '$2b$10$dummy', // Won't be used
+          role: 'user',
+          isActivated: true,
+          emailVerified: true,
+        });
+      }
+      
       if (!sponsor) {
         return res.status(400).json({ error: `Invalid sponsor ID: ${finalSponsorId}` });
       }
@@ -272,6 +292,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         finalBinaryLeg = await storage.determineBestLeg(finalSponsorId);
         console.log(`[SIGNUP] Auto-assigned ${finalBinaryLeg} leg for sponsor ${finalSponsorId}`);
       }
+      
+      // Normalize binary leg to lowercase for database enum compatibility (enum is ['left', 'right'])
+      const normalizedBinaryLeg = finalBinaryLeg?.toLowerCase() as 'left' | 'right' | undefined;
       
       // Generate email verification token
       const verificationToken = crypto.randomBytes(32).toString('hex');
@@ -287,8 +310,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: 'user',
         // userId auto-generated from sequence (PB10000+)
         sponsorId: finalSponsorId, // Auto-assign PB10000 if not provided (all users join under PB10000)
-        binaryLeg: finalBinaryLeg, // DEPRECATED: kept for backward compatibility
-        sponsorRequestedLeg: finalBinaryLeg, // Requested leg preference (actual placement at activation)
+        binaryLeg: normalizedBinaryLeg, // Normalized to lowercase for enum compatibility
+        sponsorRequestedLeg: normalizedBinaryLeg, // Requested leg preference (actual placement at activation)
         isActivated: false,
         emailVerified: false, // Require email verification
         emailVerificationToken: verificationToken,
@@ -345,7 +368,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       console.error("========================================");
-      res.status(500).json({ error: "Failed to create account" });
+      
+      // Return more specific error message when possible
+      const errorMsg = error.message || "Failed to create account";
+      res.status(500).json({ error: `Failed to create account: ${errorMsg}` });
     }
   });
   
@@ -2047,7 +2073,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      res.status(500).json({ error: "Failed to request activation" });
+      const errorMessage = error?.message || String(error);
+      res.status(500).json({ error: `Failed to request activation: ${errorMessage}` });
     }
   });
 

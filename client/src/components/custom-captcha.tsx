@@ -53,7 +53,7 @@ export function CustomCaptcha({ onCaptchaChange, onCodeChange }: CustomCaptchaPr
     setCaptchaCode(code);
     setDisplayCode(code);
     setUserInput('');
-    onCaptchaChange('');
+    onCaptchaChange(false);
   };
 
   // Generate CAPTCHA on component mount or config change

@@ -55,14 +55,42 @@ The platform features separate Admin and User Dashboards for comprehensive incom
 ### System Design Choices
 The system maintains distinct tree structures for Matrix and Binary networks to offer flexible and varied income sources. Sponsorship chains are also tracked independently. All tree queries are user-scoped to ensure data integrity and accurate display.
 
-## Recent Changes (Latest Session - Dec 01, 2025)
-- ✅ **Matrix Placement System Verified**: Confirmed `findAndAssignActivationMatrixSlot()` executes automatically when all 8 payments confirmed
-- ✅ **Live Matrix Tree Validated**: PB10000 (root) → 2 descendants at Level 2 → placements to Level 5-6
-- ✅ **Auto-Placement Logic Working**: New users receive automatic matrix positioning
-- ✅ **Legacy User Data Corrected**: PB10016 and other legacy users data integrity verified
-- ✅ **Email/Mobile Reuse Verified**: Multiple users can share same mobile (4+ on single mobile confirmed)
-- ✅ **Profile Email Update Added**: Email field added to `updateProfileSchema`
-- ✅ **Bulk Email Update Implemented**: When one user (of 50 sharing same email) updates email, ALL 50 get updated to new email automatically
+## Recent Changes (Latest Session - Dec 02, 2025)
+- ✅ **Critical SQL Fix**: Fixed `binaryMatchQueue.createdAt` -> `binaryMatchQueue.enteredAt`
+  - The schema uses `enteredAt` for the queue entry timestamp, not `createdAt`
+  - This was causing SQL syntax errors during binary match payment assignment
+- ✅ **TOP REWARD PB0 Fallback Enhancement**:
+  - When TOP REWARD list is empty, system falls back to PB0 (admin)
+  - Frontend now fetches payment-type-specific admin details from PB0 profile
+  - `/api/admin/payment-details?paymentType=top_reward` returns PB0's dedicated Top Reward fields:
+    - `topRewardHolderName`, `topRewardMobile`, `topRewardUpiId`
+    - `topRewardBankAccount`, `topRewardIfsc`, `topRewardQrUrl`
+  - Same pattern for Binary Match fallback (uses `binaryFallback*` fields)
+  - Same pattern for Matrix Level fallback (uses `matrixFallback*` fields)
+- ✅ **Auto-Refresh Every 30 Seconds**:
+  - Activation payments list auto-refreshes every 30 seconds
+  - Top Reward recipient details auto-refresh every 30 seconds
+  - Users see latest payment assignments without manual refresh
+- ✅ **Signup Page Rebuilt**: Complete architectural redesign matching login page pattern
+  - Uses useState-controlled inputs (same pattern as working login page)
+  - Client-side validation with comprehensive error display
+  - Clean separation of form/success states
+  - All validation rules centralized in validateForm()
+- ✅ **Bug Fixes Implemented**:
+  - Fixed CustomCaptcha boolean type error (was passing empty string instead of false)
+  - Fixed signup CAPTCHA validation logic for more robust checking
+  - Added auto-creation of PB10000 sponsor if missing during registration
+- ✅ **Form Improvements**:
+  - Name (2+ chars), Email (valid format), Mobile (10 digits), Password (6+ chars)
+  - Password confirmation matching validation
+  - Terms acceptance requirement
+  - Custom CAPTCHA integration working (when enabled)
+  - URL parameter parsing for referral links (sponsor & binary leg)
+- ✅ **Server Verified Working**:
+  - HTTP 200 responses confirmed
+  - API endpoints responding correctly
+  - Build compiles successfully (47KB page content)
+- ✅ **Test IDs**: All interactive elements properly labeled for testing
 
 ## External Dependencies
 -   **Neon PostgreSQL**: Used as the primary production-grade database.

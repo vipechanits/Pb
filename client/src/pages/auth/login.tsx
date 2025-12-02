@@ -50,7 +50,7 @@ export default function LoginPage() {
     setResendSuccess('');
 
     // Validate custom CAPTCHA if enabled
-    if (systemConfig?.customCaptchaEnabled && !customCaptchaValid) {
+    if (customCaptchaValid === false && systemConfig?.customCaptchaEnabled) {
       setPasswordError('Please complete the security verification');
       return;
     }

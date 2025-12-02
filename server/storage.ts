@@ -44,6 +44,7 @@ export interface IStorage {
   getUserById(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUsersByMobile(mobile: string): Promise<User[]>;
+  getUsersByEmail(email: string): Promise<User[]>;
   getUserByVerificationToken(token: string): Promise<User | undefined>;
   markEmailAsVerified(userId: string): Promise<void>;
   getUserByUserId(userId: string): Promise<User | undefined>;
@@ -306,6 +307,34 @@ export class DbStorage implements IStorage {
           console.log('[INIT] ✓ PB0 payment details added - UPDATE VIA PROFILE!');
         }
       }
+
+      // Create PB10000 (first regular user - sponsor for all new users)
+      const pb10000Exists = await this.getUserByUserId('PB10000');
+      if (!pb10000Exists) {
+        console.log('[INIT] Creating PB10000 first regular user (sponsor for all new users)...');
+        const pb10000Password = await hashPassword('InitialUser@1234');
+        await db.insert(users).values({
+          email: 'pb10000@payback247.com',
+          password: pb10000Password,
+          role: 'user',
+          userId: 'PB10000',
+          name: 'First User',
+          mobile: '9999999998',
+          sponsorId: 'PB0',
+          isActivated: true,
+          isProfileComplete: true,
+          emailVerified: true,
+          matrixLevel: 1,
+          matrixPath: 'PB10000',
+          binaryLeg: 'left',
+          sponsorRequestedLeg: 'left',
+          upiId: 'pb10000@payback247',
+          bankAccountHolder: 'First User',
+          bankAccountNumber: '11111111111111',
+          ifscCode: 'SBIN0000001',
+        });
+        console.log('[INIT] ✓ PB10000 first regular user created');
+      }
     } catch (error) {
       // CRITICAL: Rethrow production security errors to halt server startup
       if (error instanceof Error && error.message.includes('ADMIN_DEFAULT_PASSWORD is required')) {
@@ -392,6 +421,11 @@ export class DbStorage implements IStorage {
 
   async getUsersByMobile(mobile: string): Promise<User[]> {
     const result = await db.select().from(users).where(eq(users.mobile, mobile));
+    return result;
+  }
+
+  async getUsersByEmail(email: string): Promise<User[]> {
+    const result = await db.select().from(users).where(eq(users.email, email));
     return result;
   }
 
@@ -845,6 +879,7 @@ export class DbStorage implements IStorage {
     // Only return ACTIVATED users - inactive users are not visible in binary tree
     const dbOrTx = tx || db;
     
+    // Note: When using FOR UPDATE, we need .limit() before .for('update') for correct SQL syntax
     let query = dbOrTx
       .select()
       .from(users)
@@ -854,7 +889,8 @@ export class DbStorage implements IStorage {
         eq(users.isActivated, true),
         sql`${users.userId} IS NOT NULL`
       ))
-      .orderBy(users.createdAt);
+      .orderBy(users.createdAt)
+      .limit(100);
     
     // CRITICAL: Add row-level locking when inside a transaction to prevent race conditions
     if (tx) {
@@ -986,8 +1022,8 @@ export class DbStorage implements IStorage {
         const userRows = await txn.select()
           .from(users)
           .where(eq(users.userId, currentUserId))
-          .for('update')
-          .limit(1);
+          .limit(1)
+          .for('update');
         
         if (userRows.length === 0 || !userRows[0].matrixParentId) {
           break;
@@ -1029,8 +1065,8 @@ export class DbStorage implements IStorage {
     const userRows = await tx.select()
       .from(users)
       .where(eq(users.userId, payerUserId))
-      .for('update')
-      .limit(1);
+      .limit(1)
+      .for('update');
     
     if (userRows.length === 0) {
       throw new Error(`User ${payerUserId} not found for matrix reconciliation`);
@@ -1093,8 +1129,8 @@ export class DbStorage implements IStorage {
           const paymentLock = await tx.select()
             .from(activationPayments)
             .where(eq(activationPayments.id, payment.id))
-            .for('update')
-            .limit(1);
+            .limit(1)
+            .for('update');
           
           if (paymentLock.length === 0) {
             console.warn(`[MATRIX RECONCILE] Payment ${payment.id} not found for locking, skipping`);
@@ -1144,8 +1180,8 @@ export class DbStorage implements IStorage {
       const targetUser = await txn.select()
         .from(users)
         .where(eq(users.userId, userId))
-        .for('update')
-        .limit(1);
+        .limit(1)
+        .for('update');
       
       if (targetUser.length === 0) {
         throw new Error(`User ${userId} not found`);
@@ -1195,6 +1231,7 @@ export class DbStorage implements IStorage {
       // Matrix has existing users - find next available slot using BFS
       // NO LEVEL LIMIT: Matrix grows infinitely, each user earns from their 5-level downline (62 users)
       // NOTE: Don't check isActivated - users are placed during payment confirmation, before full activation
+      // Note: .limit(10000) required before .for('update') for correct SQL syntax
       const frontier = await txn.select()
         .from(users)
         .where(and(
@@ -1202,12 +1239,15 @@ export class DbStorage implements IStorage {
           ne(users.role, 'admin')  // Exclude admin accounts from matrix
         ))
         .orderBy(sql`matrix_level ASC, matrix_path ASC`)
+        .limit(10000)
         .for('update');
       
       for (const parentCandidate of frontier) {
+        // Note: .limit(2) before .for('update') for correct SQL syntax (max 2 children per node)
         const children = await txn.select()
           .from(users)
           .where(eq(users.matrixParentId, parentCandidate.userId!))
+          .limit(2)
           .for('update');
         
         if (children.length < 2) {
@@ -1801,8 +1841,8 @@ export class DbStorage implements IStorage {
       // Fetch system config for payment amounts (with lock to prevent concurrent edits)
       const configResult = await tx.select().from(systemConfig)
         .where(eq(systemConfig.id, 'default-config-singleton'))
-        .for('update')
-        .limit(1);
+        .limit(1)
+        .for('update');
       
       if (!configResult[0]) {
         throw new Error('System configuration not found');
@@ -1866,14 +1906,14 @@ export class DbStorage implements IStorage {
         } else if (paymentType === 'binary_match') {
           // Binary match pays FIRST person in queue (fallback to PB0 if empty)
           // Use FOR UPDATE lock and exclude already-reserved entries to prevent race conditions
-          // Order by createdAt (not queuePosition) for proper FIFO ordering
+          // Order by enteredAt (the actual column name) for proper FIFO ordering
           const firstInQueue = await tx.select()
             .from(binaryMatchQueue)
             .where(and(
               eq(binaryMatchQueue.status, 'waiting'),
               isNull(binaryMatchQueue.paidByActivationId) // MUST be unreserved
             ))
-            .orderBy(asc(binaryMatchQueue.createdAt))
+            .orderBy(asc(binaryMatchQueue.enteredAt))
             .limit(1)
             .for('update');
           
@@ -1898,11 +1938,12 @@ export class DbStorage implements IStorage {
           }
         } else if (paymentType === 'top_reward') {
           // Top reward - check TOP REWARD recipients list first
+          // Note: Removed FOR UPDATE lock - we update the specific recipient later with its own lock
           const topRewardRecipientsList = await tx.select()
             .from(topRewardRecipients)
             .where(eq(topRewardRecipients.isActive, true))
             .orderBy(asc(topRewardRecipients.priority), asc(topRewardRecipients.createdAt))
-            .for('update');
+            .limit(100);
           
           // Find eligible recipient (unlimited or under frequency limit)
           let selectedRecipient: typeof topRewardRecipientsList[0] | null = null;
@@ -2427,8 +2468,8 @@ export class DbStorage implements IStorage {
       const currentPaymentResult = await tx.select()
         .from(activationPayments)
         .where(eq(activationPayments.id, id))
-        .for('update')
-        .limit(1);
+        .limit(1)
+        .for('update');
       
       if (currentPaymentResult.length === 0) return undefined;
       const currentPayment = currentPaymentResult[0];
@@ -2492,8 +2533,8 @@ export class DbStorage implements IStorage {
       const existingPayment = await tx.select()
         .from(activationPayments)
         .where(eq(activationPayments.id, id))
-        .for('update')
-        .limit(1);
+        .limit(1)
+        .for('update');
       
       if (existingPayment.length === 0) {
         console.log(`[STORAGE] Payment ${id} not found`);
@@ -2664,8 +2705,8 @@ export class DbStorage implements IStorage {
             eq(binaryMatchQueue.userId, confirmedPayment.receiverUserId!),
             eq(binaryMatchQueue.paidByActivationId, confirmedPayment.activationId)
           ))
-          .for('update')
-          .limit(1);
+          .limit(1)
+          .for('update');
         
         if (reservedQueueEntry.length === 0) {
           console.error(`[STORAGE] CRITICAL ERROR: No queue entry found for user ${confirmedPayment.receiverUserId} with paidByActivationId ${confirmedPayment.activationId}`);
@@ -2802,9 +2843,11 @@ export class DbStorage implements IStorage {
       console.log(`[STORAGE] Checking if matrix reconciliation should run after confirming payment...`);
       
       // Re-fetch all payments with fresh data (using FOR UPDATE to prevent concurrent drift)
+      // Note: .limit(8) before .for('update') for correct SQL syntax (exactly 8 payments per activation)
       const freshPayments = await tx.select()
         .from(activationPayments)
         .where(eq(activationPayments.activationId, confirmedPayment.activationId))
+        .limit(8)
         .for('update');
       
       const freshConfirmedCount = freshPayments.filter(p => p.status === 'confirmed').length;
@@ -2872,8 +2915,8 @@ export class DbStorage implements IStorage {
         const activationLock = await tx.select()
           .from(activations)
           .where(eq(activations.id, activationId))
-          .for('update')
-          .limit(1);
+          .limit(1)
+          .for('update');
         
         if (activationLock.length === 0) {
           console.error(`[ACTIVATION] Activation ${activationId} not found`);
@@ -2896,9 +2939,11 @@ export class DbStorage implements IStorage {
         console.log(`[ACTIVATION] Lock acquired, activation status: ${lockedActivation.status}`);
         
         // Get all 8 payments for this activation with FOR UPDATE lock to prevent concurrent runs
+        // Note: .limit(8) before .for('update') for correct SQL syntax (exactly 8 payments per activation)
         const payments = await tx.select()
           .from(activationPayments)
           .where(eq(activationPayments.activationId, activationId))
+          .limit(8)
           .for('update');
         
         // BUG #5 FIX: Strict 8-payment enforcement - verify exactly 8 payments exist
@@ -3434,8 +3479,8 @@ export class DbStorage implements IStorage {
       const existingPayment = await tx.select()
         .from(activationPayments)
         .where(eq(activationPayments.id, id))
-        .for('update')
-        .limit(1);
+        .limit(1)
+        .for('update');
       
       if (existingPayment.length === 0) {
         console.log(`[STORAGE] Payment ${id} not found for rejection`);

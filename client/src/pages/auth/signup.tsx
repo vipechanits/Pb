@@ -7,31 +7,43 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Mail } from 'lucide-react';
+import { AlertCircle, Mail, Check, ChevronRight } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 import { useRecaptcha } from '@/hooks/use-recaptcha';
 import { CustomCaptcha } from '@/components/custom-captcha';
 
 export default function SignupPage() {
   const [, setLocation] = useLocation();
-  const [name, setName] = useState('');
-  const [mobile, setMobile] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [sponsorId, setSponsorId] = useState('');
-  const [binaryLeg, setBinaryLeg] = useState<'left' | 'right' | undefined>();
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [signupSuccess, setSignupSuccess] = useState(false);
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [captchaCode, setCaptchaCode] = useState('');
-  const [customCaptchaValid, setCustomCaptchaValid] = useState(false);
   const recaptchaRef = useRef<HTMLDivElement>(null);
   const { isLoaded, isEnabled, renderRecaptcha, executeRecaptcha } = useRecaptcha();
   const { data: systemConfig } = useQuery({
     queryKey: ['/api/system-config'],
   }) as any;
+
+  // Form state
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [mobile, setMobile] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [acceptTerms, setAcceptTerms] = useState(false);
+  
+  // UI state
+  const [stage, setStage] = useState<'form' | 'success'>('form');
+  const [successEmail, setSuccessEmail] = useState('');
+  const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [customCaptchaValid, setCustomCaptchaValid] = useState(false);
+
+  // URL parameters for referral
+  const [referralData] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      sponsorId: params.get('ref') || undefined,
+      binaryLeg: (params.get('leg') as 'left' | 'right') || undefined,
+    };
+  });
 
   // Render reCAPTCHA when loaded
   useEffect(() => {
@@ -40,46 +52,62 @@ export default function SignupPage() {
     }
   }, [isLoaded, isEnabled, renderRecaptcha]);
 
-  // Read URL parameters for referral
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const refParam = params.get('ref');
-    const legParam = params.get('leg');
-    
-    if (refParam) {
-      setSponsorId(refParam);
-    }
-    if (legParam === 'left' || legParam === 'right') {
-      setBinaryLeg(legParam);
-    }
-  }, []);
+  // Validate form fields
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
 
+    if (!name.trim()) {
+      errors.name = 'Name is required';
+    } else if (name.trim().length < 2) {
+      errors.name = 'Name must be at least 2 characters';
+    }
+
+    if (!email.trim()) {
+      errors.email = 'Email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.email = 'Invalid email address';
+    }
+
+    if (!mobile.trim()) {
+      errors.mobile = 'Mobile number is required';
+    } else if (!/^\d{10}$/.test(mobile)) {
+      errors.mobile = 'Mobile number must be exactly 10 digits';
+    }
+
+    if (!password) {
+      errors.password = 'Password is required';
+    } else if (password.length < 6) {
+      errors.password = 'Password must be at least 6 characters';
+    }
+
+    if (!confirmPassword) {
+      errors.confirmPassword = 'Please confirm your password';
+    } else if (password !== confirmPassword) {
+      errors.confirmPassword = 'Passwords do not match';
+    }
+
+    if (!acceptTerms) {
+      errors.terms = 'You must accept the terms & conditions';
+    }
+
+    if (systemConfig?.customCaptchaEnabled && !customCaptchaValid) {
+      errors.captcha = 'Please complete the security verification';
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
+    if (!validateForm()) {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
-      return;
-    }
-
-    if (!acceptedTerms) {
-      setError('You must accept the Terms & Conditions to create an account');
-      return;
-    }
-
-    // Validate custom CAPTCHA if enabled
-    if (systemConfig?.customCaptchaEnabled && !customCaptchaValid) {
-      setError('Please complete the security verification');
-      return;
-    }
-
-    setLoading(true);
+    setIsLoading(true);
     try {
       // Get reCAPTCHA token if enabled
       let recaptchaToken = '';
@@ -88,146 +116,176 @@ export default function SignupPage() {
           recaptchaToken = await executeRecaptcha();
         } catch (err: any) {
           setError(err.message || 'Please complete the reCAPTCHA verification');
-          setLoading(false);
+          setIsLoading(false);
           return;
         }
       }
 
-      const result = await apiRequest('POST', '/api/auth/signup', {
-        name,
-        mobile,
-        email,
+      // Submit signup request
+      await apiRequest('POST', '/api/auth/signup', {
+        name: name.trim(),
+        email: email.trim(),
+        mobile: mobile.trim(),
         password,
-        sponsorId: sponsorId || undefined,
-        binaryLeg: binaryLeg || undefined,
-        recaptchaToken: recaptchaToken || undefined
+        sponsorId: referralData.sponsorId,
+        binaryLeg: referralData.binaryLeg,
+        recaptchaToken: recaptchaToken || undefined,
       });
-      
-      // Show success message
-      setSignupSuccess(true);
+
+      // Success - show verification email screen
+      setSuccessEmail(email);
+      setStage('success');
+
+      // Reset reCAPTCHA on success
+      if (isEnabled && window.grecaptcha) {
+        window.grecaptcha.reset();
+      }
     } catch (err: any) {
-      setError(err.message || 'Failed to create account');
+      const errorMessage = err.message || 'Failed to create account. Please try again.';
+      setError(errorMessage);
+
       // Reset reCAPTCHA on error
       if (isEnabled && window.grecaptcha) {
         window.grecaptcha.reset();
       }
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  // Show success message after signup
-  if (signupSuccess) {
+  // Success screen
+  if (stage === 'success') {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-background">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-4">
-              <Mail className="h-16 w-16 text-primary" data-testid="icon-email" />
+            <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-green-50 dark:bg-green-950 flex items-center justify-center">
+              <Check className="h-8 w-8 text-green-600 dark:text-green-400" data-testid="icon-success" />
             </div>
             <CardTitle className="text-2xl font-bold" data-testid="text-success-title">
-              Check Your Email
+              Verify Your Email
             </CardTitle>
             <CardDescription data-testid="text-success-description">
-              We've sent a verification link to <strong className="text-foreground">{email}</strong>
+              We've sent a verification link to <strong className="text-foreground">{successEmail}</strong>
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <Alert data-testid="alert-info">
               <Mail className="h-4 w-4" />
               <AlertDescription>
-                Please check your email and click the verification link to activate your account. The link will expire in 24 hours.
+                Check your inbox and click the verification link to activate your account. The link expires in 24 hours.
               </AlertDescription>
             </Alert>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <p>Look in your spam/junk folder if you don't see the email</p>
+              <p>You'll receive your User ID (PB#####) after verification</p>
+            </div>
+          </CardContent>
+          <CardFooter>
             <Button
               onClick={() => setLocation('/auth/login')}
-              variant="outline"
               className="w-full"
               data-testid="button-goto-login"
             >
+              <ChevronRight className="h-4 w-4 mr-2" />
               Go to Login
             </Button>
-          </CardContent>
+          </CardFooter>
         </Card>
       </div>
     );
   }
 
+  // Signup form screen
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold text-center" data-testid="text-signup-title">
-            Create an account
+            Create Account
           </CardTitle>
           <CardDescription className="text-center">
-            Join PAYBACK247 and start earning today
+            Join PAYBACK247 and start earning
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* API Error Alert */}
             {error && (
-              <Alert variant="destructive" data-testid="alert-error">
+              <Alert variant="destructive" data-testid="alert-api-error">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
 
+            {/* Name Field */}
             <div className="space-y-2">
               <Label htmlFor="name">Full Name</Label>
               <Input
                 id="name"
-                type="text"
-                placeholder="Enter your full name"
+                placeholder="John Doe"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                required
+                disabled={isLoading}
                 data-testid="input-name"
               />
+              {fieldErrors.name && (
+                <p className="text-sm text-destructive" data-testid="error-name">{fieldErrors.name}</p>
+              )}
             </div>
 
+            {/* Email Field */}
             <div className="space-y-2">
-              <Label htmlFor="mobile">Mobile Number</Label>
-              <Input
-                id="mobile"
-                type="tel"
-                placeholder="10 digit mobile number"
-                value={mobile}
-                onChange={(e) => setMobile(e.target.value)}
-                required
-                maxLength={10}
-                pattern="[0-9]{10}"
-                data-testid="input-mobile"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Email Address</Label>
               <Input
                 id="email"
                 type="email"
                 placeholder="your@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                required
+                disabled={isLoading}
                 data-testid="input-email"
               />
+              {fieldErrors.email && (
+                <p className="text-sm text-destructive" data-testid="error-email">{fieldErrors.email}</p>
+              )}
             </div>
 
+            {/* Mobile Field */}
+            <div className="space-y-2">
+              <Label htmlFor="mobile">Mobile Number</Label>
+              <Input
+                id="mobile"
+                placeholder="9876543210"
+                maxLength={10}
+                value={mobile}
+                onChange={(e) => setMobile(e.target.value.replace(/\D/g, ''))}
+                disabled={isLoading}
+                data-testid="input-mobile"
+              />
+              {fieldErrors.mobile && (
+                <p className="text-sm text-destructive" data-testid="error-mobile">{fieldErrors.mobile}</p>
+              )}
+            </div>
+
+            {/* Password Field */}
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 type="password"
-                placeholder="Enter password (min 6 characters)"
+                placeholder="Min 6 characters"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
+                disabled={isLoading}
                 data-testid="input-password"
               />
+              {fieldErrors.password && (
+                <p className="text-sm text-destructive" data-testid="error-password">{fieldErrors.password}</p>
+              )}
             </div>
 
+            {/* Confirm Password Field */}
             <div className="space-y-2">
               <Label htmlFor="confirmPassword">Confirm Password</Label>
               <Input
@@ -236,21 +294,22 @@ export default function SignupPage() {
                 placeholder="Confirm your password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                required
+                disabled={isLoading}
                 data-testid="input-confirm-password"
               />
+              {fieldErrors.confirmPassword && (
+                <p className="text-sm text-destructive" data-testid="error-confirm-password">{fieldErrors.confirmPassword}</p>
+              )}
             </div>
 
-            {/* Show sponsor info if coming from referral link */}
-            {sponsorId && (
+            {/* Referral Info Alert */}
+            {referralData.sponsorId && (
               <Alert data-testid="alert-sponsor-info">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  <strong>Sponsor:</strong> {sponsorId}
-                  {binaryLeg && (
-                    <span className="ml-2">
-                      • <strong>Placement:</strong> {binaryLeg.toUpperCase()} leg
-                    </span>
+                  <strong>Sponsor:</strong> {referralData.sponsorId}
+                  {referralData.binaryLeg && (
+                    <span className="ml-2"><strong>Leg:</strong> {referralData.binaryLeg.toUpperCase()}</span>
                   )}
                 </AlertDescription>
               </Alert>
@@ -258,47 +317,63 @@ export default function SignupPage() {
 
             {/* reCAPTCHA Widget */}
             {isEnabled && (
-              <div className="flex justify-center">
-                <div ref={recaptchaRef} className="g-recaptcha" data-testid="recaptcha-widget"></div>
+              <div className="flex justify-center" data-testid="recaptcha-widget">
+                <div ref={recaptchaRef} className="g-recaptcha" />
               </div>
             )}
 
             {/* Custom CAPTCHA */}
-            <CustomCaptcha 
-              onCaptchaChange={setCustomCaptchaValid} 
-              onCodeChange={setCaptchaCode}
-              data-testid="custom-captcha-signup"
-            />
+            {systemConfig?.customCaptchaEnabled && (
+              <div data-testid="captcha-section">
+                <CustomCaptcha
+                  onCaptchaChange={(valid) => setCustomCaptchaValid(valid)}
+                />
+                {fieldErrors.captcha && (
+                  <p className="text-sm text-destructive mt-1" data-testid="error-captcha">{fieldErrors.captcha}</p>
+                )}
+              </div>
+            )}
 
             {/* Terms & Conditions Checkbox */}
             <div className="flex items-start space-x-2" data-testid="checkbox-terms-container">
               <Checkbox
                 id="terms"
-                checked={acceptedTerms}
-                onCheckedChange={(checked) => setAcceptedTerms(checked === true)}
+                checked={acceptTerms}
+                onCheckedChange={(checked) => setAcceptTerms(checked === true)}
+                disabled={isLoading}
                 data-testid="checkbox-terms"
               />
-              <Label
-                htmlFor="terms"
-                className="text-sm font-normal leading-tight cursor-pointer"
-              >
-                I agree to the{' '}
-                <button
-                  type="button"
-                  onClick={() => window.open('/legal/terms', '_blank')}
-                  className="text-primary hover:underline"
-                  data-testid="link-terms"
-                >
-                  Terms & Conditions
-                </button>
-              </Label>
+              <div className="flex-1">
+                <Label htmlFor="terms" className="text-sm font-normal cursor-pointer">
+                  I agree to the{' '}
+                  <button
+                    type="button"
+                    onClick={() => window.open('/legal/terms', '_blank')}
+                    className="text-primary hover:underline"
+                    data-testid="link-terms"
+                  >
+                    Terms & Conditions
+                  </button>
+                </Label>
+                {fieldErrors.terms && (
+                  <p className="text-sm text-destructive" data-testid="error-terms">{fieldErrors.terms}</p>
+                )}
+              </div>
             </div>
 
-            <Button type="submit" className="w-full" disabled={loading} data-testid="button-signup">
-              {loading ? 'Creating account...' : 'Sign Up'}
+            {/* Submit Button */}
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={isLoading}
+              data-testid="button-signup"
+            >
+              {isLoading ? 'Creating account...' : 'Sign Up'}
             </Button>
           </form>
         </CardContent>
+
+        {/* Footer */}
         <CardFooter className="flex justify-center gap-2 text-sm text-muted-foreground">
           Already have an account?
           <button
