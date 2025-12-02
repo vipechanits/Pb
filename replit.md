@@ -56,6 +56,17 @@ The platform features separate Admin and User Dashboards for comprehensive incom
 The system maintains distinct tree structures for Matrix and Binary networks to offer flexible and varied income sources. Sponsorship chains are also tracked independently. All tree queries are user-scoped to ensure data integrity and accurate display.
 
 ## Recent Changes (Latest Session - Dec 02, 2025)
+- ✅ **Matrix Activation Requirement**: Only fully activated users (8/8 payments) can have downlines
+  - Changed BFS algorithm to filter frontier by `isActivated=true`
+  - Inactive users skipped when finding available matrix parent slots
+  - Ensures unqualified users cannot receive matrix commissions
+  - New users placed under first fully activated parent with available slots
+- ✅ **Matrix Tree Display Filter**: Inactive users hidden from matrix visualization
+  - Updated `getMatrixSubtree` recursive query to exclude `is_activated=false` users
+  - Only fully activated users appear in matrix tree views
+  - Prevents incomplete users (e.g., PB10046 with < 8 payments) from showing in matrix
+
+## Previous Changes (Dec 02, 2025)
 - ✅ **Critical SQL Fix**: Fixed `binaryMatchQueue.createdAt` -> `binaryMatchQueue.enteredAt`
   - The schema uses `enteredAt` for the queue entry timestamp, not `createdAt`
   - This was causing SQL syntax errors during binary match payment assignment

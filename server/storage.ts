@@ -1230,12 +1230,14 @@ export class DbStorage implements IStorage {
 
       // Matrix has existing users - find next available slot using BFS
       // NO LEVEL LIMIT: Matrix grows infinitely, each user earns from their 5-level downline (62 users)
-      // NOTE: Don't check isActivated - users are placed during payment confirmation, before full activation
+      // REQUIREMENT: Only fully activated users (isActivated=true) can have downlines in matrix
+      // This ensures inactive users (< 8 confirmed payments) cannot be matrix parents
       // Note: .limit(10000) required before .for('update') for correct SQL syntax
       const frontier = await txn.select()
         .from(users)
         .where(and(
           sql`matrix_level IS NOT NULL`,
+          eq(users.isActivated, true),  // Only fully activated users can be parents
           ne(users.role, 'admin')  // Exclude admin accounts from matrix
         ))
         .orderBy(sql`matrix_level ASC, matrix_path ASC`)
@@ -1243,6 +1245,12 @@ export class DbStorage implements IStorage {
         .for('update');
       
       for (const parentCandidate of frontier) {
+        // Skip if parent is not fully activated (should not happen given frontier query, but safety check)
+        if (!parentCandidate.isActivated) {
+          console.log(`[MATRIX] Skipping inactive parent ${parentCandidate.userId} - can only have downlines when fully activated`);
+          continue;
+        }
+        
         // Note: .limit(2) before .for('update') for correct SQL syntax (max 2 children per node)
         const children = await txn.select()
           .from(users)
@@ -1322,7 +1330,7 @@ export class DbStorage implements IStorage {
       WITH RECURSIVE matrix_tree AS (
         SELECT user_id, name, email, is_activated, matrix_level, matrix_position, matrix_path, matrix_parent_id, 0 as depth
         FROM users
-        WHERE user_id = ${userId} AND matrix_level IS NOT NULL AND matrix_path IS NOT NULL
+        WHERE user_id = ${userId} AND matrix_level IS NOT NULL AND matrix_path IS NOT NULL AND is_activated = true
         
         UNION ALL
         
@@ -1331,6 +1339,7 @@ export class DbStorage implements IStorage {
         INNER JOIN matrix_tree mt ON u.matrix_parent_id = mt.user_id
         WHERE u.matrix_level IS NOT NULL 
           AND u.matrix_path IS NOT NULL 
+          AND u.is_activated = true
           AND u.matrix_level <= ${maxLevel}
           AND mt.depth < ${maxDepth}
       )
