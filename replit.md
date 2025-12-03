@@ -89,6 +89,12 @@ The system maintains distinct tree structures for Matrix and Binary networks to 
   - Assigned as left child (position 0) of PB10020
   - New matrix path: PB10000.R.R.L.L
   - User is activated and now positioned for direct income from Level 5
+- ✅ **Manual Matrix Placement**: PB475170 repositioned under PB10020
+  - Was incorrectly placed as separate root node → Now Level 5 under PB10020
+  - Assigned as right child (position 1) of PB10020
+  - New matrix path: PB10000.R.R.L.R
+  - BFS placement now verified: Level 5 has PB99639 (left) + PB475170 (right) = complete level
+  - **Permanent BFS Logic**: New activations auto-place level-by-level, left-to-right (no manual fixes needed)
 
 ## Previous Changes (Dec 02, 2025)
 - ✅ **Critical SQL Fix**: Fixed `binaryMatchQueue.createdAt` -> `binaryMatchQueue.enteredAt`
