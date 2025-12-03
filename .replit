@@ -9,7 +9,7 @@ packages = ["splat", "u-root-cmds"]
 [deployment]
 deploymentTarget = "autoscale"
 build = ["npm", "run", "build"]
-run = ["npm", "run", "start"]
+run = ["bash", "-c", "NODE_ENV=production node dist/index.js"]
 publicDir = "dist/public"
 
 [[ports]]

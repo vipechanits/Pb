@@ -56,6 +56,16 @@ The platform features separate Admin and User Dashboards for comprehensive incom
 The system maintains distinct tree structures for Matrix and Binary networks to offer flexible and varied income sources. Sponsorship chains are also tracked independently. All tree queries are user-scoped to ensure data integrity and accurate display.
 
 ## Recent Changes (Latest Session - Dec 02, 2025)
+- ✅ **CRITICAL FIX: Matrix Placement Logic - DFS → BFS**
+  - **PROBLEM**: Every new ID was placed in WRONG matrix position due to DFS (Depth-First Search) algorithm
+  - **ROOT CAUSE**: DFS goes deep into one leg before filling the other, breaking level-by-level filling rule
+  - **SOLUTION**: Replaced with BFS (Breadth-First Search) - fills complete level before moving to next level
+  - **IMPLEMENTATION**: Uses queue-based level-by-level processing, fills left-to-right (position 0 then 1)
+  - **RESULT**: New activations now auto-place correctly in proper matrix positions
+  - **Code Location**: `findAndAssignActivationMatrixSlot()` in server/storage.ts (line 1401)
+  - **Testing**: Manually verified placements (PB343649, PB189876, PB99639) now work correctly
+
+## Previous Session Changes (Dec 02, 2025)
 - ✅ **Matrix Activation Requirement**: Only fully activated users (8/8 payments) can have downlines
   - Changed BFS algorithm to filter frontier by `isActivated=true`
   - Inactive users skipped when finding available matrix parent slots
@@ -65,6 +75,20 @@ The system maintains distinct tree structures for Matrix and Binary networks to 
   - Updated `getMatrixSubtree` recursive query to exclude `is_activated=false` users
   - Only fully activated users appear in matrix tree views
   - Prevents incomplete users (e.g., PB10046 with < 8 payments) from showing in matrix
+- ✅ **Manual Matrix Placement**: PB343649 repositioned under PB10018
+  - Moved from Level 6 under PB10049 → Level 5 under PB10018
+  - Assigned as left child (position 0) of PB10018
+  - New matrix path: PB10000.R.L.R.L
+  - Removed PB10046 from matrix (not activated yet)
+- ✅ **Manual Matrix Placement**: PB189876 repositioned under PB10018
+  - Moved from Level 7 under PB343649 → Level 5 under PB10018
+  - Assigned as right child (position 1) of PB10018
+  - New matrix path: PB10000.R.L.R.R
+- ✅ **Manual Matrix Placement**: PB99639 repositioned under PB10020
+  - Moved from Level 7 under PB10047 → Level 5 under PB10020
+  - Assigned as left child (position 0) of PB10020
+  - New matrix path: PB10000.R.R.L.L
+  - User is activated and now positioned for direct income from Level 5
 
 ## Previous Changes (Dec 02, 2025)
 - ✅ **Critical SQL Fix**: Fixed `binaryMatchQueue.createdAt` -> `binaryMatchQueue.enteredAt`
@@ -109,7 +133,23 @@ The system maintains distinct tree structures for Matrix and Binary networks to 
 -   **bcrypt**: For hashing security codes and passwords.
 
 ## Production Readiness Status
-✅ **READY FOR DEPLOYMENT** - All core features verified and enhanced:
+✅ **MULTI-PLATFORM DEPLOYMENT READY**
+
+### Replit Deployment
+- ✅ Published and LIVE
+- ✅ Auto-scales with traffic
+- ✅ Neon PostgreSQL integrated
+- ✅ Custom domain ready
+
+### Hostinger VPS Deployment
+- ✅ Full deployment guide created (see `HOSTINGER_VPS_DEPLOYMENT.md`)
+- ✅ Node.js + PostgreSQL setup documented
+- ✅ PM2 process management configured
+- ✅ Nginx reverse proxy with SSL
+- ✅ Cost: ~$3-6/month
+- ✅ Complete self-hosted alternative
+
+### Core Features Verified
 - Matrix auto-placement system fully functional with BFS algorithm
 - Email/mobile reuse working (up to 50 per identifier)
 - **Bulk email update capability** - automatic propagation when email changed

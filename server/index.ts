@@ -310,11 +310,12 @@ app.use((req, res, next) => {
     // importantly only setup vite in development and after
     // setting up all the other routes so the catch-all route
     // doesn't interfere with the other routes
-    if (app.get("env") === "development") {
+    // Check NODE_ENV explicitly - must be set to 'production' for deployments
+    if (process.env.NODE_ENV !== "production") {
       console.log('✓ Setting up Vite dev server...');
       await setupVite(app, server);
     } else {
-      console.log('✓ Serving static files...');
+      console.log('✓ Serving static files from dist/public...');
       serveStatic(app);
     }
 

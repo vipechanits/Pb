@@ -1395,13 +1395,12 @@ export class DbStorage implements IStorage {
     return nodeMap.get(userId) || null;
   }
 
-  // Activation-scoped matrix methods (new)
+  // Activation-scoped matrix methods - FIXED: BFS instead of DFS
   async findAndAssignActivationMatrixSlot(activationId: string, tx?: any): Promise<void> {
     const executeInTx = async (txContext: any) => {
-      // Import the new schema
       const { activationMatrixPositions, activations } = await import('@shared/schema');
       
-      // Check if this activation already has a matrix position
+      // Check if already positioned
       const existingPosition = await txContext
         .select()
         .from(activationMatrixPositions)
@@ -1413,108 +1412,7 @@ export class DbStorage implements IStorage {
         return;
       }
 
-      // Get activation details and corresponding user to check binary leg placement
-      const activationData = await txContext
-        .select()
-        .from(activations)
-        .where(eq(activations.id, activationId))
-        .limit(1);
-
-      if (activationData.length === 0) {
-        throw new Error(`Activation ${activationId} not found`);
-      }
-
-      const activation = activationData[0];
-      
-      // Get the user record to find their sponsor's requested leg
-      const { users } = await import('@shared/schema');
-      const userData = await txContext
-        .select()
-        .from(users)
-        .where(eq(users.id, activation.payerWallet))
-        .limit(1);
-
-      const binaryLeg = userData.length > 0 ? (userData[0].sponsorRequestedLeg || userData[0].binaryLeg) : null;
-
-      // DFS helper: recursively traverse down preferred leg to find DEEPEST available slot
-      const findDeepestSlot = async (
-        parentActivationId: string,
-        parentMatrixLevel: number,
-        parentPath: string,
-        preferredPosition: number | null // 0 for left, 1 for right, null to try left then right
-      ): Promise<{ parentId: string; position: number; level: number; path: string } | null> => {
-        if (parentMatrixLevel > 100) return null; // Safety limit
-
-        // Get children of this parent
-        const children = await txContext
-          .select()
-          .from(activationMatrixPositions)
-          .where(eq(activationMatrixPositions.matrixParentActivationId, parentActivationId));
-
-        // If we have a preferred position
-        if (preferredPosition !== null) {
-          const childAtPreferred = children.find((c: any) => c.matrixPosition === preferredPosition);
-          
-          if (!childAtPreferred) {
-            // Preferred position is empty - place here
-            return {
-              parentId: parentActivationId,
-              position: preferredPosition,
-              level: parentMatrixLevel + 1,
-              path: `${parentPath}.${preferredPosition === 0 ? 'L' : 'R'}`
-            };
-          }
-          
-          // Preferred position taken - recurse deeper into it (DFS deep traversal)
-          return await findDeepestSlot(
-            childAtPreferred.activationId,
-            childAtPreferred.matrixLevel,
-            childAtPreferred.matrixPath,
-            preferredPosition
-          );
-        }
-
-        // No preferred position - try left first (classic DFS: left, then right)
-        const leftChild = children.find((c: any) => c.matrixPosition === 0);
-        if (!leftChild) {
-          return {
-            parentId: parentActivationId,
-            position: 0,
-            level: parentMatrixLevel + 1,
-            path: `${parentPath}.L`
-          };
-        }
-
-        // Left exists, try going deeper on left side
-        const leftDeepResult = await findDeepestSlot(
-          leftChild.activationId,
-          leftChild.matrixLevel,
-          leftChild.matrixPath,
-          null
-        );
-        if (leftDeepResult) return leftDeepResult;
-
-        // Left subtree full, try right
-        const rightChild = children.find((c: any) => c.matrixPosition === 1);
-        if (!rightChild) {
-          return {
-            parentId: parentActivationId,
-            position: 1,
-            level: parentMatrixLevel + 1,
-            path: `${parentPath}.R`
-          };
-        }
-
-        // Right exists, try going deeper on right side
-        return await findDeepestSlot(
-          rightChild.activationId,
-          rightChild.matrixLevel,
-          rightChild.matrixPath,
-          null
-        );
-      };
-
-      // Check if matrix is empty (root position)
+      // Check if matrix is empty
       const rootPosition = await txContext
         .select()
         .from(activationMatrixPositions)
@@ -1530,14 +1428,58 @@ export class DbStorage implements IStorage {
           matrixLevel: 1,
           matrixPath: activationId,
         });
-        console.log(`[ACTIVATION-MATRIX] Assigned ${activationId} as matrix root (level 1, DFS)`);
+        console.log(`[ACTIVATION-MATRIX] Assigned ${activationId} as matrix root (level 1, BFS)`);
         return;
       }
 
-      // Use DFS to find deepest slot in preferred leg
-      const preferredPosition = binaryLeg === 'left' ? 0 : (binaryLeg === 'right' ? 1 : null);
-      const root = rootPosition[0];
-      const slot = await findDeepestSlot(root.activationId, root.matrixLevel, root.matrixPath, preferredPosition);
+      // BFS: Level-by-level, left-to-right placement
+      const queue: Array<{
+        activationId: string;
+        matrixLevel: number;
+        matrixPath: string;
+      }> = [rootPosition[0]];
+
+      let slot: { parentId: string; position: number; level: number; path: string } | null = null;
+
+      while (queue.length > 0 && !slot) {
+        const current = queue.shift();
+        if (!current) break;
+
+        // Get all children of this node
+        const children = await txContext
+          .select()
+          .from(activationMatrixPositions)
+          .where(eq(activationMatrixPositions.matrixParentActivationId, current.activationId));
+
+        const hasLeft = children.some((c: any) => c.matrixPosition === 0);
+        const hasRight = children.some((c: any) => c.matrixPosition === 1);
+
+        // Try to place in this level (fill left-to-right)
+        if (!hasLeft) {
+          slot = {
+            parentId: current.activationId,
+            position: 0,
+            level: current.matrixLevel + 1,
+            path: `${current.matrixPath}.L`
+          };
+          break;
+        } else if (!hasRight) {
+          slot = {
+            parentId: current.activationId,
+            position: 1,
+            level: current.matrixLevel + 1,
+            path: `${current.matrixPath}.R`
+          };
+          break;
+        } else {
+          // Both positions filled, add children to queue for next level
+          const leftChild = children.find((c: any) => c.matrixPosition === 0);
+          const rightChild = children.find((c: any) => c.matrixPosition === 1);
+          
+          if (leftChild) queue.push(leftChild);
+          if (rightChild) queue.push(rightChild);
+        }
+      }
 
       if (slot) {
         await txContext.insert(activationMatrixPositions).values({
@@ -1548,7 +1490,7 @@ export class DbStorage implements IStorage {
           matrixPath: slot.path,
         });
         const legName = slot.position === 0 ? 'left' : 'right';
-        console.log(`[ACTIVATION-MATRIX] Assigned ${activationId} to ${legName} of ${slot.parentId} at level ${slot.level} (DFS deep placement)`);
+        console.log(`[ACTIVATION-MATRIX] Assigned ${activationId} to ${legName} of ${slot.parentId} at level ${slot.level} (BFS level-by-level)`);
         return;
       }
 
