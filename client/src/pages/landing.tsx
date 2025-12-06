@@ -3,8 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Shield, Users, TrendingUp, Zap, GitBranch, Grid3x3, ArrowRight, Check, Heart, HandHelping, AlertTriangle } from 'lucide-react';
+import { Shield, Users, TrendingUp, Zap, GitBranch, Grid3x3, ArrowRight, Check, Heart, HandHelping } from 'lucide-react';
 import logoUrl from '@assets/payback247-logo_1763267164811.png';
 import { useSystemConfig, formatINR } from '@/hooks/use-system-config';
 import { useState, useEffect } from 'react';
@@ -12,7 +11,6 @@ import { useState, useEffect } from 'react';
 export default function Landing() {
   const [, setLocation] = useLocation();
   const { config, isLoading } = useSystemConfig();
-  const [showNotice, setShowNotice] = useState(true);
 
   const benefits = [
     {
@@ -98,33 +96,6 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Important Notice Banner */}
-      {showNotice && (
-        <Alert className="mx-0 rounded-none border-b-2 border-amber-500 bg-amber-50 dark:bg-amber-950/30" data-testid="alert-important-notice">
-          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500" />
-          <AlertTitle className="text-amber-900 dark:text-amber-100 text-base font-bold">
-            ⚠️ IMPORTANT NOTICE
-          </AlertTitle>
-          <AlertDescription className="text-amber-800 dark:text-amber-200 mt-2 space-y-2">
-            <p className="font-semibold">
-              PAYBACK247 is a peer-to-peer community helping platform. All payments are DIRECT between members - not through any central pool or company account.
-            </p>
-            <p>
-              <strong>Key Points:</strong> Only join if you can afford the activation cost. Verify receiver details before payment. Report suspicious activity to admin immediately. Your account security code is currently <strong>123456</strong> - change it after first setup.
-            </p>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowNotice(false)}
-              className="mt-2 text-amber-700 hover:text-amber-900 dark:text-amber-300 dark:hover:text-amber-100"
-              data-testid="button-dismiss-notice"
-            >
-              Dismiss
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
-      
       {/* Header */}
       <header className="border-b sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50">
         <div className="container mx-auto px-4 sm:px-6 py-2 flex items-center justify-between gap-4">

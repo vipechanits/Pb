@@ -55,7 +55,30 @@ The platform features separate Admin and User Dashboards for comprehensive incom
 ### System Design Choices
 The system maintains distinct tree structures for Matrix and Binary networks to offer flexible and varied income sources. Sponsorship chains are also tracked independently. All tree queries are user-scoped to ensure data integrity and accurate display.
 
-## Recent Changes (Latest Session - Dec 02, 2025)
+## Recent Changes (Latest Session - Dec 06, 2025)
+- ✅ **HOSTINGER VPS DEPLOYMENT GUIDE - COMPLETE OVERHAUL**
+  - Created comprehensive deployment guide with DUAL environment setup
+  - **Production environment**: Port 5000, payback247_prod database, payback247.yourdomain.com
+  - **Development environment**: Port 5001, payback247_dev database, dev.payback247.yourdomain.com
+  - Includes complete .env templates for both environments
+  - PM2 ecosystem.config.js with clustering for production
+  - Nginx reverse proxy configs with SSL and WebSocket support
+  - Automated setup script: `hostinger-setup.sh`
+  - Database backup/restore commands
+  - Cost: ~$6/month (vs cloud hosting)
+  - See `HOSTINGER_VPS_DEPLOYMENT.md` for full instructions
+
+## Previous Changes (Dec 03, 2025)
+- ✅ **BACKUP/RESTORE SYSTEM FIXED**
+  - Added missing `/api/admin/restore-backup` endpoint
+  - Accepts backupId parameter, retrieves backup data from backupHistory table
+  - Clears all tables and restores data in atomic transaction
+  - Prevents partial restoration with transaction rollback on errors
+  - Returns backup info (name, creation date, record counts) on success
+  - Full support for restoring: users, activations, payments, matrix positions, binary queue, income data, notifications
+  - **Status**: Restore feature now fully operational
+
+## Previous Changes (Session - Dec 02, 2025)
 - ✅ **CRITICAL FIX: Matrix Placement Logic - DFS → BFS**
   - **PROBLEM**: Every new ID was placed in WRONG matrix position due to DFS (Depth-First Search) algorithm
   - **ROOT CAUSE**: DFS goes deep into one leg before filling the other, breaking level-by-level filling rule

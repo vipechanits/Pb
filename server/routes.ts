@@ -5300,6 +5300,147 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // RESTORE DATABASE FROM BACKUP (admin only)
+  app.post("/api/admin/restore-backup", adminRateLimiter, requireAdmin, async (req, res) => {
+    try {
+      const { backupId } = req.body;
+
+      if (!backupId) {
+        return res.status(400).json({ error: "backupId is required" });
+      }
+
+      console.log(`[RESTORE] Admin ${req.session.userId} initiating restore from backup ${backupId}`);
+
+      // Get backup from backupHistory
+      const backupRecords = await db.select()
+        .from((await import('@shared/schema')).backupHistory)
+        .where(eq((await import('@shared/schema')).backupHistory.id, backupId))
+        .limit(1);
+      
+      const backup = backupRecords[0];
+
+      if (!backup || !backup.backupData) {
+        return res.status(404).json({ error: "Backup not found or has no data" });
+      }
+
+      // Parse backup data
+      let backupContent;
+      try {
+        backupContent = typeof backup.backupData === 'string' 
+          ? JSON.parse(backup.backupData) 
+          : backup.backupData;
+      } catch (parseError) {
+        console.error('[RESTORE] Failed to parse backup data:', parseError);
+        return res.status(400).json({ error: "Invalid backup data format" });
+      }
+
+      // Execute restore in transaction
+      await db.transaction(async (tx) => {
+        // TRUNCATE all tables (in dependency order - foreign keys last)
+        console.log('[RESTORE] Clearing existing data...');
+        await tx.delete(notifications);
+        await tx.delete(incomeTransactions);
+        await tx.delete(userIncomeSummaries);
+        await tx.delete(binaryMatchQueue);
+        await tx.delete(activationMatrixPositions);
+        await tx.delete(activationPayments);
+        await tx.delete(reentries);
+        await tx.delete(activations);
+        await tx.delete(users);
+
+        console.log('[RESTORE] Restoring data from backup...');
+
+        // Restore users
+        if (backupContent.tables?.users?.data?.length) {
+          console.log(`[RESTORE] Restoring ${backupContent.tables.users.data.length} users`);
+          for (const userData of backupContent.tables.users.data) {
+            await tx.insert(users).values(userData);
+          }
+        }
+
+        // Restore activations
+        if (backupContent.tables?.activations?.data?.length) {
+          console.log(`[RESTORE] Restoring ${backupContent.tables.activations.data.length} activations`);
+          for (const actData of backupContent.tables.activations.data) {
+            await tx.insert(activations).values(actData);
+          }
+        }
+
+        // Restore activation payments
+        if (backupContent.tables?.activationPayments?.data?.length) {
+          console.log(`[RESTORE] Restoring ${backupContent.tables.activationPayments.data.length} activation payments`);
+          for (const paymentData of backupContent.tables.activationPayments.data) {
+            await tx.insert(activationPayments).values(paymentData);
+          }
+        }
+
+        // Restore reentries
+        if (backupContent.tables?.reentries?.data?.length) {
+          console.log(`[RESTORE] Restoring ${backupContent.tables.reentries.data.length} reentries`);
+          for (const reentryData of backupContent.tables.reentries.data) {
+            await tx.insert(reentries).values(reentryData);
+          }
+        }
+
+        // Restore activation matrix positions
+        if (backupContent.tables?.activationMatrixPositions?.data?.length) {
+          console.log(`[RESTORE] Restoring ${backupContent.tables.activationMatrixPositions.data.length} activation matrix positions`);
+          for (const matrixData of backupContent.tables.activationMatrixPositions.data) {
+            await tx.insert(activationMatrixPositions).values(matrixData);
+          }
+        }
+
+        // Restore binary match queue
+        if (backupContent.tables?.binaryMatchQueue?.data?.length) {
+          console.log(`[RESTORE] Restoring ${backupContent.tables.binaryMatchQueue.data.length} binary match queue entries`);
+          for (const queueData of backupContent.tables.binaryMatchQueue.data) {
+            await tx.insert(binaryMatchQueue).values(queueData);
+          }
+        }
+
+        // Restore income transactions
+        if (backupContent.tables?.incomeTransactions?.data?.length) {
+          console.log(`[RESTORE] Restoring ${backupContent.tables.incomeTransactions.data.length} income transactions`);
+          for (const incomeData of backupContent.tables.incomeTransactions.data) {
+            await tx.insert(incomeTransactions).values(incomeData);
+          }
+        }
+
+        // Restore user income summaries
+        if (backupContent.tables?.userIncomeSummaries?.data?.length) {
+          console.log(`[RESTORE] Restoring ${backupContent.tables.userIncomeSummaries.data.length} user income summaries`);
+          for (const summaryData of backupContent.tables.userIncomeSummaries.data) {
+            await tx.insert(userIncomeSummaries).values(summaryData);
+          }
+        }
+
+        // Restore notifications
+        if (backupContent.tables?.notifications?.data?.length) {
+          console.log(`[RESTORE] Restoring ${backupContent.tables.notifications.data.length} notifications`);
+          for (const notifData of backupContent.tables.notifications.data) {
+            await tx.insert(notifications).values(notifData);
+          }
+        }
+      });
+
+      console.log(`[RESTORE] Successfully restored database from backup ${backupId}`);
+      res.json({ 
+        success: true, 
+        message: "Database restored successfully from backup",
+        backupInfo: {
+          name: backup.backupName,
+          createdAt: backup.completedAt,
+          totalUsers: backupContent.tables?.users?.count || 0,
+          totalActivations: backupContent.tables?.activations?.count || 0,
+          totalPayments: backupContent.tables?.activationPayments?.count || 0,
+        }
+      });
+    } catch (error: any) {
+      console.error("[RESTORE] Failed to restore database:", error);
+      res.status(500).json({ error: "Failed to restore database: " + (error.message || "Unknown error") });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
